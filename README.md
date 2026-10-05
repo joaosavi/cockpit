@@ -1,4 +1,4 @@
-# agent-secrets
+# claude-devcontainer
 
 O agente do Claude Code entra em site com as senhas do cofre sem ver as senhas, e nenhum valor de segredo chega ao transcript.
 
@@ -29,14 +29,14 @@ Pré-requisitos: `bw` (`npm i -g @bitwarden/cli`), `jq`, `flock`, Node com `npx`
 1. Clone o repo e rode o instalador:
 
 	```sh
-	git clone git@github.com:joaosavi/agent-secrets.git ~/agent-secrets
-	~/agent-secrets/install.sh
+	git clone git@github.com:joaosavi/claude-devcontainer.git ~/claude-devcontainer
+	~/claude-devcontainer/install.sh
 	```
 
 2. Pelo SSH, copie o modelo e preencha as credenciais da conta do agente:
 
 	```sh
-	cp ~/agent-secrets/.env.bw-agente.example ~/getdemo/.env.bw-agente
+	cp ~/claude-devcontainer/.env.bw-agente.example ~/getdemo/.env.bw-agente
 	chmod 600 ~/getdemo/.env.bw-agente
 	```
 
