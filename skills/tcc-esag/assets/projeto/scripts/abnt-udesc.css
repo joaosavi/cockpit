@@ -1,0 +1,180 @@
+/* Formatação de trabalho acadêmico no padrão da UDESC.
+   Fonte principal: Manual para Elaboração de Trabalhos Acadêmicos da BU/UDESC, 10. ed. rev., jun. 2025
+   ("Manual p. N" = página impressa). Onde o manual não fala, vale a NBR 14724:2024. Cada regra, com a fonte,
+   está em normas/abnt-udesc.md. O texto do trabalho fica no .html; a forma fica toda aqui.
+
+   Entrelinha: nenhuma fonte define "1,5" em pontos. Este arquivo usa a entrelinha 1,5 do Word para Times 12
+   (cerca de 20,7 pt) e a simples do Word (cerca de 13,8 pt para 12 e 11,5 pt para 10). */
+
+:root { --lh: 1.725; --lh1: 1.15; --linha: 20.7pt; }
+
+/* Papel A4; margens superior e esquerda 3 cm, inferior e direita 2 cm (Manual p. 42).
+   Número da página: fonte 10, canto superior direito, a 2 cm da borda superior e da direita (Manual p. 47). */
+@page {
+  size: A4;
+  margin: 3cm 2cm 2cm 3cm;
+  @top-right {
+    content: counter(page);
+    font-family: "Times New Roman", "TCC Serif", "Liberation Serif", serif;
+    font-size: 10pt;
+    line-height: 1;
+    vertical-align: top;
+    padding-top: 2cm;
+  }
+  /* Notas de rodapé dentro das margens, separadas do texto por um espaço simples e por filete de 5 cm a
+     partir da margem esquerda (Manual p. 44). */
+  @footnote {
+    float: bottom;
+    margin-top: 13.8pt;
+    padding-top: 2pt;
+    background: linear-gradient(#000, #000) no-repeat left top / 5cm 0.5pt;
+  }
+}
+/* A capa não é contada; a folha de rosto é a página 1; os pré-textuais contam e não exibem número
+   (Manual p. 47). O contador do Paged.js zera na capa; o artifact.py tira a capa da contagem. */
+@page capa { @top-right { content: none; } }
+@page rosto { counter-reset: page 1; @top-right { content: none; } }
+@page pretextual { @top-right { content: none; } }
+
+/* Uma fonte só no trabalho, Arial ou Times New Roman (Manual p. 42); este CSS usa Times New Roman. Sem ela
+   instalada, entra a Liberation Serif, que tem as mesmas medidas, embutida pelo artifact.py. Texto em preto
+   (Manual p. 42). */
+html { font-family: "Times New Roman", "TCC Serif", "Liberation Serif", Times, serif; font-size: 12pt; color: #000; background: #fff; }
+body { margin: 0; line-height: var(--lh); text-align: justify; }
+
+/* Parágrafo: recuo de 1,25 cm na primeira linha, justificado, evitar órfãs e viúvas (Manual p. 43); sem espaço
+   antes e depois, como no modelo de espaçamento do manual (p. 45-46). */
+p { margin: 0; text-indent: 1.25cm; orphans: 2; widows: 2; }
+p.semrec { text-indent: 0; }
+
+/* Títulos (Manual p. 45-49): indicativo à esquerda, separado por um espaço, sem ponto; primária em
+   maiúsculas e negrito, em página nova, no topo da mancha; secundária em maiúsculas; terciária em negrito;
+   quaternária em itálico; quinária sem destaque; uma linha de 1,5 em branco antes e depois, 0 pt; a partir da
+   segunda linha, o título fica sob a primeira letra da primeira palavra. Tudo em 12 (Manual p. 42). */
+h1, h2, h3, h4, h5 { font-size: 12pt; line-height: var(--lh); text-align: left; margin: var(--linha) 0; break-after: avoid; display: flex; font-weight: normal; }
+h1 { font-weight: bold; text-transform: uppercase; break-before: page; margin-top: 0; }
+h2 { text-transform: uppercase; }
+h3 { font-weight: bold; }
+h4 { font-style: italic; }
+.ind { flex: none; margin-right: 0.3em; }
+.tit { min-width: 0; }
+/* Títulos sem indicativo (resumo, listas, sumário, referências, apêndices, anexos): centralizados, em
+   maiúsculas e negrito, em página nova, no topo da mancha (Manual p. 46). */
+h1.pre { display: block; text-align: center; }
+/* Título, ilustração ou citação longa que abre a página não leva a linha em branco de cima: ela separa do
+   texto anterior, que ali não existe (Manual p. 45, 51, 66). */
+.pagedjs_page_content > div > :is(h2, h3, h4, h5, .ilustracao, blockquote):first-child { margin-top: 0; }
+
+/* Alíneas (Manual p. 50): letra minúscula e parêntese, recuada da margem; da segunda linha em diante, sob a
+   primeira letra do texto. A letra sai do CSS; escreva só o texto em cada <li>. Subalínea: travessão e espaço,
+   recuada em relação à alínea. */
+ol.alineas { list-style: none; counter-reset: alinea; margin: 0; padding-left: 1.25cm; }
+ol.alineas > li { counter-increment: alinea; text-align: justify; padding-left: 0.6cm; text-indent: -0.6cm; }
+ol.alineas > li::before { content: counter(alinea, lower-alpha) ")"; display: inline-block; width: 0.6cm; text-indent: 0; }
+ul.subalineas { list-style: none; margin: 0; padding-left: 0; }
+ul.subalineas > li { padding-left: 0.5cm; text-indent: -0.5cm; }
+ul.subalineas > li::before { content: "\2013\00a0"; display: inline-block; width: 0.5cm; text-indent: 0; }
+
+/* Citação direta com mais de três linhas: parágrafo próprio, recuo de 4 cm, fonte 10, espaçamento simples,
+   sem aspas, uma linha de 1,5 em branco antes e depois (Manual p. 42-43, 66). */
+blockquote { margin: var(--linha) 0 var(--linha) 4cm; font-size: 10pt; line-height: var(--lh1); text-align: justify; }
+blockquote p { text-indent: 0; }
+
+/* Notas de rodapé (Manual p. 44-45): fonte 10, espaçamento simples, sem espaço entre elas; da segunda linha
+   em diante, sob a primeira letra da primeira palavra, destacando o expoente; numeração única no trabalho
+   todo. Nota explicativa justificada; nota de referência (classe "ref") alinhada à esquerda. */
+.nota { float: footnote; font-size: 10pt; line-height: var(--lh1); text-align: justify; text-indent: 0; font-weight: normal; font-style: normal; text-transform: none; }
+.nota.ref { text-align: left; }
+.nota::footnote-call { content: counter(footnote); vertical-align: super; font-size: 7pt; line-height: 0; font-variant-position: normal; }
+/* No rodapé, o número sai como expoente, seguido de um espaço até o texto (Manual p. 73-74), e as linhas da
+   nota começam sob a primeira letra, com o expoente pendurado dentro da margem. O Paged.js desenharia o
+   número como marcador de lista, sem expoente; por isso a nota deixa de ser item de lista. */
+.pagedjs_footnote_area .nota { display: block; padding-left: 0.35cm; text-indent: -0.35cm; }
+.pagedjs_footnote_area .nota::before { content: counter(footnote-marker); display: inline-block; width: 0.35cm; text-indent: 0; vertical-align: super; font-size: 7pt; line-height: 0; }
+
+/* Ilustrações (Manual p. 51-53): uma linha de 1,5 entre o texto e o título; título acima, em 12, 1,5,
+   centralizado; fonte abaixo, obrigatória, em 10, simples, centralizada. Quadro: bordas laterais fechadas
+   (Manual p. 53). O manual não define tamanho nem entrelinha do conteúdo do quadro e não o põe entre as
+   exceções de 10 e de espaçamento simples (p. 42-43), então valem as regras gerais: 12 e 1,5. */
+.ilustracao { margin: var(--linha) 0; break-inside: avoid; }
+.ilustracao .titulo-ilus, .ilustracao .titulo-tab { text-indent: 0; text-align: center; }
+.ilustracao .fonte { text-indent: 0; font-size: 10pt; line-height: var(--lh1); text-align: center; }
+.ilustracao img { display: block; max-width: 100%; margin: 0 auto; }
+/* Imagem: título, fonte e notas respeitam as margens da ilustração (NBR 14724, 5.8, versão corrigida), então
+   o bloco toma a largura da imagem e os textos ficam presos a ela. */
+.ilustracao.figura { display: table; margin-left: auto; margin-right: auto; }
+.ilustracao.figura > .titulo-ilus { display: table-caption; caption-side: top; }
+.ilustracao.figura > .fonte { display: table-caption; caption-side: bottom; }
+table { border-collapse: collapse; width: 100%; font-size: 12pt; line-height: var(--lh); text-align: left; }
+th, td { border: 1px solid #000; padding: 2pt 4pt; vertical-align: top; }
+th { font-weight: bold; }
+/* Tabela (Manual p. 53-54; IBGE, 1993): dado numérico como informação central; conteúdo em espaçamento
+   simples, em 10 ou 12, o mesmo no trabalho todo (aqui, 12); sem bordas laterais; sem traços horizontais
+   entre as linhas. */
+.ilustracao.tabela table { line-height: var(--lh1); }
+.ilustracao.tabela th, .ilustracao.tabela td { border-left: none; border-right: none; }
+.ilustracao.tabela td { border-top: none; border-bottom: none; }
+.ilustracao.tabela tr:last-child td { border-bottom: 1px solid #000; }
+
+/* Capa (Manual p. 18-19) e folha de rosto (Manual p. 20-21): centralizadas, 12, maiúsculas e negrito,
+   subtítulo sem negrito; natureza em 12, espaçamento simples, justificada, recuo de 8 cm (Manual p. 43). As
+   distâncias verticais seguem o modelo Word da BU. */
+.capa, .rosto { break-after: page; height: 24.6cm; display: flex; flex-direction: column; text-align: center; }
+.capa { page: capa; font-weight: bold; text-transform: uppercase; }
+.rosto { page: rosto; }
+.capa p, .rosto p { text-indent: 0; text-align: center; }
+.capa .sub, .rosto .sub { font-weight: normal; }
+.capa .autor { margin-top: calc(5 * var(--linha)); }
+.capa .titulo { margin-top: calc(6 * var(--linha)); }
+.rosto .autor, .rosto .titulo, .rosto .local { font-weight: bold; text-transform: uppercase; }
+.rosto .titulo { margin-top: calc(12 * var(--linha)); }
+.rosto .natureza { margin: calc(3 * var(--linha)) 0 0 8cm; line-height: var(--lh1); }
+.rosto .natureza p { text-align: justify; }
+.capa .local, .rosto .local { margin-top: auto; }
+
+/* Pré-textuais: cada um em página nova (Manual p. 42). */
+.pretextual { page: pretextual; }
+.pretextual > section { break-before: page; }
+.pretextual > section > h1.pre { break-before: auto; }
+
+/* Resumo e abstract: parágrafo único, sem recuo, 1,5; palavras-chave logo abaixo (Manual p. 26-28). */
+.resumo { text-indent: 0; }
+.palavras-chave { text-indent: 0; margin-top: var(--linha); }
+
+.siglas { width: auto; line-height: var(--lh); }
+.siglas td { border: none; padding: 0 1em 0 0; }
+
+/* Sumário (Manual p. 33-35): indicativos à esquerda; títulos alinhados pelo indicativo mais extenso; cada
+   item com o destaque do seu nível; pontilhado até a página; 1,5. Listas (Manual p. 30): designação, número,
+   travessão, título, pontilhado e página; a segunda linha do título começa sob a primeira palavra do título.
+   O scripts/montar.py preenche os dois e dá à coluna do indicativo a largura do maior indicativo do trabalho. */
+.sumario a.item { display: flex; align-items: flex-end; color: #000; text-decoration: none; text-align: left; }
+.sumario a.item .ind { flex: none; align-self: flex-start; margin: 0; }
+.sumario a.item.n0 .ind { margin-right: 0.3em; }
+/* O pontilhado começa logo depois da última palavra do título, mesmo quando o título quebra em várias linhas:
+   o .fill fica dentro do .tit, em posição absoluta sem deslocamento, que o põe onde estaria o próximo
+   caractere; o .tit corta o excesso na borda, antes do número. Por não ocupar espaço, ele não muda a quebra
+   de linha do título. */
+.sumario a.item .tit { flex: 1 1 auto; min-width: 0; overflow: hidden; position: relative; }
+.sumario a.item .fill::after { content: "\00a0........................................................................................................................................................................................................................................................................"; position: absolute; white-space: nowrap; font-weight: normal; font-style: normal; }
+.sumario a.item .pg { flex: none; white-space: nowrap; padding-left: 0.2em; }
+.sumario a.item.n1 { font-weight: bold; text-transform: uppercase; }
+.sumario a.item.n2 { text-transform: uppercase; }
+.sumario a.item.n3 { font-weight: bold; }
+.sumario a.item.n4 { font-style: italic; }
+.sumario a.item.n5 { font-weight: normal; }
+
+/* Referências (Manual p. 43, 78): alinhadas à esquerda, espaçamento simples, separadas por uma linha em
+   branco de espaçamento simples. */
+.refs p { text-indent: 0; text-align: left; line-height: var(--lh1); margin: 0 0 1.15em 0; }
+
+/* Marcador de texto por escrever. O scripts/checar.py avisa enquanto houver algum. */
+.pendente { font-style: italic; color: #555; }
+
+/* Prévia no navegador, fora da paginação. */
+@media screen {
+  html { background: #e9e9e9; }
+  body { max-width: 16cm; margin: 12px auto; padding: 3cm 2cm 2cm 3cm; background: #fff; box-shadow: 0 0 8px rgba(0,0,0,.25); }
+  .capa, .rosto { height: auto; min-height: 24.6cm; }
+  .nota { float: none; display: block; margin: 0.5em 0 0.5em 1cm; color: #333; }
+}

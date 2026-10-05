@@ -1,0 +1,8 @@
+{
+  "name": "tcc-scripts",
+  "private": true,
+  "description": "Pagina o tcc.html com o Paged.js e imprime o PDF pelo Chromium",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

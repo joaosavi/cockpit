@@ -1,0 +1,7 @@
+scripts/node_modules/
+__pycache__/
+.paginar.html
+.conferir.html
+tcc.pdf
+trabalho.pdf
+artifact/

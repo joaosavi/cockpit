@@ -13,6 +13,12 @@ mkdir -p "$HOME/.local/bin" "$HOME/.claude/hooks"
 ln -sfn "$R/bin/navegador-cofre" "$HOME/.local/bin/navegador-cofre"
 ln -sfn "$R/hooks/segredo.pl" "$HOME/.claude/hooks/segredo.pl"
 
+# As skills feitas nesta máquina. As de terceiros chegam por outro caminho.
+mkdir -p "$HOME/.claude/skills"
+for d in "$R"/skills/*/; do
+  ln -sfn "${d%/}" "$HOME/.claude/skills/$(basename "$d")"
+done
+
 # O hook de segredo nos dois lados de toda ferramenta, e o `bw` fora do alcance do Bash do agente.
 [ -f "$CONF" ] || echo '{}' >"$CONF"
 jq '

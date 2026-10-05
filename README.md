@@ -9,6 +9,7 @@ O agente do Claude Code entra em site com as senhas do cofre sem ver as senhas, 
 | `bin/navegador-cofre` | Lê os logins da organização "Agente Getdemo" no Vaultwarden e abre o Playwright MCP com eles | `~/.local/bin/navegador-cofre` |
 | `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/segredo.pl` |
 | `install.sh` | Cria os links, ajusta o `settings.json`, registra o MCP e instala o Chromium | |
+| `skills/tcc-esag/` | A skill do TCC da ESAG, feita nesta máquina | `~/.claude/skills/tcc-esag` |
 | `.env.bw-agente.example` | Modelo das credenciais da conta do agente | `~/getdemo/.env.bw-agente` |
 
 Os arquivos instalados são links para este repo. Edite aqui, e a próxima sessão já usa a versão nova.
