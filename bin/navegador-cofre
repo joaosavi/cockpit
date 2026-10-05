@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Abre o Playwright MCP com as senhas da organização "Agente Getdemo" do Vaultwarden.
+# As senhas vão para um arquivo na RAM (/dev/shm), o Playwright lê na partida e o arquivo é apagado.
+# O agente digita o nome (LOGIN_CONTAAZUL_COM_PASSWORD) e nunca vê o valor.
+#   navegador-cofre          inicia o MCP
+#   navegador-cofre --nomes  lista só os nomes das variáveis, sem valor
+set -euo pipefail
+CRED="$HOME/getdemo/.env.bw-agente"
+FORA='paypal\.com'   # domínios que nunca entram
+
+MCP='@playwright/mcp@0.0.83'   # versão fixa: @latest baixa código novo a cada partida
+
+# Duas sessões abrindo ao mesmo tempo: o `bw lock` de uma esvazia o `bw list` da outra.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/navegador-cofre.lock"
+flock -w 120 9
+
+set -a; . "$CRED"; set +a
+bw login --apikey </dev/null >/dev/null 2>&1 || true
+# A chave vai por variável de ambiente: em --session ela aparece no `ps` de qualquer processo.
+export BW_SESSION
+BW_SESSION=$(bw unlock --passwordenv BW_PASSWORD --raw </dev/null 2>/dev/null || true)
+unset BW_PASSWORD BW_CLIENTSECRET BW_CLIENTID
+bw sync </dev/null >/dev/null 2>&1 || true
+ITENS=$(bw list items </dev/null 2>/dev/null || true)
+bw lock </dev/null >/dev/null 2>&1 || true
+unset BW_SESSION
+exec 9>&-
+
+if ! jq -e 'type == "array" and length > 0' <<<"$ITENS" >/dev/null 2>&1; then
+  echo "navegador-cofre: o cofre voltou vazio. Confira $CRED e o acesso a pwvault.zippitech.online." >&2
+  exit 1
+fi
+
+dotenv() {
+  jq -r --arg fora "$FORA" '
+    .[] | select(.organizationId != null and .login != null) |
+    ((.login.uris // [])[0].uri // .name | sub("^[a-z]+://";"") | split("/")[0]) as $dom |
+    select($dom | test($fora) | not) |
+    ($dom | ascii_upcase | gsub("[^A-Z0-9]";"_")) as $n |
+    (if .login.username then "\($n)_USER=\(.login.username | @json)" else empty end),
+    (if .login.password then "\($n)_PASSWORD=\(.login.password | @json)" else empty end)
+  ' <<<"$ITENS"
+}
+
+if [ "${1:-}" = "--nomes" ]; then dotenv | sed 's/=.*//'; exit 0; fi
+
+umask 077
+find /dev/shm -maxdepth 1 -name "navegador-cofre.*" -mmin +2 -delete 2>/dev/null || true
+ARQ=$(mktemp /dev/shm/navegador-cofre.XXXXXX)
+dotenv >"$ARQ"
+unset ITENS
+setsid nohup sh -c "sleep 90; rm -f \"$ARQ\"" >/dev/null 2>&1 &
+exec npx -y "$MCP" --browser chromium --headless --isolated \
+  --output-dir "${XDG_RUNTIME_DIR:-/tmp}/navegador-saida" \
+  --blocked-origins "https://www.paypal.com;https://paypal.com" \
+  --secrets "$ARQ" "$@"
