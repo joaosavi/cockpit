@@ -13,7 +13,8 @@ for u in agentes.slice resgate.slice \
          getdemo-rc.service zippi-rc.service esag-rc.service resgate-rc.service \
          retomar-limite.service retomar-limite.timer \
          sessoes-limite.service sessoes-limite.timer \
-         getdemo-faxina.service getdemo-faxina.timer; do
+         getdemo-faxina.service getdemo-faxina.timer \
+         sessoes-esquecidas.service sessoes-esquecidas.timer; do
   cp "/etc/systemd/system/$u" "$R/systemd/$u"
   if [ -d "/etc/systemd/system/$u.d" ]; then
     cp -r "/etc/systemd/system/$u.d" "$R/systemd/$u.d"
