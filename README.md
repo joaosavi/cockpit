@@ -10,6 +10,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/` |
 | `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite` e `navegador-cofre` | `~/.local/bin/` |
 | `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
+| `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agente` | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite` e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
@@ -41,7 +42,7 @@ O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o
 	~/claude-devcontainer/install.sh
 	```
 
-	Ele cria os links, copia o `settings.json` se ainda não existir, registra o MCP `navegador`, instala o Chromium, instala as units com `sudo` e liga os serviços. No fim, roda o teste do hook de segredo.
+	Ele cria os links, copia o `settings.json` se ainda não existir, instala os mods, registra o MCP `navegador`, instala o Chromium, instala as units com `sudo` e liga os serviços. No fim, roda o teste do hook de segredo.
 
 2. Pelo SSH, crie as credenciais da conta do agente:
 
@@ -55,6 +56,42 @@ O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o
 	```sh
 	~/.local/bin/navegador-cofre --nomes
 	```
+
+## Os mods
+
+Um mod é um plugin com código que roda dentro do Claude Code e responde a eventos: uma chamada de ferramenta, um prompt, um subagente subindo. Ele faz de forma determinística o que antes era regra no `CLAUDE.md` ou script num timer. A raiz do repo é o marketplace `agente`, e cada pasta em `mods/` é um plugin dele.
+
+| mod | o que faz |
+| :--- | :--- |
+| `limite` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta. Grava um diário por sessão em `~/.local/state/mods/limite/` |
+
+O `retomar-limite.timer` continua rodando para a sessão que ainda bater 100%. A opção `retomarNoErro` do mod `limite` assume esse caso quando o timer sair.
+
+Para mudar um mod:
+
+1. Edite o código e rode os testes na pasta dele:
+
+	```sh
+	claude plugin validate ~/claude-devcontainer/mods/limite
+	claude plugin test ~/claude-devcontainer/mods/limite
+	```
+
+2. Suba o `version` no `.claude-plugin/plugin.json` do mod. Sem a versão nova, o Claude Code mantém a cópia antiga.
+3. Instale a versão nova:
+
+	```sh
+	claude plugin marketplace update agente
+	claude plugin update limite@agente
+	```
+
+As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
+
+Para usar os mods em outra máquina, adicione o repo como marketplace e instale o mod:
+
+```sh
+claude plugin marketplace add joaosavi/claude-devcontainer
+claude plugin install limite@agente
+```
 
 ## Fica fora do git
 

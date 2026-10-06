@@ -1,0 +1,8 @@
+{
+  "name": "agente",
+  "owner": { "name": "João Savi" },
+  "description": "Os mods do agente: o que antes era regra no CLAUDE.md ou script no timer, agora roda dentro do Claude Code",
+  "plugins": [
+    { "name": "limite", "source": "./mods/limite", "description": "Segura o limite de uso da conta: um subagente por vez acima de 90%, pausa com reserva em 98% e retoma sozinho quando a janela volta" }
+  ]
+}
