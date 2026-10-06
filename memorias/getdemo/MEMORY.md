@@ -3,3 +3,6 @@
 - [Cofre de credenciais para agentes](cofre-credenciais-agentes.md) — Vaultwarden + MCP navegador-cofre montado em out/2026, onde fica cada peça
 - [MBR mensal](mbr-mensal.md) — o deck de agosto com o DATA trocado, nunca redesenhado; números pelo mbrFrom da V2
 - [Repo da VPS](vps-claude-devcontainer.md) — joaosavi/claude-devcontainer guarda a VPS; chezmoi é só das máquinas locais
+- [Rendimento CDB mensal](rendimento-cdb-mensal.md) — extratos do Inter → rendimento do mês → lançamento de ajuste no Conta Azul
+- [Conciliação dos cartões](conciliacao-cartoes.md) — faturas Inter e Itaú × Conta Azul, erros recorrentes, regra de centavos do parcelamento
+- [Mods do agente](mods-do-agente.md) — marketplace `agente` no claude-devcontainer, ordem dos mods, o que funciona no Remote Control
