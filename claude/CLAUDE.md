@@ -184,6 +184,13 @@ Carregue a skill antes da ação que ela cobre, mesmo quando a tarefa parecer si
 - antes de editar `SKILL.md`, `AGENTS.md` ou `CLAUDE.md`: `writing-for-agents`
 - antes de editar `CONTEXT.md` ou um ADR: `domain-modeling`
 
+# Pesquisa na web
+
+O Firecrawl cobra crédito por chamada, e o resto sai de graça. Busque com o WebSearch, carregado pelo
+ToolSearch quando ele estiver adiado. Leia página e API com `curl` (a do GitHub responde JSON). Use o
+Firecrawl só quando os dois falharem: site que bloqueia o `curl` ou página que só monta com
+JavaScript.
+
 # Memória desta VPS
 
 Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e para tudo que ela dispara: MCP, `tsc`, `vitest`, build, navegador.
