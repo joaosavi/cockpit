@@ -6,3 +6,4 @@
 - [Rendimento CDB mensal](rendimento-cdb-mensal.md) — extratos do Inter → rendimento do mês → lançamento de ajuste no Conta Azul
 - [Conciliação dos cartões](conciliacao-cartoes.md) — faturas Inter e Itaú × Conta Azul, erros recorrentes, regra de centavos do parcelamento
 - [Mods do agente](mods-do-agente.md) — marketplace `agente` no claude-devcontainer, ordem dos mods, o que funciona no Remote Control
+- [Gmail do agente](gmail-do-agente.md) — conta própria no cofre (ACCOUNTS_GOOGLE_COM_*); o Google barra login headless
