@@ -1,0 +1,3 @@
+interface:
+  display_name: "Chain check"
+  short_description: "Validate reasoning one chain of claims at a time"
