@@ -13,6 +13,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite` e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
+| `ambientes/` | O `CLAUDE.md` de cada pasta que um serviço `*-rc` abre, como `getdemo` e `esag` | `~/<pasta>/CLAUDE.md` |
 | `docs/always-on.html` | O guia "Claude Code Always-On", exportado do claude.ai | |
 | `.env.bw-agente.example` | Modelo das credenciais da conta do agente no Vaultwarden | `~/getdemo/.env.bw-agente` |
 

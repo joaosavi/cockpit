@@ -18,6 +18,7 @@ for d in "$R"/skills/*/; do link "${d%/}" "$HOME/.claude/skills/$(basename "$d")
 link "$R/tarefas/sessoes-limite/PROMPT.md" "$HOME/tarefas/sessoes-limite/PROMPT.md"
 link "$R/tarefas/sessoes-limite/retomar.py" "$HOME/tarefas/sessoes-limite/retomar.py"
 link "$R/resgate/CLAUDE.md" "$HOME/resgate/CLAUDE.md"
+for d in "$R"/ambientes/*/; do link "${d}CLAUDE.md" "$HOME/$(basename "$d")/CLAUDE.md"; done
 
 # O Claude Code regrava o settings.json inteiro, e um link viraria arquivo comum na primeira
 # gravação. Por isso ele entra como cópia, só quando ainda não existe. O capturar.sh traz de volta.
