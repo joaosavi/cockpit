@@ -1,0 +1,9 @@
+- [Agentes em paralelo](agentes-em-paralelo.md) — no máximo um agente em segundo plano por vez
+- [Handoff do TCC](tcc-handoff.md) — v4 de 05/10/2026, 35 folhas, ainda não enviada; estado em tcc/HANDOFF.md
+- [Artifact em sessão SDK](artifact-em-sessao-sdk.md) — sem CLAUDE_CODE_ARTIFACT=1 no settings, o Artifact some
+- [Conversor para Google Docs](conversor-google-docs.md): cópia do TCC no Google Docs para o orientador; a fonte segue o HTML
+- [Skill tcc-esag e kit](skill-abnt-esag-motor.md) — kit do TCC da ESAG (antes abnt-esag), com cópia do Google Docs; o kit de consultoria sai dele
+- [Versão para o orientador](versao-para-orientador.md) — estrutura inteira montada; só saem os avisos de "entra depois"
+- [Download por scp](download-por-scp.md) — entregas em /home/sv/esag/entrega, com comando scp pronto
+- [Texto do TCC não validado](texto-tcc-nao-validado.md) — o João não revisou o texto; fato vem de decisoes.md, das fontes ou dele
+- [Validar por cadeia](validar-por-cadeia.md) — para o João conferir fato ou raciocínio, usar a skill global chain-check

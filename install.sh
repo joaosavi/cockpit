@@ -20,6 +20,16 @@ link "$R/tarefas/sessoes-limite/retomar.py" "$HOME/tarefas/sessoes-limite/retoma
 link "$R/resgate/CLAUDE.md" "$HOME/resgate/CLAUDE.md"
 for d in "$R"/ambientes/*/; do link "${d}CLAUDE.md" "$HOME/$(basename "$d")/CLAUDE.md"; done
 
+# A memória de cada projeto mora em ~/.claude/projects/<pasta com / trocado por ->/memory.
+for d in "$R"/memorias/*/; do
+  p="$HOME/.claude/projects/$(printf '%s' "$HOME/$(basename "$d")" | tr '/' '-')/memory"
+  if [ -d "$p" ] && [ ! -L "$p" ]; then
+    echo "$p já existe e não é link. Junte com ${d%/} à mão." >&2
+  else
+    link "${d%/}" "$p"
+  fi
+done
+
 # O Claude Code regrava o settings.json inteiro, e um link viraria arquivo comum na primeira
 # gravação. Por isso ele entra como cópia, só quando ainda não existe. O capturar.sh traz de volta.
 for f in settings.json settings.local.json; do

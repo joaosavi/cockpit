@@ -14,6 +14,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite` e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
 | `ambientes/` | O `CLAUDE.md` de cada pasta que um serviço `*-rc` abre, como `getdemo` e `esag` | `~/<pasta>/CLAUDE.md` |
+| `memorias/` | A memória automática do Claude Code de cada projeto, como `getdemo` e `esag` | `~/.claude/projects/<projeto>/memory/` |
 | `docs/always-on.html` | O guia "Claude Code Always-On", exportado do claude.ai | |
 | `.env.bw-agente.example` | Modelo das credenciais da conta do agente no Vaultwarden | `~/getdemo/.env.bw-agente` |
 
@@ -57,7 +58,7 @@ O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o
 
 ## Fica fora do git
 
-As credenciais do Claude Code e do GitHub, o `~/.secrets`, todo `.env`, e a memória dos projetos, que tem dado de empresa. Cada máquina faz os próprios logins.
+As credenciais do Claude Code e do GitHub, o `~/.secrets` e todo `.env`. Cada máquina faz os próprios logins. A memória dos projetos entra, e ela tem dado de empresa: o repo precisa continuar privado.
 
 ## Como o navegador usa o cofre
 
