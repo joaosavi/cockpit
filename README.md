@@ -63,7 +63,11 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 
 | mod | o que faz |
 | :--- | :--- |
-| `limite` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta. Grava um diário por sessão em `~/.local/state/mods/limite/` |
+| `agente` | O pacote. Não tem código: instala os outros como dependência |
+| `limite` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta |
+| `memoria` | Antes de typecheck, teste, build ou Playwright, confere se o comando cabe no alto de memória do grupo, menos 2%. Se não cabe, roda com um processo só, espera até 2 minutos ou recusa. Repete com um processo só o comando que morreu com exit 137, e guarda o pico de cada comando para a próxima conta |
+
+Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`.
 
 O `retomar-limite.timer` continua rodando para a sessão que ainda bater 100%. A opção `retomarNoErro` do mod `limite` assume esse caso quando o timer sair.
 
@@ -77,21 +81,18 @@ Para mudar um mod:
 	```
 
 2. Suba o `version` no `.claude-plugin/plugin.json` do mod. Sem a versão nova, o Claude Code mantém a cópia antiga.
-3. Instale a versão nova:
+3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/agente/.claude-plugin/plugin.json`, suba o `version` do `agente` e registre o mod no `.claude-plugin/marketplace.json`.
 
-	```sh
-	claude plugin marketplace update agente
-	claude plugin update limite@agente
-	```
+O marketplace `agente` tem atualização automática ligada no `settings.json`. Depois da mudança, a primeira sessão que abre atualiza a cópia instalada e instala a dependência que entrou, e as sessões abertas a partir daí carregam a versão nova. As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
 
-As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
-
-Para usar os mods em outra máquina, adicione o repo como marketplace e instale o mod:
+Para usar os mods em outra máquina, adicione o repo como marketplace e instale o pacote:
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install limite@agente
+claude plugin install agente@agente
 ```
+
+Na outra máquina, ligue a atualização automática do marketplace `agente` no `/plugin`, aba **Marketplaces**. Desinstalar o pacote deixa os mods instalados, e o `claude plugin prune` remove os que sobraram.
 
 ## Fica fora do git
 

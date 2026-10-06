@@ -205,4 +205,4 @@ Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e pa
 
 Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado. Uma sessão parada ocupa de 200 a 500 MB, e um `tsc --noEmit` do zippi-datawarehouse ocupa 1 GB.
 
-Antes de typecheck, suíte de teste, build ou Playwright, rode `memoria` e confira a folga do seu grupo. Um comando que morre com exit 137 bateu no teto: rode de novo com menos paralelismo, por exemplo `turbo run ... --concurrency=1`.
+O mod `memoria` guarda typecheck, suíte de teste, build e Playwright: antes de rodar, confere a folga do grupo, e se não couber roda com um processo só ou espera. Depois de um exit 137, ele repete com um processo só. Quando ele recusar um comando, siga com a parte da tarefa que não depende dele e avise o João. O `/memoria` mostra a folga de cada grupo.

@@ -1,0 +1,10 @@
+{
+  "name": "memoria",
+  "version": "0.1.0",
+  "description": "Segura typecheck, build, teste e Playwright abaixo do alto de memória: roda com um processo só, espera ou recusa, e repete o comando que morreu com exit 137",
+  "author": { "name": "João Savi" },
+  "userConfig": {
+    "margem": { "type": "number", "title": "Margem", "description": "Percentual do alto de memória de cada grupo que fica livre", "default": 2, "min": 0, "max": 30 },
+    "esperaSegundos": { "type": "number", "title": "Espera", "description": "Segundos que um comando pesado espera a memória baixar antes da recusa", "default": 120, "min": 0, "max": 600 }
+  }
+}

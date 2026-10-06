@@ -1,0 +1,7 @@
+{
+  "name": "agente",
+  "version": "0.1.0",
+  "description": "O pacote com todos os mods do agente. Instalar este plugin instala cada mod como dependência",
+  "author": { "name": "João Savi" },
+  "dependencies": ["limite", "memoria"]
+}
