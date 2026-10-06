@@ -1,0 +1,8 @@
+#!/bin/sh
+# O ambiente da Getdemo inteira: abre em ~/getdemo e enxerga todas as pastas de lá.
+# O modo servidor do Remote Control sai depois de uns 10 minutos sem rede, e o laço o devolve.
+cd "$HOME/getdemo" || exit 1
+while true; do
+    claude remote-control --name getdemo --remote-control-session-name-prefix getdemo --spawn same-dir --no-create-session-in-dir --permission-mode bypassPermissions
+    sleep 10
+done

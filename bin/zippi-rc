@@ -1,0 +1,8 @@
+#!/bin/sh
+# O ambiente só do zippi-datawarehouse: a sessão abre no repo e carrega a memória e os hooks dele.
+# O modo servidor do Remote Control sai depois de uns 10 minutos sem rede, e o laço o devolve.
+cd "$HOME/getdemo/zippi-datawarehouse" || exit 1
+while true; do
+    claude remote-control --name zippi-datawarehouse --remote-control-session-name-prefix zippi --spawn same-dir --no-create-session-in-dir --permission-mode bypassPermissions
+    sleep 10
+done

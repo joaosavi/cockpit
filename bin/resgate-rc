@@ -1,0 +1,7 @@
+#!/bin/sh
+# O modo servidor do Remote Control sai depois de uns 10 minutos sem rede, e o laço o devolve.
+cd "$HOME/resgate" || exit 1
+while true; do
+    claude remote-control --name resgate --remote-control-session-name-prefix resgate --spawn same-dir --capacity 2 --permission-mode bypassPermissions
+    sleep 10
+done

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Mostra quanto cada grupo de memória usa, os limites dele e a pressão de memória do container.
+mb() { case "$1" in max) echo "sem teto" ;; *) echo "$(( $1 / 1048576 )) MB" ;; esac; }
+for cg in agentes.slice agentes.slice/esag-rc.service agentes.slice/getdemo-rc.service agentes.slice/zippi-rc.service resgate.slice system.slice; do
+    p=/sys/fs/cgroup/$cg
+    [ -d "$p" ] || continue
+    printf '%-34s usa %-8s swap %-8s alto %-9s teto %s\n' "$cg" "$(mb "$(cat $p/memory.current)")" \
+        "$(mb "$(cat $p/memory.swap.current)")" "$(mb "$(cat $p/memory.high)")" "$(mb "$(cat $p/memory.max)")"
+done
+echo
+free -m | sed -n '1,3p'
+echo
+printf 'pressão de memória (full avg10): %s%%\n' "$(sed -n 's/^full avg10=\([0-9.]*\).*/\1/p' /sys/fs/cgroup/memory.pressure)"

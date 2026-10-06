@@ -1,0 +1,15 @@
+[Unit]
+Description=Remote Control do Claude Code nos trabalhos da ESAG
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=sv
+ExecStart=/usr/bin/tmux -L esag new-session -d -s esag "zsh -lic esag-rc"
+ExecStop=/usr/bin/tmux -L esag kill-server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

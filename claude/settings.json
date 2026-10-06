@@ -1,0 +1,113 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "model": "opus[1m]",
+  "statusLine": {
+    "type": "command",
+    "command": "bash -c 'cols=${COLUMNS:-}; case \"$cols\" in \"\"|*[!0-9]*) cols=$(stty size </dev/tty 2>/dev/null | awk '\"'\"'{print $2}'\"'\"');; esac; case \"$cols\" in \"\"|*[!0-9]*) cols=120;; esac; export COLUMNS=$(( cols > 4 ? cols - 4 : 1 )); plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '\"'\"'{ print $(NF-1) \"\\t\" $(0) }'\"'\"' | grep -E '\"'\"'^[0-9]+\\.[0-9]+\\.[0-9]+[[:space:]]'\"'\"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); node_bin=$(command -v node || ls -1 \"$HOME\"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1); exec \"$node_bin\" \"${plugin_dir}dist/index.js\"'"
+  },
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-hud@claude-hud": true,
+    "code-review@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false
+  },
+  "extraKnownMarketplaces": {
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
+  "effortLevel": "xhigh",
+  "autoUpdatesChannel": "latest",
+  "tui": "default",
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark-ansi",
+  "remoteControlAtStartup": false,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skillOverrides": {
+    "anthropic-skills:conciliacao-inter-erp": "off",
+    "anthropic-skills:diagnostico-leads": "off",
+    "anthropic-skills:mentor-sdr": "off",
+    "anthropic-skills:post-linkedin-getdemo": "off",
+    "anthropic-skills:pptx": "off",
+    "anthropic-skills:radar-linkedin": "off",
+    "abnt-esag": "name-only",
+    "archify": "name-only",
+    "codebase-design": "name-only",
+    "find-skills": "name-only",
+    "git-guardrails-claude-code": "name-only",
+    "how": "name-only",
+    "why": "name-only",
+    "principios": "name-only",
+    "prototype": "name-only",
+    "recall": "name-only",
+    "research": "name-only",
+    "setup-pre-commit": "name-only",
+    "humanizer": "name-only",
+    "keybindings-help": "name-only",
+    "fewer-permission-prompts": "name-only",
+    "loop": "name-only",
+    "schedule": "name-only",
+    "run": "name-only",
+    "init": "name-only",
+    "security-review": "name-only",
+    "simplify": "name-only",
+    "code-review": "name-only",
+    "plugin-authoring": "name-only",
+    "artifact-diagramming": "name-only",
+    "artifact-capabilities": "name-only",
+    "workflow-authoring": "name-only"
+  },
+  "env": {
+    "GITHUB_TOKEN": "",
+    "BI_MCP_PG_URL": "",
+    "CLAUDE_CODE_ARTIFACT": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "perl \"$HOME/.claude/hooks/segredo.pl\" pre"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "perl \"$HOME/.claude/hooks/segredo.pl\" post"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(bw:*)"
+    ]
+  }
+}

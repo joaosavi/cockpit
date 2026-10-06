@@ -1,0 +1,8 @@
+[Unit]
+Description=Faxina toda segunda às 7h de Brasília (#216)
+
+[Timer]
+OnCalendar=Mon *-*-* 07:00:00 America/Sao_Paulo
+
+[Install]
+WantedBy=timers.target

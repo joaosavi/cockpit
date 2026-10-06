@@ -1,31 +1,36 @@
 # claude-devcontainer
 
-O agente do Claude Code entra em site com as senhas do cofre sem ver as senhas, e nenhum valor de segredo chega ao transcript.
+Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claude Code, os serviços do systemd, os scripts, as skills feitas aqui e o navegador que usa o cofre de senhas. O repo é o backup da máquina e a receita para montar outra.
 
 ## O que tem aqui
 
-| arquivo | o que faz | vai para |
+| pasta | o que guarda | na máquina |
 | :--- | :--- | :--- |
-| `bin/navegador-cofre` | Lê os logins da organização "Agente Getdemo" no Vaultwarden e abre o Playwright MCP com eles | `~/.local/bin/navegador-cofre` |
-| `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/segredo.pl` |
-| `install.sh` | Cria os links, ajusta o `settings.json`, registra o MCP e instala o Chromium | |
-| `skills/tcc-esag/` | A skill do TCC da ESAG, feita nesta máquina | `~/.claude/skills/tcc-esag` |
-| `.env.bw-agente.example` | Modelo das credenciais da conta do agente | `~/getdemo/.env.bw-agente` |
+| `claude/` | `CLAUDE.md` global, `settings.json` e `settings.local.json` | `~/.claude/` |
+| `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/` |
+| `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite` e `navegador-cofre` | `~/.local/bin/` |
+| `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
+| `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
+| `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite` e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
+| `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
+| `docs/always-on.html` | O guia "Claude Code Always-On", exportado do claude.ai | |
+| `.env.bw-agente.example` | Modelo das credenciais da conta do agente no Vaultwarden | `~/getdemo/.env.bw-agente` |
 
-Os arquivos instalados são links para este repo. Edite aqui, e a próxima sessão já usa a versão nova.
+## Mude a máquina e o repo junto
 
-## Como o navegador usa o cofre
+Quase todo arquivo instalado é um link para este repo. Uma mudança feita na VPS já aparece no `git status`.
 
-1. O `navegador-cofre` destrava o cofre com a conta do agente, lê os logins da organização e trava o cofre de novo.
-2. Ele grava um arquivo em `/dev/shm`, com um nome por domínio: `LOGIN_CONTAAZUL_COM_USER` e `LOGIN_CONTAAZUL_COM_PASSWORD`. O arquivo é apagado em 90 s.
-3. Ele abre o `@playwright/mcp` com `--secrets` apontando para esse arquivo.
-4. O agente digita o nome do segredo. O Playwright troca o nome pelo valor dentro do navegador e mascara o valor em tudo que devolve.
+Três coisas entram como cópia: o `settings.json`, o `settings.local.json` e as units do systemd. O Claude Code regrava o `settings.json` inteiro e desfaz o link, e as units são do root. Antes de commitar, rode:
 
-O PayPal fica fora do arquivo e bloqueado no navegador por `--blocked-origins`.
+```sh
+~/claude-devcontainer/capturar.sh
+```
 
-## Instale numa máquina nova
+O script copia as três de volta para o repo e mostra o `git status`.
 
-Pré-requisitos: `bw` (`npm i -g @bitwarden/cli`), `jq`, `flock`, Node com `npx`, `perl` e `claude`.
+## Monte uma VPS nova
+
+O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o login do Claude e do GitHub. Depois dele:
 
 1. Clone o repo e rode o instalador:
 
@@ -34,25 +39,36 @@ Pré-requisitos: `bw` (`npm i -g @bitwarden/cli`), `jq`, `flock`, Node com `npx`
 	~/claude-devcontainer/install.sh
 	```
 
-2. Pelo SSH, copie o modelo e preencha as credenciais da conta do agente:
+	Ele cria os links, copia o `settings.json` se ainda não existir, registra o MCP `navegador`, instala o Chromium, instala as units com `sudo` e liga os serviços. No fim, roda o teste do hook de segredo.
+
+2. Pelo SSH, crie as credenciais da conta do agente:
 
 	```sh
 	cp ~/claude-devcontainer/.env.bw-agente.example ~/getdemo/.env.bw-agente
 	chmod 600 ~/getdemo/.env.bw-agente
 	```
 
-3. Confira os nomes que o agente vai receber, sem os valores:
+3. Confira os nomes de segredo que o agente recebe, sem os valores:
 
 	```sh
 	~/.local/bin/navegador-cofre --nomes
 	```
 
-4. Abra uma sessão nova do Claude Code. O MCP `navegador` leva cerca de 16 s para partir.
+## Fica fora do git
 
-O instalador termina rodando `segredo.pl --teste`, que prova o hook com segredos falsos.
+As credenciais do Claude Code e do GitHub, o `~/.secrets`, todo `.env`, e a memória dos projetos, que tem dado de empresa. Cada máquina faz os próprios logins.
 
-## Limites conhecidos
+## Como o navegador usa o cofre
 
-- O `browser_evaluate` devolve sem máscara qualquer transformação do valor, como o tamanho ou o valor separado por espaços.
+1. O `navegador-cofre` destrava o Vaultwarden com a conta do agente, lê os logins da organização "Agente Getdemo" e trava o cofre de novo.
+2. Ele grava em `/dev/shm` um arquivo com um nome por domínio, como `LOGIN_CONTAAZUL_COM_PASSWORD`, e apaga o arquivo em 90 s.
+3. Ele abre o `@playwright/mcp` com `--secrets` apontando para esse arquivo.
+4. O agente digita o nome do segredo. O Playwright troca o nome pelo valor dentro do navegador e mascara o valor em tudo que devolve.
+
+O PayPal fica fora do arquivo e bloqueado no navegador.
+
+Limites conhecidos:
+
+- O `browser_evaluate` devolve sem máscara qualquer transformação do valor, como o tamanho.
 - A máscara troca por valor. Dois logins com o mesmo usuário aparecem com o nome de um deles.
 - O usuário que roda as sessões lê o `.env.bw-agente` e tem sudo. O conjunto evita vazamento por acidente e não segura um agente que queira a senha.

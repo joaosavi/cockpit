@@ -1,0 +1,7 @@
+[Unit]
+Description=Reserva de memória do agente de resgate
+
+[Slice]
+MemoryMin=1G
+MemoryMax=1536M
+CPUWeight=1000

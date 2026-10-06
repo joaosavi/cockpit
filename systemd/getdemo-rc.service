@@ -1,0 +1,15 @@
+[Unit]
+Description=Remote Control do Claude Code na Getdemo inteira, em ~/getdemo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=sv
+ExecStart=/usr/bin/tmux -L getdemo new-session -d -s getdemo "zsh -lic getdemo-rc"
+ExecStop=/usr/bin/tmux -L getdemo kill-server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

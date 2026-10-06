@@ -1,0 +1,4 @@
+#!/bin/sh
+# Abre, uma vez, a sessão que monta a retomada de sessões paradas por limite de uso.
+cd "$HOME/tarefas/sessoes-limite" || exit 1
+exec claude --remote-control sessoes-limite --permission-mode bypassPermissions "$(cat "${1:-PROMPT.md}")"

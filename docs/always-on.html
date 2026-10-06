@@ -1,0 +1,2428 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Claude Code Always-On</title>
+<meta name="description" content="Como deixar o Claude Code rodando 24 horas numa máquina remota, com acesso pelo celular, pelo terminal e pelo VS Code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: documentação em três colunas. Menu de páginas à esquerda, artigo no centro, sumário da página à direita. O âmbar é o LED de "ligado" do servidor. */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --sunken: #eceef2;
+  --ink: #151922;
+  --muted: #586071;
+  --line: #e0e3e9;
+  --line-strong: #c9ced8;
+  --link: #1d52b3;
+  --led: #d38a06;
+  --led-soft: #fbf0d8;
+  --ok: #1d7a4c;
+  --ok-soft: #e2f2e9;
+  --warn: #9a5a05;
+  --warn-soft: #fcefd9;
+  --danger: #b3261e;
+  --danger-soft: #fce7e5;
+  --info: #1d52b3;
+  --info-soft: #e5edfb;
+  --code-bg: #f0f2f6;
+  --code-ink: #1a2030;
+  --shadow: 0 1px 2px rgba(20, 25, 34, .06), 0 8px 24px rgba(20, 25, 34, .06);
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --header-h: 60px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1016; --surface: #12161e; --sunken: #181d27; --ink: #e4e7ee; --muted: #9aa2b2;
+    --line: #232a36; --line-strong: #323a49; --link: #8fb4ff; --led: #f0b43c; --led-soft: #2b2312;
+    --ok: #5cc28f; --ok-soft: #10261b; --warn: #f0b43c; --warn-soft: #2b2312; --danger: #ff8b7d; --danger-soft: #34151299;
+    --info: #8fb4ff; --info-soft: #14203a; --code-bg: #0a0d13; --code-ink: #d5dae5;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1016; --surface: #12161e; --sunken: #181d27; --ink: #e4e7ee; --muted: #9aa2b2;
+  --line: #232a36; --line-strong: #323a49; --link: #8fb4ff; --led: #f0b43c; --led-soft: #2b2312;
+  --ok: #5cc28f; --ok-soft: #10261b; --warn: #f0b43c; --warn-soft: #2b2312; --danger: #ff8b7d; --danger-soft: #34151299;
+  --info: #8fb4ff; --info-soft: #14203a; --code-bg: #0a0d13; --code-ink: #d5dae5;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--header-h) + 24px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 var(--f-body); -webkit-font-smoothing: antialiased; }
+a { color: var(--link); text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--led); outline-offset: 2px; border-radius: 4px; }
+code, kbd, pre { font-family: var(--f-mono); }
+:not(pre) > code { font-size: .86em; background: var(--sunken); border: 1px solid var(--line); padding: .08em .38em; border-radius: 5px; overflow-wrap: anywhere; }
+
+/* topo */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; height: var(--header-h); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; padding-inline: 16px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); flex-shrink: 0; }
+.mark { position: relative; width: 28px; height: 28px; border-radius: 7px; background: var(--ink); display: grid; place-items: center; flex-shrink: 0; }
+.mark svg { width: 16px; height: 16px; stroke: var(--bg); }
+.mark::after { content: ""; position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--led); box-shadow: 0 0 0 2px var(--surface); }
+.wordmark { font: 700 16.5px/1 var(--f-display); letter-spacing: -.012em; white-space: nowrap; }
+.brand .sep { width: 1px; height: 18px; background: var(--line-strong); }
+.brand .docs { font: 500 14.5px/1 var(--f-body); color: var(--muted); }
+.topnav { display: flex; align-items: center; gap: 2px; margin-left: 14px; height: 100%; }
+.topnav a { position: relative; display: flex; align-items: center; height: 100%; padding: 0 11px; color: var(--muted); text-decoration: none; font: 500 14px var(--f-body); white-space: nowrap; }
+.topnav a:hover { color: var(--ink); }
+.topnav a.on { color: var(--ink); }
+.topnav a.on::after { content: ""; position: absolute; left: 11px; right: 11px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--led); }
+.ver { font: 500 12px/1 var(--f-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; white-space: nowrap; flex-shrink: 0; }
+.search { position: relative; flex: 1; max-width: 320px; margin-left: auto; }
+.search kbd { position: absolute; right: 8px; top: 9px; font: 500 11.5px/1 var(--f-mono); color: var(--muted); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; padding: 3px 6px; background: var(--surface); pointer-events: none; }
+.search input { width: 100%; height: 38px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); font: 14px var(--f-body); padding: 0 12px 0 36px; }
+.search svg { position: absolute; left: 11px; top: 11px; width: 16px; height: 16px; stroke: var(--muted); }
+.results { position: absolute; top: 44px; left: 0; right: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; max-height: 60vh; overflow: auto; }
+.results button { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--ink); padding: 8px 10px; border-radius: 8px; cursor: pointer; font: 14px/1.4 var(--f-body); }
+.results button:hover, .results button.on { background: var(--sunken); }
+.results small { display: block; color: var(--muted); font-size: 12.5px; }
+.results .empty { padding: 10px; color: var(--muted); font-size: 14px; }
+.menu-btn { display: none; place-items: center; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: 8px; width: 38px; height: 36px; padding: 0; cursor: pointer; flex-shrink: 0; }
+.menu-btn svg { width: 18px; height: 18px; stroke: currentColor; }
+
+/* grade */
+.shell { display: grid; grid-template-columns: 272px minmax(0, 1fr) 220px; max-width: 1440px; margin: 0 auto; }
+.sidebar { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top, 0px)); height: calc(100vh - var(--header-h)); overflow-y: auto; padding: 24px 16px 40px 20px; border-right: 1px solid var(--line); }
+.nav-group { margin-bottom: 22px; }
+.nav-group h4 { margin: 0 0 6px 10px; font: 600 11.5px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.nav-group a { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14.5px; line-height: 1.35; }
+.nav-group a:hover { background: var(--sunken); }
+.nav-group a.active { background: var(--led-soft); color: var(--ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--led); }
+.nav-group a .tag { margin-left: auto; font: 600 10.5px/1 var(--f-body); letter-spacing: .04em; color: var(--ok); background: var(--ok-soft); padding: 3px 6px; border-radius: 999px; }
+.nav-group a .num { font: 500 12px/1 var(--f-mono); color: var(--muted); width: 1.4em; }
+
+main { min-width: 0; padding: 36px 48px 80px; }
+.page { max-width: 760px; margin: 0 auto; }
+.page[hidden] { display: none; }
+.crumb { font: 500 13px var(--f-body); color: var(--muted); margin-bottom: 10px; }
+h1 { font: 700 clamp(30px, 4vw, 40px)/1.12 var(--f-display); letter-spacing: -.02em; margin: 0 0 14px; text-wrap: balance; }
+h2 { font: 700 24px/1.25 var(--f-display); letter-spacing: -.01em; margin: 48px 0 12px; text-wrap: balance; }
+h3 { font: 600 18px/1.35 var(--f-body); margin: 30px 0 8px; }
+p, li { max-width: 68ch; }
+.lead { font-size: 18.5px; line-height: 1.6; color: var(--muted); margin: 0 0 24px; }
+ul, ol { padding-left: 1.3em; }
+li { margin: 4px 0; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
+
+/* sumário à direita */
+.toc { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top, 0px)); height: calc(100vh - var(--header-h)); overflow-y: auto; padding: 36px 16px 40px 8px; }
+.toc h5 { margin: 0 0 10px; font: 600 11.5px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.toc button { display: block; width: 100%; text-align: left; background: none; border: 0; border-left: 2px solid var(--line); padding: 5px 0 5px 12px; color: var(--muted); font: 13.5px/1.4 var(--f-body); cursor: pointer; }
+.toc button:hover { color: var(--ink); border-left-color: var(--line-strong); }
+.toc button.on { color: var(--ink); border-left-color: var(--led); }
+
+/* componentes */
+.callout { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 14px 16px; border-radius: 12px; margin: 20px 0; border: 1px solid; }
+.callout > svg { width: 20px; height: 20px; margin-top: 2px; }
+.callout p { margin: 0; }
+.callout p + p, .callout ul { margin-top: 6px; }
+.callout strong.label { display: block; font: 600 13px/1.3 var(--f-body); letter-spacing: .02em; margin-bottom: 2px; }
+.callout.note { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
+.callout.note > svg { stroke: var(--info); }
+.callout.tip { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+.callout.tip > svg { stroke: var(--ok); }
+.callout.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.callout.warn > svg { stroke: var(--warn); }
+.callout.danger { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.callout.danger > svg { stroke: var(--danger); }
+
+.code { margin: 16px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--code-bg); overflow: hidden; }
+.code-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--line); font: 500 12px var(--f-mono); color: var(--muted); }
+.copy { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: 7px; font: 600 12.5px var(--f-body); padding: 5px 10px; cursor: pointer; }
+.copy:hover { border-color: var(--led); }
+.copy.done { color: var(--ok); border-color: var(--ok); }
+.code pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 13.4px; line-height: 1.6; color: var(--code-ink); tab-size: 4; }
+.code pre .c { color: var(--muted); }
+.code.big pre { max-height: 560px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.steps { list-style: none; padding: 0; counter-reset: s; margin: 20px 0; }
+.steps > li { counter-increment: s; position: relative; padding: 0 0 22px 46px; max-width: none; }
+.steps > li::before { content: counter(s); position: absolute; left: 0; top: -2px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 600 13.5px var(--f-mono); background: var(--surface); border: 1.5px solid var(--line-strong); color: var(--ink); }
+.steps > li::after { content: ""; position: absolute; left: 14.5px; top: 32px; bottom: 4px; width: 1.5px; background: var(--line); }
+.steps > li:last-child::after { display: none; }
+.steps > li > b:first-child { display: block; font-weight: 600; margin-bottom: 2px; }
+
+.table-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+th { font: 600 12.5px var(--f-body); letter-spacing: .03em; text-transform: uppercase; color: var(--muted); background: var(--sunken); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+th[scope="row"] { text-transform: none; font: 600 14px/1.4 var(--f-body); letter-spacing: 0; color: var(--ink); background: var(--surface); white-space: normal; }
+tr:last-child th[scope="row"] { border-bottom: 0; }
+td code { white-space: nowrap; }
+tr.rec td:first-child { box-shadow: inset 3px 0 0 var(--led); }
+.pill { display: inline-block; font: 600 11.5px/1 var(--f-body); padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.led { background: var(--led-soft); color: var(--warn); }
+.pill.no { background: var(--danger-soft); color: var(--danger); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 18px 0; }
+.card { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; text-decoration: none; color: var(--ink); transition: border-color .15s, transform .15s; }
+a.card:hover { border-color: var(--led); transform: translateY(-1px); }
+.card h3 { margin: 0 0 6px; font: 700 18px/1.3 var(--f-display); }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.card .pill { margin-bottom: 10px; }
+@media (prefers-reduced-motion: reduce) { a.card { transition: none; } a.card:hover { transform: none; } }
+
+.term { white-space: pre; background: #0b0e13; color: #d6dbe5; border-radius: 14px; padding: 16px 18px; font: 13px/1.7 var(--f-mono); overflow-x: auto; box-shadow: var(--shadow); margin: 8px 0 28px; border: 1px solid #1d2330; }
+.term .p { color: #8fb4ff; }
+.term .g { color: #5cc28f; }
+.term .a { color: #f0b43c; }
+.term .d { color: #7d8597; }
+
+.figure { margin: 18px 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; overflow-x: auto; }
+.figure svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.figcap { font-size: 13.5px; color: var(--muted); margin: 6px 2px 0; }
+.d-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.25; }
+.d-main { fill: var(--led-soft); stroke: var(--led); stroke-width: 2; }
+.d-in { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.25; }
+.d-t { fill: var(--ink); font: 600 13px var(--f-body); }
+.d-s { fill: var(--muted); font: 12.5px var(--f-body); }
+.d-l { fill: var(--muted); font: 11.5px var(--f-body); }
+.d-line { stroke: var(--muted); stroke-width: 1.25; fill: none; }
+.d-arrow { fill: var(--muted); }
+
+.tabs { margin: 18px 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.tablist { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); }
+.tablist button { border: 0; background: none; color: var(--muted); font: 600 14px var(--f-body); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+.tablist button[aria-selected="true"] { background: var(--sunken); color: var(--ink); box-shadow: inset 0 -2px 0 var(--led); }
+.tabpanel { padding: 4px 18px 10px; }
+
+.chooser { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 22px 0; box-shadow: var(--shadow); }
+.chooser h3 { margin: 0 0 4px; font: 700 19px/1.3 var(--f-display); }
+.chooser > p { margin: 0 0 14px; color: var(--muted); font-size: 14.5px; }
+.q { border: 0; margin: 0 0 14px; padding: 0; }
+.q legend { font-weight: 600; margin-bottom: 8px; font-size: 15px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opts label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 12px; cursor: pointer; font-size: 14.5px; background: var(--bg); }
+.opts input { accent-color: var(--led); }
+.opts label:has(input:checked) { border-color: var(--led); background: var(--led-soft); }
+.verdict { margin-top: 6px; border-radius: 12px; padding: 16px; background: var(--sunken); border: 1px dashed var(--line-strong); }
+.verdict.on { background: var(--led-soft); border: 1px solid var(--led); }
+.verdict b { display: block; font: 700 17px/1.3 var(--f-display); margin-bottom: 4px; }
+.verdict p { margin: 0; font-size: 14.5px; }
+.verdict a { font-weight: 600; }
+
+.pager { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 56px; }
+.pager a { display: block; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; text-decoration: none; color: var(--ink); background: var(--surface); }
+.pager a:hover { border-color: var(--led); }
+.pager small { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 2px; }
+.pager .next { text-align: right; grid-column: 2; }
+.pager b { font-weight: 600; }
+
+.checklist { list-style: none; padding: 0; }
+.checklist li { position: relative; padding-left: 30px; margin: 10px 0; }
+.checklist li::before { content: ""; position: absolute; left: 0; top: 4px; width: 16px; height: 16px; border: 1.5px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+
+.foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+/* telas menores */
+@media (max-width: 1280px) { .ver { display: none; } }
+@media (max-width: 1200px) { .shell { grid-template-columns: 260px minmax(0, 1fr); } .toc { display: none; } }
+@media (max-width: 1080px) { .topnav { display: none; } }
+@media (max-width: 880px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .menu-btn { display: inline-grid; }
+  .sidebar { position: fixed; top: calc(var(--header-h) + env(safe-area-inset-top, 0px)); left: 0; bottom: 0; width: min(86vw, 320px); height: auto; background: var(--surface); z-index: 25; transform: translateX(-100%); transition: transform .2s; box-shadow: var(--shadow); }
+  .sidebar.open { transform: none; }
+  main { padding: 28px 16px 64px; }
+  .brand .sep, .brand .docs { display: none; }
+  .pager { grid-template-columns: 1fr; }
+  .pager .next { grid-column: 1; }
+}
+@media (max-width: 880px) { .sidebar { visibility: hidden; transition: transform .2s, visibility .2s; } .sidebar.open { visibility: visible; } }
+@media (max-width: 520px) { .search { max-width: none; } .search kbd { display: none; } }
+@media (max-width: 460px) { .wordmark { display: none; } }
+</style>
+
+<header class="topbar">
+  <button class="menu-btn" id="menuBtn" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir o menu"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <a class="brand" href="#inicio" aria-label="Claude Code Always-On, documentação">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7 5 5-5 5"/><path d="M13 17h6"/></svg></span>
+    <span class="wordmark">Claude Code Always-On</span>
+    <span class="sep" aria-hidden="true"></span>
+    <span class="docs">Docs</span>
+  </a>
+  <nav class="topnav" aria-label="Seções da documentação">
+    <a href="#inicio" data-group="Começar">Começar</a>
+    <a href="#setup" data-group="Fazer com o Claude Code">Setup guiado</a>
+    <a href="#oracle" data-group="Onde hospedar">Hospedagem</a>
+    <a href="#preparar" data-group="Montar à mão">Montagem</a>
+    <a href="#dia" data-group="Referência">Referência</a>
+  </nav>
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Buscar na documentação" autocomplete="off" aria-label="Buscar na documentação">
+    <kbd aria-hidden="true">/</kbd>
+    <div class="results" id="results" hidden></div>
+  </div>
+  <span class="ver" title="Data da última revisão">out 2026</span>
+</header>
+
+<div class="shell">
+<nav class="sidebar" id="sidebar" aria-label="Páginas do guia">
+  <div class="nav-group"><h4>Começar</h4>
+    <a href="#inicio">Visão geral</a>
+    <a href="#caminhos">Escolher o caminho</a>
+    <a href="#nuvem">Como funciona a nuvem da Anthropic</a>
+  </div>
+  <div class="nav-group"><h4>Fazer com o Claude Code</h4>
+    <a href="#setup">Setup guiado pelo Claude <span class="tag">recomendado</span></a>
+  </div>
+  <div class="nav-group"><h4>Onde hospedar</h4>
+    <a href="#oracle">Oracle Cloud, Pay As You Go</a>
+    <a href="#vps">VPS dedicada paga</a>
+    <a href="#container">Container numa VPS compartilhada</a>
+  </div>
+  <div class="nav-group"><h4>Montar à mão</h4>
+    <a href="#preparar"><span class="num">1</span>Preparar a máquina</a>
+    <a href="#acesso"><span class="num">2</span>Acesso por SSH e VS Code</a>
+    <a href="#ambiente"><span class="num">3</span>Ambiente e dotfiles</a>
+    <a href="#logins"><span class="num">4</span>Login do Claude e do GitHub</a>
+    <a href="#codigo"><span class="num">5</span>Código e segredos</a>
+    <a href="#remote"><span class="num">6</span>Remote Control como serviço</a>
+    <a href="#memoria"><span class="num">7</span>Limites de memória</a>
+    <a href="#provar"><span class="num">8</span>Provar que funciona</a>
+  </div>
+  <div class="nav-group"><h4>Referência</h4>
+    <a href="#dia">No dia a dia</a>
+    <a href="#problemas">Problemas comuns</a>
+    <a href="#seguranca">Segurança e custos</a>
+    <a href="#fontes">Fontes</a>
+  </div>
+</nav>
+
+<main id="main">
+
+<!-- ============ VISÃO GERAL ============ -->
+<article class="page" id="inicio" data-title="Visão geral">
+  <div class="crumb">Começar</div>
+  <h1>Visão geral</h1>
+  <p class="lead">O Claude Code roda numa máquina que não desliga, e você conversa com ele pelo celular, pelo navegador, pelo terminal e pelo VS Code. Este guia ajuda você a escolher onde essa máquina fica e leva você até a primeira sessão aberta pelo celular.</p>
+
+  <div class="term" role="img" aria-label="Exemplo do painel do Remote Control na máquina remota"><span class="p">voce@agente:~$</span> systemctl is-active agente-rc
+<span class="g">active</span>
+<span class="p">voce@agente:~$</span> tmux -L rc capture-pane -p -t rc
+<span class="g">·✔︎· Connected</span> · meu-projeto · main
+    Capacity: 1/32 · New sessions will be created in the current directory
+    <span class="a">agente-smooth-zephyr</span>
+<span class="d">Continue coding in the Claude mobile app or https://claude.ai/code</span></div>
+
+  <h2>Como funciona</h2>
+  <div class="figure">
+    <svg viewBox="0 0 760 360" role="img" aria-label="O agente roda numa máquina sempre ligada, e você chega por dois caminhos">
+      <defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="d-main" x="448" y="24" width="288" height="296" rx="10"/>
+      <text class="d-t" x="466" y="50">Máquina sempre ligada</text>
+      <text class="d-l" x="466" y="68">Oracle, outra VPS ou um container</text>
+      <rect class="d-in" x="466" y="86" width="252" height="58" rx="8"/>
+      <text class="d-t" x="482" y="111">Sessões do Claude Code</text>
+      <text class="d-s" x="482" y="129">no seu repo, com os .env</text>
+      <rect class="d-in" x="466" y="160" width="252" height="58" rx="8"/>
+      <text class="d-t" x="482" y="185">Remote Control</text>
+      <text class="d-s" x="482" y="203">serviço do systemd</text>
+      <rect class="d-in" x="466" y="234" width="252" height="58" rx="8"/>
+      <text class="d-t" x="482" y="259">Docker</text>
+      <text class="d-s" x="482" y="277">banco e serviços de dev</text>
+      <rect class="d-box" x="24" y="40" width="192" height="76" rx="10"/>
+      <text class="d-t" x="40" y="66">Celular ou navegador</text>
+      <text class="d-s" x="40" y="84">claude.ai/code ou</text>
+      <text class="d-s" x="40" y="101">app do Claude</text>
+      <rect class="d-box" x="256" y="40" width="160" height="76" rx="10"/>
+      <text class="d-t" x="272" y="66">claude.ai</text>
+      <text class="d-s" x="272" y="84">liga o celular</text>
+      <text class="d-s" x="272" y="101">à sessão</text>
+      <rect class="d-box" x="24" y="224" width="192" height="92" rx="10"/>
+      <text class="d-t" x="40" y="250">Terminal e VS Code</text>
+      <text class="d-s" x="40" y="268">ssh agente</text>
+      <text class="d-s" x="40" y="285">Remote-SSH no VS Code</text>
+      <text class="d-s" x="40" y="302">ssh -L para abrir o app</text>
+      <path class="d-line" d="M216 78H254" marker-end="url(#arw)"/>
+      <path class="d-line" d="M466 189H336V118" marker-end="url(#arw)"/>
+      <path class="d-line" d="M592 160V146" marker-end="url(#arw)"/>
+      <path class="d-line" d="M216 270H446" marker-end="url(#arw)"/>
+      <text class="d-l" x="344" y="158">conexão de saída</text>
+      <text class="d-l" x="331" y="260" text-anchor="middle">SSH, porta 22</text>
+    </svg>
+  </div>
+  <p class="figcap">O serviço do Remote Control liga para o claude.ai de dentro da máquina. Nenhuma porta precisa abrir para o celular funcionar.</p>
+  <p>Na máquina, um serviço mantém o <code>claude remote-control</code> sempre de pé. Ele se conecta ao claude.ai por uma conexão de saída e abre uma sessão nova sempre que você pede pelo app, até 32 ao mesmo tempo. O terminal e o VS Code entram por SSH, como em qualquer servidor.</p>
+
+  <h2>Duas formas de rodar fora do seu computador</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>Máquina sua com Remote Control</th><th>Nuvem da Anthropic</th></tr>
+    <tr><th scope="row">Onde roda</th><td>Numa VM ou container seu</td><td>Numa VM que a Anthropic cria por sessão</td></tr>
+    <tr><th scope="row">Serviço privado</th><td>Sim, por túnel SSH ou VPN</td><td>Não, só domínios que a rede do ambiente libera</td></tr>
+    <tr><th scope="row">Modo bypass</th><td>Sim</td><td>Não. Modos Accept edits, Plan e Auto</td></tr>
+    <tr><th scope="row">Quem mantém</th><td>Você</td><td>A Anthropic</td></tr>
+    <tr><th scope="row">Custo</th><td>A máquina, ou zero na Oracle Pay As You Go</td><td>Incluso no plano</td></tr>
+  </table></div>
+  <p>As duas gastam a mesma cota da sua conta do Claude. A <a href="#nuvem">página da nuvem</a> explica quando ela basta.</p>
+
+  <h2>Como usar este guia</h2>
+  <div class="cards">
+    <a class="card" href="#setup"><span class="pill ok">recomendado</span><h3>Com o Claude Code</h3><p>Você cola um pedido no Claude Code da sua máquina. Ele entrevista você, escolhe o caminho junto e faz a montagem, parando só no que precisa da sua mão.</p></a>
+    <a class="card" href="#caminhos"><span class="pill led">manual</span><h3>À mão, passo a passo</h3><p>Escolha onde hospedar e siga as páginas de montagem, de 1 a 8. Cada comando tem botão de copiar.</p></a>
+  </div>
+
+  <h2>O que você precisa ter</h2>
+  <ul>
+    <li>Plano Pro, Max, Team ou Enterprise do Claude. O Remote Control não funciona com chave de API, e no Team e no Enterprise um Owner precisa ligar o Remote Control nas configurações de admin do Claude Code.</li>
+    <li>O Claude Code instalado na máquina que você usa hoje.</li>
+    <li>Uma chave SSH, e o seu código num repositório git, de preferência no GitHub.</li>
+    <li>Para a Oracle, um cartão de crédito para o cadastro e o upgrade para Pay As You Go.</li>
+  </ul>
+  <p>Para conferir a conta, rode <code>claude remote-control --help</code>. Ele lista as opções quando a conta pode usar o Remote Control, e responde com erro quando não pode.</p>
+</article>
+
+<!-- ============ CAMINHOS ============ -->
+<article class="page" id="caminhos" data-title="Escolher o caminho" hidden>
+  <div class="crumb">Começar</div>
+  <h1>Escolher o caminho</h1>
+  <p class="lead">São quatro caminhos. Para a maioria das pessoas, o melhor é uma VM ARM na Oracle com conta Pay As You Go. Ela tem 2 núcleos, 12 GB de memória e até 200 GB de disco, e fica ligada o mês inteiro sem custo.</p>
+
+  <form class="chooser" id="chooser" aria-labelledby="ch-t">
+    <h3 id="ch-t">Qual é o seu caso?</h3>
+    <p>Três perguntas. A recomendação aparece embaixo.</p>
+    <fieldset class="q"><legend>O projeto precisa alcançar algo privado, como um banco sem porta pública, ou você quer sessões em modo bypass?</legend>
+      <div class="opts"><label><input type="radio" name="q1" value="sim" id="q1s"> Sim</label><label><input type="radio" name="q1" value="nao" id="q1n"> Não, só GitHub e pacotes públicos</label></div></fieldset>
+    <fieldset class="q"><legend>Você já tem uma VPS com folga rodando outras coisas?</legend>
+      <div class="opts"><label><input type="radio" name="q2" value="sim" id="q2s"> Sim, com 4 GB de memória e 30 GB de disco livres</label><label><input type="radio" name="q2" value="nao" id="q2n"> Não</label></div></fieldset>
+    <fieldset class="q"><legend>Quanto quer gastar?</legend>
+      <div class="opts"><label><input type="radio" name="q3" value="zero" id="q3z"> Nada</label><label><input type="radio" name="q3" value="pago" id="q3p"> Posso pagar por mês</label></div></fieldset>
+    <div class="verdict" id="verdict" aria-live="polite"><b>Responda as três perguntas</b><p>Sem resposta, a recomendação padrão é a Oracle com Pay As You Go.</p></div>
+  </form>
+
+  <h2>Comparação</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Caminho</th><th>Custo</th><th>Máquina</th><th>Serviço privado</th><th>Bypass</th><th>Quem mantém</th></tr>
+    <tr class="rec"><td><a href="#oracle"><b>Oracle, Pay As You Go</b></a><br><span class="pill ok">recomendado</span></td><td>US$ 0 dentro da cota</td><td>ARM, 2 OCPU, 12 GB, até 200 GB</td><td><span class="pill ok">sim</span></td><td><span class="pill ok">sim</span></td><td>Você</td></tr>
+    <tr><td><a href="#vps"><b>VPS dedicada paga</b></a></td><td>R$ 43,99 por mês na Hostinger KVM 2, em contrato de 24 meses</td><td>x86, 2 vCPU, 8 GB, 100 GB</td><td><span class="pill ok">sim</span></td><td><span class="pill ok">sim</span></td><td>Você</td></tr>
+    <tr><td><a href="#container"><b>Container numa VPS que você já tem</b></a></td><td>Nada a mais</td><td>O que sobra da VPS</td><td><span class="pill ok">sim</span></td><td><span class="pill ok">sim</span></td><td>Você</td></tr>
+    <tr><td><a href="#nuvem"><b>Nuvem da Anthropic</b></a></td><td>Incluso no plano</td><td>VM da Anthropic por sessão</td><td><span class="pill no">não</span></td><td><span class="pill no">não</span></td><td>Anthropic</td></tr>
+  </table></div>
+
+  <h2>Qual escolher</h2>
+  <ul>
+    <li>Só GitHub e pacotes públicos, sem bypass? Comece pela <a href="#nuvem">nuvem da Anthropic</a>. Não há máquina para manter.</li>
+    <li>Quer custo zero e uma máquina sua? <a href="#oracle">Oracle com Pay As You Go</a>. Na conta Pay As You Go, o que cabe no Always Free não é cobrado, e a Oracle não recolhe a VM por ociosidade.</li>
+    <li>Já tem uma VPS com folga rodando outras coisas? Um <a href="#container">container LXD</a> nela sai de graça e não mistura o agente com os outros serviços.</li>
+    <li>Prefere pagar, ou a Oracle está sem capacidade na sua região? Uma <a href="#vps">VPS dedicada</a> num provedor comum.</li>
+  </ul>
+
+  <h2>Tamanho da máquina</h2>
+  <p>Medimos com 2 núcleos e 7 GB de memória, num projeto Next.js com Postgres em Docker. A suíte inteira de testes de tela levou 32 minutos. Com menos de 4 GB, o build de um app web e o navegador dos testes disputam memória. Cada sessão parada do Claude Code ocupou de 200 a 500 MB, e a página <a href="#memoria">Limites de memória</a> dá a conta do teto das sessões.</p>
+  <div class="callout note"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div><strong class="label">Troque os nomes de exemplo</strong><p>Os comandos usam três nomes de exemplo. Troque <code>voce</code> pelo seu usuário, <code>agente</code> pelo nome da máquina e <code>projeto</code> pela pasta do repo na máquina. Escolha os três antes de começar, porque eles se repetem em várias páginas.</p></div></div>
+  <div class="callout note"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div><strong class="label">ARM ou x86</strong><p>A Oracle grátis é ARM. Confira se as imagens Docker e os binários do projeto têm versão <code>linux/arm64</code>. Imagem Docker que roda num Mac com Apple Silicon já é <code>linux/arm64</code> e serve. Binário que o npm ou o pip baixam no Mac é para macOS e não prova nada. Se o seu deploy já roda em ARM, o projeto roda.</p></div></div>
+</article>
+
+<!-- ============ NUVEM ANTHROPIC ============ -->
+<article class="page" id="nuvem" data-title="Como funciona a nuvem da Anthropic" hidden>
+  <div class="crumb">Começar</div>
+  <h1>Como funciona a nuvem da Anthropic</h1>
+  <p class="lead">No Claude Code na web, cada sessão roda numa VM que a Anthropic cria e mantém. Não existe máquina para você configurar, e a sessão continua com o seu computador desligado.</p>
+
+  <h2>O caminho de uma sessão</h2>
+  <ol class="steps">
+    <li><b>Você pede</b>Pelo <a href="https://claude.ai/code">claude.ai/code</a>, pela aba Code do app do Claude, ou com <code>claude --cloud "tarefa"</code> no terminal.</li>
+    <li><b>A VM nasce</b>No navegador e no app, você escolhe o repo e o branch. Pelo terminal, o <code>--cloud</code> clona o branch atual do GitHub. Commit sem push não chega.</li>
+    <li><b>O ambiente prepara</b>Roda o setup script do ambiente, ou reaproveita o disco guardado da última vez.</li>
+    <li><b>O Claude trabalha</b>Edita, roda testes, sobe serviços com Docker e devolve um branch. O PR sai pela própria sessão.</li>
+    <li><b>Você continua de onde quiser</b>Pelo app, pelo navegador, ou no terminal com <code>claude --teleport</code>, que traz a sessão e o branch dela.</li>
+  </ol>
+
+  <h2>O que já vem na VM</h2>
+  <p>Docker, <code>docker compose</code>, PostgreSQL 16 e Redis 7, além das linguagens e gerenciadores de pacote comuns. O PostgreSQL e o Redis vêm parados, e o Claude sobe quando você pede.</p>
+
+  <h2>O que configurar</h2>
+  <ol class="steps">
+    <li><b>Conecte o GitHub</b>No primeiro acesso ao claude.ai/code. Repo público já funciona. Para repo privado, instale o app do Claude no GitHub da conta dona do repo. Pelo terminal, <code>/web-setup</code> manda o token do seu <code>gh</code> para a conta. No Team e no Enterprise, o <code>/web-setup</code> só aparece se um Owner ligar o Quick web setup.</li>
+    <li><b>Confira o ambiente e a rede</b>O primeiro acesso cria o ambiente Default, com rede Trusted, ou pede para você criar. Para mudar, use o seletor de ambiente do claude.ai/code. Trusted libera registries de pacote, GitHub e Docker Hub. Custom usa só a sua lista de domínios, e soma a do Trusted se você marcar a opção. Full libera qualquer domínio, e None corta tudo.</li>
+    <li><b>Ponha as variáveis de ambiente</b>No formato <code>.env</code>. Todo mundo que usa o ambiente lê os valores. No Pro e no Max, guarde chave de API em API credentials, e a sessão usa a chave sem enxergá-la.</li>
+    <li><b>Escreva o setup script</b>Instale as dependências e rode <code>docker compose pull</code>. Se ele termina em uns 5 minutos, a Anthropic guarda o disco, e as próximas sessões começam prontas. O disco guardado vale uns 7 dias e guarda arquivos, não processos, então banco e compose sobem de novo a cada sessão.</li>
+  </ol>
+
+  <h2>Os limites</h2>
+  <ul>
+    <li>A VM pausa depois de alguns minutos sem atividade e pode ser recolhida. Reabrir a sessão devolve a conversa, mas não o que rodava em segundo plano.</li>
+    <li>Não existe modo bypass. Os modos são Accept edits, Plan e Auto, em que um classificador revisa cada ação.</li>
+    <li>A sessão não alcança o que não tem endereço público, como um banco atrás de túnel SSH.</li>
+    <li>Para devolver commit e PR, o repo precisa estar no GitHub.</li>
+    <li>Está nos planos Pro, Max e Team, e no Enterprise com assento premium ou Chat + Claude Code. A VM não é cobrada à parte, e as sessões gastam a cota da conta.</li>
+  </ul>
+
+  <h2>Quando ela basta</h2>
+  <p>Quando o projeto só precisa de GitHub, pacotes públicos e serviços que sobem em Docker na própria VM, e você aceita aprovar ou deixar o modo Auto aprovar as ações. Se algum desses falha, use uma máquina sua com Remote Control, começando pela <a href="#oracle">Oracle</a>.</p>
+  <div class="callout note"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div><strong class="label">Ambiente self-hosted</strong><p>Organizações Team e Enterprise podem fazer as sessões da nuvem rodarem em máquinas próprias, com um runner. Está em beta, um Owner liga em Admin settings, Cloud environments, e a instalação está no <a href="https://code.claude.com/docs/en/self-hosted-environments-quickstart">quickstart oficial</a>. Este guia não cobre esse caminho.</p></div></div>
+</article>
+
+<!-- ============ SETUP GUIADO ============ -->
+<article class="page" id="setup" data-title="Setup guiado pelo Claude" data-next="" hidden>
+  <div class="crumb">Fazer com o Claude Code</div>
+  <h1>Setup guiado pelo Claude Code</h1>
+  <p class="lead">Cole o pedido desta página no Claude Code da máquina que você usa hoje. Ele descobre sozinho o que dá para ver, entrevista você, recomenda o caminho e faz a montagem passo a passo, parando só onde precisa de você.</p>
+
+  <h2>Antes de colar</h2>
+  <ul class="checklist">
+    <li>Abra o Claude Code na máquina que você usa hoje, na pasta dos seus projetos.</li>
+    <li>Para aprovar cada comando, abra com <code>claude --permission-mode default</code>. Sem a flag, ele pode abrir no modo Auto, em que um classificador aprova os comandos no seu lugar.</li>
+    <li>Deixe o celular por perto. Os logins do Claude e do GitHub mostram um link ou um código.</li>
+    <li>Reserve uma a duas horas, por estimativa. A suíte de testes do seu projeto pode somar mais.</li>
+  </ul>
+
+  <h2>Como a conversa anda</h2>
+  <ol class="steps">
+    <li><b>Reconhecimento</b>Ele lê a sua máquina sem mudar nada: repos, o que o git ignora, chaves SSH, dotfiles, o que há em <code>~/.claude</code>, os servidores MCP e se a conta pode usar o Remote Control.</li>
+    <li><b>Entrevista</b>Uma pergunta por vez, só sobre o que ele não conseguiu descobrir, sempre com as opções e a sugestão dele.</li>
+    <li><b>Recomendação e plano</b>Ele escolhe o caminho pelas regras deste guia, mostra a lista de passos com os valores que vai usar e espera você aprovar.</li>
+    <li><b>Montagem</b>Um passo por vez. Ele diz o que vai fazer, faz, e mostra a saída que prova que funcionou.</li>
+    <li><b>Prova e entrega</b>Ele roda a lista de provas, pede para você abrir uma sessão pelo celular e entrega um resumo de como acessar.</li>
+  </ol>
+
+  <h2>O que fica com você</h2>
+  <ul>
+    <li>Tudo o que acontece num site: criar a conta na Oracle, o upgrade, o orçamento e a VM no console. Ele diz onde clicar e o que preencher.</li>
+    <li>Os comandos que pedem resposta no terminal: os logins, o primeiro <code>claude remote-control</code> e <code>sudo</code> com senha. Ele entrega a linha pronta para colar.</li>
+    <li>Confirmar o que tem risco: mexer em rede num host que já roda serviços, reiniciar a máquina e apagar qualquer coisa.</li>
+  </ul>
+
+  <h2>O pedido</h2>
+  <p>Copie e cole inteiro, são cerca de 52 mil caracteres. Ele traz as regras do que fazer e do que não fazer, a entrevista, os critérios de escolha e os roteiros validados de cada caminho, então o Claude não precisa abrir este guia.</p>
+  <div class="code big"><div class="code-head"><span>pedido para o Claude Code</span><button class="copy" data-copy="prompt-text">Copiar pedido</button></div><pre id="prompt-text">Você vai conduzir comigo, do começo ao fim, a montagem de uma máquina remota onde o Claude Code fica rodando 24 horas por dia. Vou acessar essa máquina pelo celular e pelo navegador (Remote Control), pelo terminal (SSH) e pelo VS Code (Remote-SSH). Você faz o trabalho. Eu tomo as decisões e faço só o que exige a minha mão.
+
+Este pedido traz as regras, a entrevista, os critérios de escolha e roteiros já validados numa VM ARM com Ubuntu 24.04. Siga os roteiros como estão. Quando a realidade divergir deles, pare, explique a diferença em duas linhas e proponha o ajuste antes de seguir.
+
+======================================================================
+1. REGRAS DE CONDUTA
+======================================================================
+
+Faça:
+- Trabalhe em passos curtos. Antes de cada passo, diga em uma linha o que vai fazer e por quê. Depois, mostre a saída que prova que funcionou.
+- Rode você mesmo os comandos que não pedem resposta. Nos remotos, use ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new &lt;host&gt; 'bash -lc "..."' com timeout. Comando que passa de 5 minutos, como uma suíte de testes, roda num tmux da máquina com a saída num log, e você acompanha pelo log.
+- Comando que pede resposta no terminal (logins, ssh-add, o primeiro claude remote-control, tailscale up, sudo com senha) eu rodo. Me entregue a linha pronta para colar, diga em qual terminal ela roda (WSL, PowerShell, macOS ou dentro da máquina), o que vai aparecer, e espere eu dizer que terminei.
+- O que acontece num site (criar conta, clicar num console, digitar um código) eu faço. Diga onde clicar e o que preencher, com o link, e espere. Peça um print quando precisar conferir.
+- Mantenha ~/claude-always-on/progresso.md atualizado depois de cada passo: caminho, valores escolhidos, passos feitos e o próximo. Nunca grave senha, token ou chave privada ali.
+- Se a conversa for compactada ou recomeçar, leia ~/claude-always-on/progresso.md antes de qualquer outra coisa e retome do próximo passo.
+- Os roteiros usam valores de exemplo entre &lt;&gt;. Troque pelos da entrevista ou da medição, e mostre todos no plano antes de usar: &lt;usuario&gt;, &lt;maquina&gt;, &lt;host&gt; (o Host da VPS no meu ~/.ssh/config, no R3), &lt;ip&gt;, &lt;repo&gt; (o do projeto, no formato dono/nome), &lt;repo-dotfiles&gt;, &lt;pasta&gt; (a pasta do repo na máquina), &lt;interface&gt;, &lt;subrede&gt;, &lt;gateway&gt; (o .1 da subrede), &lt;ip-container&gt; (o .10 da subrede), &lt;pool&gt;, &lt;memoria&gt;, &lt;flags&gt;, &lt;swap&gt;, &lt;teto&gt;, &lt;alto&gt; e &lt;swap-agentes&gt;. Os números dos roteiros (192.168.200.x, 60GiB, 6GiB, 5G, 4608M) são exemplo e nunca entram como estão.
+- Quando um passo falhar, investigue, conserte e prove de novo antes de avançar. Consulte a seção 7 quando o sintoma bater.
+
+Não faça:
+- Não junte os passos num script de instalação. Execute um bloco por vez e mostre a saída.
+- Não copie ~/.claude/.credentials.json nem ~/.claude.json entre máquinas. Cada máquina faz o próprio login. O token de renovação gira, e a primeira máquina que renovar derruba a outra.
+- Não mostre senha, token ou chave privada na tela, nem grave em arquivo, log ou commit. Para ler um .env, use só os nomes (cut -d= -f1 .env) e, das URLs, só host e porta. Nunca rode cat, head ou grep que mostre a linha inteira de um .env.
+- Não leve para a máquina nova segredo que o agente não usa, como chave root de nuvem ou a chave SSH pessoal que abre outros servidores.
+- Na minha máquina, você pode escrever em ~/claude-always-on/, acrescentar blocos ao ~/.ssh/config e trocar o User dos blocos que você criou, criar chave nova em ~/.ssh sem sobrescrever nenhuma, e deixar o ssh gravar no known_hosts. No WSL, vale o mesmo em /mnt/c/Users/&lt;eu&gt;/.ssh. Para qualquer outra coisa, pergunte.
+- Num host que já roda outros serviços (R3): não reinicie o host, o Docker nem serviço existente; não rode netfilter-persistent save; não ligue ufw; não mude o hostname; não instale nada além do LXD, e só com a minha confirmação; crie swap no host só com a minha confirmação, porque os serviços dele passam a usar o mesmo swap. Meça a resposta dos serviços antes e depois de cada mudança de rede e me mostre os dois resultados.
+- Não rode lxc num host sem me avisar antes: no Ubuntu 24.04, o primeiro lxc instala o snap do LXD.
+- No R3, tudo dentro do container roda por sudo lxc exec &lt;maquina&gt; -- ..., nunca num shell aberto com bash. Um usermod ou um rm do sudoers rodado no host por engano renomeia o usuário dele e tira o sudo.
+- Não ligue o ufw sem antes liberar o SSH, e não ligue o ufw numa VM da Oracle, que já filtra com iptables e com a security list da VCN.
+- Não abra porta para a internet além da 22. O Remote Control não precisa de porta aberta.
+- Não ponha defaultMode "bypassPermissions" em .claude/settings.json ou .claude/settings.local.json esperando que funcione: o Claude Code ignora esse valor vindo do projeto. O bypass vai como flag depois de remote-control.
+- Não ponha flags globais antes do subcomando, como claude --dangerously-skip-permissions remote-control. O servidor recusa.
+- Nunca rode chezmoi init --apply. Veja C4.
+- Nunca rode pelo seu shell um comando que abre tela cheia, como claude agents sem --json: ele trava.
+- Na Oracle, não passe de 2 OCPU e 12 GB somando todas as VMs ARM, de 200 GB somando todos os discos, nem de 5 backups de volume, e não ligue política de backup no volume de boot. Acima disso a conta Pay As You Go cobra.
+- Não reinicie a máquina remota, não apague arquivo, VM ou disco, e não rode comando destrutivo sem me pedir confirmação na hora.
+
+======================================================================
+2. FASE 0: RECONHECIMENTO, SÓ LENDO
+======================================================================
+
+Antes de perguntar qualquer coisa, descubra sozinho, sem mudar nada:
+- o sistema desta máquina, se é WSL, e o whoami;
+- as chaves em ~/.ssh, quais estão no agente (ssh-add -l) e quais têm senha (ssh-keygen -y -P '' -f &lt;chave&gt; &gt;/dev/null falha nelas), e o ~/.ssh/config. No WSL, olhe também /mnt/c/Users/*/.ssh, que é o que o VS Code do Windows usa. Chave com senha fora do agente não serve para os seus comandos com BatchMode;
+- os repos git na pasta atual e um nível abaixo: o remoto de cada um, se está no GitHub, e o que cada um ignora (git status --ignored --porcelain), separando o que é gerado (node_modules, .next, dist, .venv) do que é segredo ou configuração;
+- claude --version, claude auth status, claude mcp list, e se claude remote-control --help responde sem erro. Se der erro, mostre a mensagem e pare: sem Remote Control só o R4 serve. Procure, sem imprimir valor, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, apiKeyHelper e as variáveis CLAUDE_CODE_USE_* no ambiente, nos arquivos do shell e no env do ~/.claude/settings.json. O que aparecer não vai para a máquina nova, nem pelos dotfiles, porque derruba o Remote Control lá;
+- gh auth status;
+- se há gerenciador de dotfiles (chezmoi, stow, um repo dotfiles), o que há em ~/.claude (settings.json, skills, agents, plugins) e em ~/.agents. Não abra .credentials.json;
+- os servidores MCP de escopo user e local, os que não vêm no .mcp.json do repo;
+- se os projetos usam Docker, as imagens do compose e se cada uma tem linux/arm64 (docker buildx imagetools inspect &lt;imagem&gt; ou docker manifest inspect &lt;imagem&gt;). Imagem sem arm64 tira a Oracle da recomendação;
+- se algum .env aponta para serviço privado (host interno, túnel, porta local de outro serviço), lendo só nomes e hosts.
+
+Mostre um resumo de até 15 linhas.
+
+======================================================================
+3. FASE 1: ENTREVISTA
+======================================================================
+
+Uma pergunta por vez, com as opções e a sua sugestão, só sobre o que a fase 0 não respondeu. Comece pelas que escolhem o caminho (A, B e C), recomende o caminho pela fase 2, e só depois faça as outras, pulando as que o caminho não usa (no R4, pule E e H).
+A. Onde rodar: se já tenho VPS, rodando outros serviços ou não; se aceito pagar; se já tenho conta na Oracle. Se eu já disse onde quero rodar, siga a minha escolha.
+B. Permissões: sessões em bypass, que não pedem nada, ou sessões que pedem permissão pelo app.
+C. Acesso: de quais aparelhos e sistemas (Windows, WSL, macOS, Linux, celular), e se uso VS Code ou terminal na máquina.
+D. O que migrar: quais repos, e se é para levar o ambiente atual ou começar do zero.
+E. Configuração da máquina: Ubuntu padrão, ou importar meus dotfiles (de onde, com qual ferramenta).
+F. O que levar do Claude Code: settings.json, skills, agents, plugins e servidores MCP. Credenciais nunca.
+G. Segredos: quais arquivos ignorados o agente precisa lá, um por um.
+H. Sessões paralelas: todas no checkout principal (same-dir), ou cada uma no seu worktree. Com docker compose, recomende same-dir, porque cada worktree subiria o próprio banco na mesma porta.
+I. Nomes: &lt;usuario&gt; e &lt;maquina&gt;. Sugira como &lt;usuario&gt; o mesmo do whoami daqui, para que caminhos absolutos de settings, hooks e statusLine continuem valendo. Se eles vierem do macOS (/Users/...) ou do WSL (/mnt/c/...), mostre os que precisam mudar.
+J. GitHub: se o agente trabalha em poucos repos, ofereça um token fine-grained só desses repos no lugar do login completo do gh, que abre todos os repos da conta.
+
+======================================================================
+4. FASE 2: RECOMENDAÇÃO E PLANO
+======================================================================
+
+Se eu já escolhi onde rodar, siga a escolha e aponte em uma linha o risco ou o custo dela. Senão, escolha por estas regras, nesta ordem, e explique em uma frase:
+a) O repo está no GitHub, o projeto só precisa de GitHub, pacotes públicos e serviços que sobem em Docker, aceito sessões sem bypass e não preciso de terminal nem VS Code na máquina: a nuvem da Anthropic basta (R4). Ofereça a Oracle se eu quiser uma máquina minha mesmo assim.
+b) Já tenho VPS rodando outros serviços, com pelo menos 4 GB de memória e 30 GB de disco livres, medidos por ssh com free -h e df -h /: container LXD nela (R3).
+c) Quero custo zero e o projeto roda em ARM: Oracle Cloud com conta Pay As You Go (R1). É a recomendação padrão.
+d) Prefiro pagar, o projeto não roda em ARM, ou a Oracle segue sem capacidade: VPS dedicada (R2).
+
+Monte o plano com os passos que valem para o caminho, na ordem da seção 5, cada um com os valores que você vai usar, e espere eu aprovar.
+
+======================================================================
+5. FASE 3: MONTAGEM
+======================================================================
+
+Ordem: o roteiro do caminho (R1, R2, R3 ou R4), depois C1 (fora do R3), C2, C3, C4, C5, C6, C7, C8 e C9.
+
+--- R1. Oracle Cloud com Pay As You Go ---
+1. Conta em https://www.oracle.com/cloud/free/. A região escolhida no cadastro é a principal: ela não muda depois, e as VMs grátis só nascem nela. Sugira a mais perto de mim.
+2. Upgrade para Pay As You Go pelo link Upgrade no banner do topo do console. Se ele não aparecer, clique no logo da Oracle Cloud e procure Upgrade no painel à direita. Na Pay As You Go, o que cabe no Always Free não é cobrado e a Oracle não recolhe VM ociosa.
+3. Orçamento: Billing &amp; Cost Management, Budgets, um orçamento de US$ 1 com alerta por e-mail. Ele só avisa depois do gasto, então os limites da seção 1 continuam valendo.
+4. Chave SSH para a VM: use uma sem senha ou que esteja no agente. Se precisar de uma nova, gere sem sobrescrever: test -e ~/.ssh/id_ed25519_&lt;maquina&gt; || ssh-keygen -t ed25519 -N '' -C &lt;maquina&gt; -f ~/.ssh/id_ed25519_&lt;maquina&gt;. Me mostre só a pública, e me lembre que quem tiver o arquivo privado entra na VM.
+5. VM em Compute, Instances, Create instance:
+   - Name: &lt;maquina&gt;
+   - Image: Canonical Ubuntu 24.04
+   - Shape: Ampere, VM.Standard.A1.Flex, 2 OCPU e 12 GB de memória
+   - Networking: criar VCN e sub-rede pública, com endereço IPv4 público
+   - Add SSH keys: colar a chave pública
+   - Boot volume: 100 GB, sem política de backup
+   Antes de eu clicar em Create, peça um print do resumo e confira o selo Always Free-eligible na shape e na imagem. Se der "Out of host capacity", troque o availability domain. Em região com um só, tente de novo de hora em hora por no máximo um dia, e então me ofereça o R2.
+6. Com o IP público, acrescente ao meu ~/.ssh/config um Host &lt;maquina&gt; com User ubuntu e a chave, teste ssh &lt;maquina&gt; true e siga para C1.
+
+--- R2. VPS dedicada ---
+1. Recomende a Hostinger, plano KVM 2 (2 vCPU, 8 GB, 100 GB NVMe, x86): R$ 43,99 por mês no contrato de 24 meses, renovando a R$ 77,99 em 01/10/2026. O KVM 4 (4 vCPU, 16 GB) serve a quem roda várias sessões ou uma suíte grande de testes de tela. Não recomende o KVM 1, que tem 1 vCPU. Me peça para conferir o preço do dia antes de contratar.
+2. Eu contrato e, no painel da VPS, escolho o modelo Ubuntu 24.04 sem painel de controle, o data center da América do Sul se houver, cadastro a minha chave SSH pública e defino uma senha de root longa.
+3. Com o IP, descubra o usuário que o provedor criou (ssh root@&lt;ip&gt; true, depois ssh ubuntu@&lt;ip&gt; true), acrescente o Host &lt;maquina&gt; com esse User ao ~/.ssh/config e siga para C1. Os comandos de C1 servem como estão mesmo para root.
+
+--- R3. Container LXD numa VPS que já roda outros serviços ---
+Tudo no host, com os cuidados da seção 1. Antes, meça os serviços do host (curl -s -o /dev/null -w '%{http_code} %{time_total}s' &lt;url&gt;) e guarde o resultado.
+1. Leia sem mudar: cat /etc/os-release, free -h, df -h /, nproc, ip -4 -br addr, ip route, sudo iptables -S INPUT, sudo iptables -S FORWARD, sudo iptables -S DOCKER-USER, cat /etc/docker/daemon.json, docker ps, docker network ls, snap list lxd. Siga só se o host for Ubuntu com snap (o validado é o 24.04), sem LXD em uso, e com a chain DOCKER-USER ou sem Docker. Fora disso, pare e me traga a diferença. Escolha a &lt;subrede&gt; /24 que não colida com nada, anote a &lt;interface&gt; de saída (a do default route) e calcule &lt;pool&gt; (no máximo o livre do df menos 10 GB) e &lt;memoria&gt; (no máximo o available do free menos 1 GB).
+2. Peça minha confirmação e rode: sudo snap install lxd
+3. Grave preseed.yaml no host e rode sudo lxd init --preseed &lt; preseed.yaml:
+config: {}
+networks:
+- name: lxdbr0
+  type: bridge
+  config:
+    ipv4.address: &lt;gateway&gt;/24
+    ipv4.nat: "true"
+    ipv6.address: none
+storage_pools:
+- name: default
+  driver: btrfs
+  config:
+    size: &lt;pool&gt;
+profiles:
+- name: default
+  devices:
+    root: {path: /, pool: default, type: disk}
+    eth0: {name: eth0, network: lxdbr0, type: nic}
+4. Firewall. Com Docker no host, a política do FORWARD é DROP, e imagens de nuvem terminam o INPUT em REJECT. Grave /usr/local/sbin/lxd-firewall.sh. As quatro primeiras regras deixam o container receber IP e DNS do host e mais nada do host. As duas últimas deixam ele sair só pela &lt;interface&gt;:
+#!/bin/sh
+set -e
+regra() { iptables -C "$@" 2&gt;/dev/null || iptables -I "$@"; }
+regra INPUT -i lxdbr0 -j REJECT
+regra INPUT -i lxdbr0 -p udp --dport 67 -j ACCEPT
+regra INPUT -i lxdbr0 -p udp --dport 53 -j ACCEPT
+regra INPUT -i lxdbr0 -p tcp --dport 53 -j ACCEPT
+regra DOCKER-USER -i lxdbr0 -o &lt;interface&gt; -j ACCEPT
+regra DOCKER-USER -i &lt;interface&gt; -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+   A ordem importa: cada regra entra no topo, então o REJECT vem primeiro no arquivo e os ACCEPT ficam acima dele. Sem Docker no host, troque DOCKER-USER por FORWARD nas duas últimas. Se o agente precisa do host (por exemplo, um túnel SSH até um banco), acrescente logo abaixo da linha do REJECT: regra INPUT -i lxdbr0 -p tcp --dport 22 -j ACCEPT. Grave /etc/systemd/system/lxd-firewall.service:
+[Unit]
+After=netfilter-persistent.service docker.service snap.lxd.daemon.service
+PartOf=docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lxd-firewall.sh
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target docker.service
+   Rode: sudo chmod 755 /usr/local/sbin/lxd-firewall.sh &amp;&amp; sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now lxd-firewall. Meça os serviços do host de novo e me mostre antes e depois.
+5. Container:
+sudo lxc init ubuntu:24.04 &lt;maquina&gt; -c security.nesting=true -c security.syscalls.intercept.mknod=true -c security.syscalls.intercept.setxattr=true -c limits.memory=&lt;memoria&gt; -c boot.autostart=true -c raw.lxc="lxc.cgroup2.cpu.weight = 20"
+sudo lxc config device override &lt;maquina&gt; eth0 ipv4.address=&lt;ip-container&gt;
+sudo lxc start &lt;maquina&gt;
+sudo lxc exec &lt;maquina&gt; -- cloud-init status --wait
+sudo lxc exec &lt;maquina&gt; -- curl -sI https://github.com
+   O peso de CPU 20, contra 100 do host, dá ao host uns 83% da CPU numa disputa. Prove o isolamento: liste as portas do host com sudo ss -ltnp e teste algumas de dentro do container, no &lt;gateway&gt;, com sudo lxc exec &lt;maquina&gt; -- timeout 3 bash -c '&lt;/dev/tcp/&lt;gateway&gt;/&lt;porta&gt;'. Fora as que você liberou, nenhuma pode abrir. Se abrir, pare e me mostre.
+6. Usuário dentro do container, sempre por lxc exec:
+sudo lxc exec &lt;maquina&gt; -- sh -c 'usermod -l &lt;usuario&gt; -d /home/&lt;usuario&gt; -m ubuntu &amp;&amp; groupmod -n &lt;usuario&gt; ubuntu &amp;&amp; echo "&lt;usuario&gt; ALL=(ALL) NOPASSWD:ALL" &gt; /etc/sudoers.d/90-&lt;usuario&gt; &amp;&amp; chmod 440 /etc/sudoers.d/90-&lt;usuario&gt; &amp;&amp; rm -f /etc/sudoers.d/90-cloud-init-users &amp;&amp; hostnamectl set-hostname &lt;maquina&gt; &amp;&amp; install -d -m 700 -o &lt;usuario&gt; -g &lt;usuario&gt; /home/&lt;usuario&gt;/.ssh'
+   A chave vem da minha máquina, e não do authorized_keys do host, que pode ter chave de deploy de outro serviço. Daqui:
+cat &lt;minha-chave&gt;.pub | ssh &lt;host&gt; 'sudo lxc exec &lt;maquina&gt; -- sh -c "cat &gt; /home/&lt;usuario&gt;/.ssh/authorized_keys &amp;&amp; chown &lt;usuario&gt;:&lt;usuario&gt; /home/&lt;usuario&gt;/.ssh/authorized_keys &amp;&amp; chmod 600 /home/&lt;usuario&gt;/.ssh/authorized_keys"'
+7. No meu ~/.ssh/config, o Host &lt;host&gt; já existe. Acrescente um Host &lt;maquina&gt; com HostName &lt;ip-container&gt;, User &lt;usuario&gt; e ProxyJump &lt;host&gt;. Teste ssh &lt;maquina&gt; true e siga de C2 em diante, dentro do container. Não rode C1 no host.
+
+--- R4. Nuvem da Anthropic ---
+1. GitHub: no primeiro acesso ao claude.ai/code. Repo privado precisa do app do Claude no GitHub da conta dona do repo. Pelo terminal, /web-setup manda o token do meu gh. No Team e no Enterprise, ele só aparece se um Owner ligar o Quick web setup.
+2. Ambiente em claude.ai/code: rede Trusted, ou Custom com os domínios extras que o projeto usa; variáveis no formato .env, sem segredo que não possa vazar, porque todo mundo que usa o ambiente lê; e um setup script que instala as dependências e, se o repo tem compose, roda docker compose pull.
+3. O que mora em ~/.claude (skills, agents, plugins, MCP de escopo user) não chega à sessão da nuvem. Só chega o que está commitado e com push em .claude/ e .mcp.json do repo. Se eu escolhi levar algo, me mostre o diff do commit e espere eu aprovar.
+4. Abra uma sessão de teste com claude --cloud "rode os testes e me diga o resultado" e me mostre o link.
+5. Pule C1 a C9 e vá para a entrega.
+
+--- C1. Preparar a máquina (R1 e R2, com o User do provedor) ---
+sudo adduser --disabled-password --gecos '' &lt;usuario&gt;
+echo '&lt;usuario&gt; ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-&lt;usuario&gt; &amp;&amp; sudo chmod 440 /etc/sudoers.d/90-&lt;usuario&gt;
+sudo install -d -m 700 -o &lt;usuario&gt; -g &lt;usuario&gt; /home/&lt;usuario&gt;/.ssh
+sudo install -m 600 -o &lt;usuario&gt; -g &lt;usuario&gt; ~/.ssh/authorized_keys /home/&lt;usuario&gt;/.ssh/authorized_keys
+sudo hostnamectl set-hostname &lt;maquina&gt;
+echo 'PasswordAuthentication no' | sudo tee /etc/ssh/sshd_config.d/10-sem-senha.conf &amp;&amp; sudo systemctl reload ssh
+   Troque o User do meu Host &lt;maquina&gt; para &lt;usuario&gt; e teste ssh &lt;maquina&gt; true numa conexão nova antes de seguir.
+   Firewall: numa VPS comum, sudo ufw allow OpenSSH &amp;&amp; sudo ufw --force enable. Na Oracle, nada.
+   Confira systemctl is-active unattended-upgrades.
+
+--- C2. Ferramentas (como &lt;usuario&gt;) ---
+sudo apt-get update &amp;&amp; sudo apt-get install -y git curl tmux gh jq
+curl -fsSL https://get.docker.com | sudo sh &amp;&amp; sudo usermod -aG docker &lt;usuario&gt;
+curl -fsSL https://claude.ai/install.sh | bash
+   No R1 e no R2, logo depois e ainda sem container rodando, grave /etc/docker/daemon.json com {"ip": "127.0.0.1"} e rode sudo systemctl restart docker. Assim a porta que um compose publica fica só no loopback, porque o Docker publica por cima do ufw. No R3, o container não tem IP público, e esse passo é opcional.
+   O grupo docker e o ~/.local/bin do claude só valem a partir da próxima conexão. Prove numa conexão nova: claude --version &amp;&amp; docker ps.
+
+--- C3. Logins (eu rodo, você entrega as linhas) ---
+- Claude: ssh -t &lt;maquina&gt; "tmux new -s login 'claude auth login'". Eu abro o link, entro na conta e, se a página mostrar um código, colo no terminal.
+- GitHub: na máquina, você gera a chave dela com test -e ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519 -C &lt;maquina&gt;. Depois eu rodo ssh -t &lt;maquina&gt; 'gh auth login -h github.com -p ssh -w', escolho essa chave para subir, e digito o código de 8 caracteres em https://github.com/login/device. O aviso de que não achou navegador pode ser ignorado. Se na entrevista eu escolhi token fine-grained, eu crio o token em https://github.com/settings/personal-access-tokens, rodo gh auth login --with-token num tmux e colo, e você roda gh auth setup-git.
+- Git: git config --global user.name e user.email, com os meus valores.
+
+--- C4. Ambiente ---
+- Ubuntu padrão: instale só o que o projeto pede.
+- Dotfiles com chezmoi: nunca rode chezmoi init --apply. Instale com sh -c "$(curl -fsLS get.chezmoi.io)" -- -b ~/.local/bin, rode chezmoi init &lt;repo-dotfiles&gt; sem aplicar e leia o .chezmoi.toml.tmpl. Se ele pergunta algo, passe a resposta com --promptString chave=valor ou me entregue a linha. Rode chezmoi managed --include=encrypted,scripts e me mostre o que é segredo (chaves em ~/.ssh, ~/.aws, tokens) e o que é script feito para WSL, macOS ou interface gráfica. Aplique com chezmoi apply --exclude=encrypted,scripts, e depois só os scripts e segredos que eu aprovar, um por um. A chave de decifrar eu trago à mão, e ela sai da máquina no fim. Com stow ou outro gerenciador, mesma ideia: leia antes, aplique sem segredo e sem script, e me mostre o resto.
+- Depois, confira file ~/.local/bin/* e qualquer binário baixado. Na Oracle a máquina é ARM, e binário x86 falha com exec format error.
+- Se os dotfiles trazem zsh, instale o zsh e rode sudo chsh -s /usr/bin/zsh &lt;usuario&gt;.
+- Do Claude Code, leve o que eu escolhi:
+  - settings.json, se não veio pelos dotfiles;
+  - skills e agents: cd ~ &amp;&amp; ls -d .claude/skills .claude/agents .agents 2&gt;/dev/null | tar czf - -T - | ssh &lt;maquina&gt; 'tar xzf - -C ~';
+  - plugins: claude plugin marketplace add e claude plugin install, lá;
+  - servidores MCP de escopo user ou local, que moram no ~/.claude.json e não chegam pelo clone. Copie o JSON de cada um sem imprimir: jq -c '.mcpServers["&lt;nome&gt;"]' ~/.claude.json | ssh &lt;maquina&gt; 'cat &gt; ~/mcp-&lt;nome&gt;.json', e lá claude mcp add-json &lt;nome&gt; "$(cat ~/mcp-&lt;nome&gt;.json)" --scope user &amp;&amp; rm ~/mcp-&lt;nome&gt;.json. Os de escopo local estão em .projects["&lt;caminho-do-repo&gt;"].mcpServers;
+  - nunca .credentials.json nem o ~/.claude.json inteiro.
+
+--- C5. Código e segredos ---
+GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new' git clone git@github.com:&lt;repo&gt;.git ~/&lt;pasta&gt;
+   Os arquivos ignorados que eu aprovei vão por tar, escritos um a um, sem glob. Confira antes com ls -l &lt;lista&gt; dentro do repo local:
+tar czf - -C &lt;caminho-local-do-repo&gt; &lt;lista&gt; | ssh &lt;maquina&gt; 'cd ~/&lt;pasta&gt; &amp;&amp; tar xzf - &amp;&amp; chmod 600 &lt;lista&gt;'
+   Instale as dependências dentro de ~/&lt;pasta&gt; pelo lockfile (npm ci, pnpm install --frozen-lockfile, uv sync, pip install -r requirements.txt). Se o projeto usa Playwright, só então: npx playwright install --with-deps chromium. Suba os serviços com docker compose up -d e rode docker update --restart unless-stopped &lt;container-do-banco&gt;, para o banco voltar depois de um reboot.
+   Se o agente precisa alcançar outra máquina (um túnel até um banco, por exemplo), gere uma chave só dele e me peça para autorizá-la lá.
+
+--- C6. Acesso ---
+- O Host &lt;maquina&gt; do meu ~/.ssh/config já está pronto. No WSL, o VS Code do Windows lê C:\Users\&lt;eu&gt;\.ssh\config, que daqui é /mnt/c/Users/&lt;eu&gt;/.ssh/config. Escreva o mesmo bloco lá, com IdentityFile apontando para uma chave do Windows. Se o Windows não tiver chave, me entregue para rodar no PowerShell: ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\id_ed25519_&lt;maquina&gt;. Autorize a pública dela na máquina com cat /mnt/c/Users/&lt;eu&gt;/.ssh/id_ed25519_&lt;maquina&gt;.pub | ssh &lt;maquina&gt; 'cat &gt;&gt; ~/.ssh/authorized_keys', e me peça para provar no PowerShell com ssh &lt;maquina&gt; true.
+- VS Code: a extensão Remote-SSH se instala no VS Code do Windows. O code --install-extension chamado de dentro do WSL instala no lado WSL e não aparece na janela do Windows.
+- App no navegador: ssh -L 3000:localhost:3000 &lt;maquina&gt;. O endereço continua localhost, então login e OAuth funcionam sem mudar configuração.
+
+--- C7. Remote Control como serviço ---
+Defina &lt;flags&gt; uma vez e use as mesmas no passo 1, no script, em C8 e em C9: --spawn same-dir (ou worktree) e --permission-mode bypassPermissions (ou default). Com worktree, crie um .worktreeinclude com os .env e ponha worktree.baseRef "head" no ~/.claude/settings.json da máquina. Antes de criar o script, me mostre a linha do claude remote-control que ele vai rodar.
+1. Eu rodo à mão, uma vez: ssh -t &lt;maquina&gt; 'cd ~/&lt;pasta&gt; &amp;&amp; claude remote-control &lt;flags&gt;'. Respondo y à confiança na pasta e ao Remote Control, aceito o aviso do bypass se aparecer, e saio com Ctrl+C. Com bypass, eu rodo antes também ssh -t &lt;maquina&gt; 'cd ~/&lt;pasta&gt; &amp;&amp; claude --dangerously-skip-permissions', aceito o aviso e saio com /exit.
+2. Você cria ~/.local/bin/agente-rc, com chmod 755:
+#!/bin/sh
+cd "$HOME/&lt;pasta&gt;" || exit 1
+while true; do
+    claude remote-control &lt;flags&gt;
+    sleep 10
+done
+   O laço existe porque o servidor sai sozinho depois de uns 10 minutos sem rede.
+3. Você cria /etc/systemd/system/agente-rc.service:
+[Unit]
+After=network-online.target docker.service
+Wants=network-online.target
+[Service]
+Type=forking
+User=&lt;usuario&gt;
+ExecStart=/usr/bin/tmux -L rc new-session -d -s rc "bash -lic agente-rc"
+ExecStop=/usr/bin/tmux -L rc kill-server
+Restart=on-failure
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+   Com zsh de login, use zsh -lic. O -i carrega o .bashrc ou o .zshrc, onde nvm, pyenv e afins põem o PATH. O tmux tem socket próprio (-L rc): no socket padrão, o tmux que eu abro pelo SSH nasceria dentro do serviço e morreria a cada reinício.
+   Rode: sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now agente-rc
+4. Prove: systemctl is-active agente-rc e tmux -L rc capture-pane -p -t rc mostrando Connected.
+
+--- C8. Memória (fora do R4) ---
+Sem swap e sem teto, um comando pesado de uma sessão enche a memória da máquina, e as outras sessões e o SSH param junto. Na montagem que validou este pedido, um typecheck com dois tsc de 1 GB num container de 7 GB sem swap fez cada conexão SSH passar de 1s para 20 a 77s.
+Calcule e mostre no plano: &lt;swap&gt; (8G, se o df -h / tiver essa folga), &lt;teto&gt; (o total do free -m menos 2 GiB, 1 do resgate e 1 do sistema e do Docker; desconte mais se os containers do projeto usam mais que isso), &lt;alto&gt; (&lt;teto&gt; menos 512 MiB) e &lt;swap-agentes&gt; (metade de &lt;swap&gt;). Na validação, com 7 GB, foram 5G, 4608M e 4G.
+1. Swap. Confira findmnt -no FSTYPE / e siga só com ext4. Se cat /proc/swaps já lista um swap, pule a criação. No R1 e no R2, rode na máquina. No R3, rode no host, com a minha confirmação, medindo os serviços antes e depois. O container usa o swap do host sem configuração no LXD.
+sudo fallocate -l &lt;swap&gt; /swapfile &amp;&amp; sudo chmod 600 /swapfile &amp;&amp; sudo mkswap /swapfile &amp;&amp; sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+   Prove com cat /proc/swaps. No R3, prove também de dentro do container: cat /sys/fs/cgroup/memory.swap.max não pode ser 0.
+2. Teto das sessões, na máquina. Grave /etc/systemd/system/agentes.slice:
+[Unit]
+Description=Sessões do Claude Code, com teto de memória somado
+[Slice]
+MemoryHigh=&lt;alto&gt;
+MemoryMax=&lt;teto&gt;
+MemorySwapMax=&lt;swap-agentes&gt;
+   Grave /etc/systemd/system/agente-rc.service.d/memoria.conf:
+[Service]
+Slice=agentes.slice
+OOMPolicy=continue
+   Sem OOMPolicy=continue vale o padrão do systemd, stop, e o systemd derruba o servidor inteiro, com todas as sessões, quando o kernel mata um processo dele. O serviço só muda de grupo ao reiniciar, e o reinício derruba as sessões abertas. Me avise antes e rode: sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart agente-rc. Prove: cat /proc/$(systemctl show -p MainPID --value agente-rc)/cgroup mostra 0::/agentes.slice/agente-rc.service, e systemctl show -p OOMPolicy agente-rc mostra OOMPolicy=continue. Com mais de um projeto, cada serviço do Remote Control ganha o mesmo drop-in, com MemoryHigh e MemoryMax próprios abaixo de &lt;teto&gt;, para um projeto não ocupar o grupo inteiro.
+3. Servidor de resgate, fora do teto, para eu abrir uma sessão pelo celular quando as do projeto estiverem no teto. O resgate-rc fica fora do agentes.slice, porque ele existe para ter memória quando o teto está cheio. Grave /etc/systemd/system/resgate.slice:
+[Unit]
+Description=Reserva de memória do servidor de resgate
+[Slice]
+MemoryMin=1G
+MemoryMax=1536M
+CPUWeight=1000
+   Crie a pasta com mkdir -p ~/resgate e o script ~/.local/bin/resgate-rc, com chmod 755. Use o mesmo --permission-mode de &lt;flags&gt;:
+#!/bin/sh
+cd "$HOME/resgate" || exit 1
+while true; do
+    claude remote-control --name resgate --remote-control-session-name-prefix resgate --spawn same-dir --capacity 2 --permission-mode bypassPermissions
+    sleep 10
+done
+   Grave ~/resgate/CLAUDE.md:
+# Servidor de resgate
+
+Esta sessão roda em resgate.slice, com 1 GiB reservado, para responder quando as sessões do projeto estão no teto de memória. Rode `memoria` primeiro.
+
+Libere do menos destrutivo para o mais destrutivo, e rode `memoria` depois de cada passo:
+1. Mate o comando pesado (tsc, vitest, build, navegador) com kill. A sessão que o rodou continua viva.
+2. Mate a sessão que sozinha passa de 1 GiB.
+3. Com o servidor do projeto inteiro preso, rode `tmux -L rc send-keys -t rc C-c` e depois `sudo systemctl restart agente-rc`.
+
+Me diga o que ocupava a memória, com MB e a sessão dona, e o que você matou.
+   Eu rodo à mão, uma vez: ssh -t &lt;maquina&gt; 'cd ~/resgate &amp;&amp; claude remote-control --name resgate --remote-control-session-name-prefix resgate --spawn same-dir --capacity 2 --permission-mode bypassPermissions'. Respondo y à confiança na pasta e saio com Ctrl+C. Depois você grava /etc/systemd/system/resgate-rc.service:
+[Unit]
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=forking
+User=&lt;usuario&gt;
+Slice=resgate.slice
+OOMPolicy=continue
+OOMScoreAdjust=-900
+ExecStart=/usr/bin/tmux -L resgate new-session -d -s resgate "bash -lic resgate-rc"
+ExecStop=/usr/bin/tmux -L resgate kill-server
+Restart=on-failure
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+   Com zsh de login, use zsh -lic. Rode: sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now resgate-rc. Prove: tmux -L resgate capture-pane -p -t resgate mostra resgate e Capacity: 0/2. No app, a sessão aparece com o título resgate.
+4. Você cria ~/.local/bin/memoria, com chmod 755:
+#!/bin/sh
+# Mostra quanto cada grupo de memória usa, os limites dele e a pressão de memória da máquina.
+mb() { case "$1" in max) echo "sem limite" ;; *) echo "$(( $1 / 1048576 )) MB" ;; esac; }
+for cg in agentes.slice agentes.slice/agente-rc.service resgate.slice system.slice; do
+    p=/sys/fs/cgroup/$cg
+    [ -d "$p" ] || continue
+    printf '%-34s usa %-8s swap %-8s alto %-11s teto %s\n' "$cg" "$(mb "$(cat $p/memory.current)")" \
+        "$(mb "$(cat $p/memory.swap.current)")" "$(mb "$(cat $p/memory.high)")" "$(mb "$(cat $p/memory.max)")"
+done
+echo
+free -m | sed -n '1,3p'
+echo
+printf 'pressão de memória (full avg10): %s%%\n' "$(sed -n 's/^full avg10=\([0-9.]*\).*/\1/p' /sys/fs/cgroup/memory.pressure)"
+   Prove numa conexão nova, rodando memoria: a linha do agentes.slice mostra o teto igual a &lt;teto&gt;.
+5. Os limites no ~/.claude/CLAUDE.md da máquina, para as sessões conferirem a folga antes de um comando pesado. Se esse arquivo vem dos meus dotfiles, acrescente na fonte deles e aplique. Senão, acrescente ao fim, com os números de &lt;alto&gt; e &lt;teto&gt;:
+# Memória desta máquina
+
+Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e para tudo que ela dispara: MCP, testes, build, navegador.
+
+| Grupo systemd | Quem roda lá | Alto | Teto |
+|---|---|---|---|
+| `agentes.slice` | as sessões do projeto | &lt;alto&gt; | &lt;teto&gt; |
+| `resgate.slice` | o servidor de resgate | 1 GiB reservado | 1,5 GiB |
+
+Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado.
+
+Antes de typecheck, suíte de teste, build ou Playwright, rode `memoria` e confira a folga do grupo. Um comando que morre com exit 137 bateu no teto: rode de novo com menos paralelismo, por exemplo `turbo run ... --concurrency=1`.
+6. Prove o teto: sudo systemd-run --wait -p MemoryMax=200M -p MemorySwapMax=0 python3 -c "a=bytearray(400*1024*1024)" termina em Finished with result: oom-kill.
+7. Retomada depois do limite de uso, no mesmo grupo do resgate. Quando a conta bate o limite, a sessão para com uma linha assistant de "error": "rate_limit" e o texto You've hit your session limit · resets 9:50am (UTC), e fica parada até alguém escrever nela. Grave ~/.local/bin/retomar-limite, com chmod 755, exatamente como abaixo, trocando em PASTAS "projeto" por &lt;pasta&gt; e acrescentando as pastas dos outros projetos:
+#!/usr/bin/env python3
+"""Retoma as sessões do Remote Control que pararam por limite de uso da conta.
+
+Roda pelo retomar-limite.timer. Lê os históricos das pastas em PASTAS, acha a sessão cuja
+última fala é o erro de limite, espera o horário de volta e manda uma mensagem nela
+por um `claude -p` mensageiro, que usa SendMessage. Cada limite é retomado uma vez.
+"""
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+CASA = Path.home()
+PROJETOS = CASA / ".claude" / "projects"
+SESSOES = CASA / ".claude" / "sessions"
+PASTAS = [re.sub(r"[^A-Za-z0-9]", "-", str(CASA / p)) for p in ("projeto", "resgate")]
+ESTADO = CASA / ".local" / "state" / "retomar-limite" / "estado.json"
+
+MARGEM = timedelta(minutes=2)
+JANELA_SUBAGENTES = timedelta(hours=5)
+JANELA_ATIVOS = timedelta(minutes=5)
+TENTATIVAS = 3
+
+MENSAGEM = (
+    "Esta sessão parou às {hora_parada} UTC porque a conta bateu o limite de uso "
+    '("{mensagem_limite}"). O limite voltou às {hora_volta} UTC. Antes de continuar, '
+    "confira se foi esta sessão que gastou o limite. Nas 5 horas antes da parada ela abriu "
+    "{n_subagentes} subagentes, e {n_ativos} estavam rodando na hora da parada. Se foi aqui, "
+    "por exemplo por ter disparado 10 ou 15 subagentes em paralelo, não retome do mesmo jeito. "
+    "Siga a tarefa sem subagentes em paralelo, com no máximo um por vez e só quando uma pesquisa "
+    "exigir. Se não foi aqui, outra sessão em paralelo pode ter consumido o limite, e está tudo "
+    "certo. Nos dois casos, siga com cautela de tokens: leia trechos em vez de arquivos inteiros "
+    "e corte saída longa. Depois continue de onde parou. [{marca}]"
+)
+
+MENSAGEIRO = """Você é só um mensageiro. Faça isto e nada mais:
+1. Use a ferramenta SendMessage com to="{nome}" e, como message, o texto entre as linhas INICIO e FIM, exatamente igual, sem mudar uma letra.
+2. Se a ferramenta recusar ou não achar a sessão, não tente outro caminho.
+3. Responda numa linha só: ENVIADO, ou FALHOU seguido do motivo.
+
+INICIO
+{texto}
+FIM"""
+
+RE_LIMITE = re.compile(r"resets (?P&lt;quando&gt;.+?)\s*\((?P&lt;fuso&gt;[^)]+)\)")
+RE_HORA = re.compile(r"(?P&lt;h&gt;\d{1,2})(?::(?P&lt;m&gt;\d{2}))?\s*(?P&lt;ap&gt;am|pm)", re.I)
+RE_DATA = re.compile(r"(?P&lt;mes&gt;[A-Z][a-z]{2})[a-z]*\.?\s+(?P&lt;dia&gt;\d{1,2})")
+MESES = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def data(ts):
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def texto_de(entrada):
+    conteudo = entrada.get("message", {}).get("content")
+    if isinstance(conteudo, list):
+        return " ".join(p.get("text", "") for p in conteudo if isinstance(p, dict))
+    return conteudo if isinstance(conteudo, str) else ""
+
+
+def horario_de_volta(mensagem, parada):
+    """Lê "resets 9:50am (UTC)" ou "resets Oct 7, 5pm (UTC)". Devolve (horário, lido)."""
+    achado = RE_LIMITE.search(mensagem)
+    hora = RE_HORA.search(achado.group("quando")) if achado else None
+    if not hora:
+        return parada + timedelta(hours=5), False
+    try:
+        fuso = ZoneInfo(achado.group("fuso").strip())
+    except Exception:
+        return parada + timedelta(hours=5), False
+    h = int(hora.group("h")) % 12 + (12 if hora.group("ap").lower() == "pm" else 0)
+    m = int(hora.group("m") or 0)
+    local = parada.astimezone(fuso)
+    dia = RE_DATA.search(achado.group("quando"))
+    if dia and dia.group("mes") in MESES:
+        volta = local.replace(month=MESES.index(dia.group("mes")) + 1, day=int(dia.group("dia")),
+                              hour=h, minute=m, second=0, microsecond=0)
+        if volta &lt; local - timedelta(days=1):
+            volta = volta.replace(year=volta.year + 1)
+    else:
+        volta = local.replace(hour=h, minute=m, second=0, microsecond=0)
+        if volta &lt;= local:
+            volta += timedelta(days=1)
+    return volta.astimezone(timezone.utc), True
+
+
+def parada_por_limite(historico):
+    """Devolve a última fala se ela for o erro de limite, ou None."""
+    ultima = None
+    with open(historico, encoding="utf-8", errors="replace") as f:
+        for linha in f:
+            try:
+                e = json.loads(linha)
+            except ValueError:
+                continue
+            if e.get("type") in ("user", "assistant") and not e.get("isSidechain"):
+                ultima = e
+    if ultima and ultima.get("isApiErrorMessage") and ultima.get("error") == "rate_limit":
+        return ultima
+    return None
+
+
+def pontas(arquivo):
+    """Primeiro e último timestamp de um histórico de subagente."""
+    primeiro = ultimo = None
+    with open(arquivo, "rb") as f:
+        for linha in f:
+            ts = json.loads(linha).get("timestamp") if b'"timestamp"' in linha else None
+            if ts:
+                primeiro = ts
+                break
+        f.seek(max(0, os.path.getsize(arquivo) - 65536))
+        for linha in f.read().splitlines():
+            try:
+                ts = json.loads(linha).get("timestamp")
+            except ValueError:
+                continue
+            ultimo = ts or ultimo
+    return primeiro and data(primeiro), ultimo and data(ultimo)
+
+
+def subagentes(historico, parada):
+    pasta = historico.with_suffix("") / "subagents"
+    abertos = ativos = 0
+    for arquivo in pasta.glob("agent-*.jsonl"):
+        inicio, fim = pontas(arquivo)
+        if not inicio:
+            continue
+        if parada - JANELA_SUBAGENTES &lt;= inicio &lt;= parada:
+            abertos += 1
+        if inicio &lt;= parada and fim and fim &gt;= parada - JANELA_ATIVOS:
+            ativos += 1
+    return abertos, ativos
+
+
+def detectar(projetos, pastas, agora, janela):
+    for pasta in pastas:
+        for historico in sorted((projetos / pasta).glob("*.jsonl")):
+            idade = agora.timestamp() - historico.stat().st_mtime
+            if janela and idade &gt; janela.total_seconds():
+                continue
+            e = parada_por_limite(historico)
+            if not e:
+                continue
+            parada = data(e["timestamp"])
+            mensagem = texto_de(e).strip()
+            volta, lido = horario_de_volta(mensagem, parada)
+            abertos, ativos = subagentes(historico, parada)
+            yield {
+                "sessao": historico.stem, "pasta": pasta, "historico": str(historico),
+                "parada": parada.isoformat(), "volta": volta.isoformat(), "volta_lida": lido,
+                "mensagem_limite": mensagem, "subagentes": abertos, "ativos": ativos,
+            }
+
+
+def processo_vivo(sessao):
+    for arquivo in SESSOES.glob("*.json"):
+        try:
+            s = json.loads(arquivo.read_text())
+        except (ValueError, OSError):
+            continue
+        if s.get("sessionId") != sessao:
+            continue
+        try:
+            inicio = Path(f"/proc/{s['pid']}/stat").read_text().rsplit(")", 1)[1].split()[19]
+        except (OSError, IndexError, KeyError):
+            continue
+        if inicio == str(s.get("procStart")):
+            return s
+    return None
+
+
+def entregue(historico, parada, marca):
+    """A marca aparece no histórico depois da parada."""
+    with open(historico, encoding="utf-8", errors="replace") as f:
+        return any(marca in linha for linha in f if '"timestamp"' in linha
+                   and json.loads(linha).get("timestamp", "") &gt; parada)
+
+
+def enviar(nome, texto, cwd):
+    prompt = MENSAGEIRO.format(nome=nome, texto=texto)
+    r = subprocess.run(
+        ["claude", "-p", "--model", "haiku", "--permission-mode", "bypassPermissions",
+         "--no-session-persistence", "--strict-mcp-config", "--tools", "SendMessage,ListAgents"],
+        input=prompt, capture_output=True, text=True, timeout=300, cwd=cwd,
+    )
+    return (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--detectar", action="store_true", help="só lista, sem estado e sem mensagem")
+    p.add_argument("--projetos", type=Path, default=PROJETOS)
+    p.add_argument("--pasta", action="append", help="pasta de projetos, repetível")
+    p.add_argument("--estado", type=Path, default=ESTADO)
+    p.add_argument("--agora", help="horário ISO, para teste")
+    p.add_argument("--horas", type=float, default=24, help="idade máxima do histórico, 0 = todos")
+    a = p.parse_args()
+
+    agora = data(a.agora) if a.agora else datetime.now(timezone.utc)
+    janela = timedelta(hours=a.horas) if a.horas else None
+    achados = list(detectar(a.projetos, a.pasta or PASTAS, agora, janela))
+
+    if a.detectar:
+        for s in achados:
+            log(json.dumps(s, ensure_ascii=False))
+        log(f"{len(achados)} sessões paradas por limite")
+        return
+
+    a.estado.parent.mkdir(parents=True, exist_ok=True)
+    trava = open(a.estado.with_suffix(".lock"), "w")
+    fcntl.flock(trava, fcntl.LOCK_EX)
+    estado = json.loads(a.estado.read_text()) if a.estado.exists() else {}
+
+    for s in achados:
+        chave = f"{s['sessao']}@{s['volta']}"
+        reg = estado.setdefault(chave, {**s, "situacao": "esperando", "tentativas": 0})
+        marca = f"retomada-limite {s['sessao'][:8]} {s['volta'][:16]}"
+        if reg["situacao"] in ("retomada", "desistiu"):
+            continue
+        if reg["tentativas"] and entregue(s["historico"], s["parada"], marca):
+            reg["situacao"] = "retomada"
+            log(f"{chave}: entrega confirmada no histórico")
+            continue
+        if agora &lt; datetime.fromisoformat(s["volta"]) + MARGEM:
+            if not reg.get("avisado"):
+                log(f"{chave}: parada às {s['parada'][11:16]}, esperando o limite voltar")
+                reg["avisado"] = True
+            continue
+        vivo = processo_vivo(s["sessao"])
+        if not vivo:
+            if reg["situacao"] != "sem processo":
+                log(f"{chave}: sem processo vivo, retome pelo app")
+            reg["situacao"] = "sem processo"
+            continue
+        if reg["tentativas"] &gt;= TENTATIVAS:
+            reg["situacao"] = "desistiu"
+            log(f"{chave}: {TENTATIVAS} tentativas sem confirmação, desisti")
+            continue
+        texto = MENSAGEM.format(
+            hora_parada=s["parada"][11:16], hora_volta=s["volta"][11:16],
+            mensagem_limite=s["mensagem_limite"], n_subagentes=s["subagentes"],
+            n_ativos=s["ativos"], marca=marca,
+        )
+        reg["tentativas"] += 1
+        resposta = enviar(vivo["name"], texto, a.estado.parent)
+        reg["resposta"] = resposta
+        log(f"{chave}: mensageiro para {vivo['name']} respondeu {resposta}")
+        for _ in range(12):
+            if entregue(s["historico"], s["parada"], marca):
+                reg["situacao"] = "retomada"
+                log(f"{chave}: entrega confirmada no histórico")
+                break
+            time.sleep(5)
+        a.estado.write_text(json.dumps(estado, ensure_ascii=False, indent=1))
+
+    a.estado.write_text(json.dumps(estado, ensure_ascii=False, indent=1))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+   Prove com retomar-limite --detectar --horas 0, que termina em "0 sessões paradas por limite" quando nenhuma sessão está parada. Grave as unidades, com &lt;usuario&gt; no lugar de voce:
+sudo tee /etc/systemd/system/retomar-limite.service &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Retoma as sessões do Remote Control paradas por limite de uso
+
+[Service]
+Type=oneshot
+User=voce
+Slice=resgate.slice
+MemoryMax=512M
+OOMScoreAdjust=-900
+Environment=PATH=/home/voce/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /home/voce/.local/bin/retomar-limite
+TimeoutStartSec=20min
+EOF
+sudo tee /etc/systemd/system/retomar-limite.timer &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Procura sessões paradas por limite de uso a cada 5 minutos
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
+EOF
+sudo systemctl daemon-reload
+   Antes de ligar, teste numa sessão sua, nunca numa sessão do projeto. Com o meu ok, rode o teste abaixo, trocando voce por &lt;usuario&gt; no caminho do histórico. Ele abre a sessão teste-limite em bypass, grava no histórico dela uma linha de limite falsa e roda o job só nessa pasta:
+mkdir -p ~/teste-limite &amp;&amp; cd ~/teste-limite
+tmux -L teste new-session -d -s teste "claude --permission-mode bypassPermissions --model haiku -n teste-limite"
+sleep 8 &amp;&amp; tmux -L teste send-keys -t teste "responda só: pronto" Enter
+sleep 15 &amp;&amp; H=$(ls -t ~/.claude/projects/-home-voce-teste-limite/*.jsonl | head -1)
+P=$(date -u -d '-1 hour' +%FT%T.000Z); V=$(date -u -d '-30 min' +%-I:%M%P)
+printf '{"type":"assistant","isSidechain":false,"isApiErrorMessage":true,"error":"rate_limit","timestamp":"%s","message":{"role":"assistant","content":[{"type":"text","text":"You'"'"'ve hit your session limit · resets %s (UTC)"}]}}\n' "$P" "$V" &gt;&gt; "$H"
+retomar-limite --pasta=-home-voce-teste-limite --estado /tmp/estado-teste.json
+sleep 20 &amp;&amp; tmux -L teste capture-pane -p -t teste | tail -12
+   O job tem de responder ENVIADO e "entrega confirmada no histórico", e o painel tem de mostrar Message from e a resposta da sessão. Rode o retomar-limite de novo e prove que não reenvia. Me peça para fechar a sessão de teste (tmux -L teste kill-server). Só então, com o meu ok, porque dali em diante ele escreve nas sessões reais: sudo systemctl enable --now retomar-limite.timer, e prove com systemctl list-timers retomar-limite.timer. Sem bypass em &lt;flags&gt;, a sessão retém a mensagem de um remetente em bypass: tire --permission-mode bypassPermissions da função enviar, ponha --allowedTools SendMessage e repita o teste.
+
+--- C9. Provas, todas e nesta ordem ---
+- A suíte de testes do projeto passa na máquina, rodando num tmux com log. Em 2 núcleos, teste que sobe banco em container pode estourar 5s, e teste de tela pode falhar por lentidão e passar sozinho: rode de novo o que falhou antes de concluir que quebrou.
+- claude mcp list lá mostra os mesmos servidores conectados que aqui.
+- Eu abro uma sessão pelo app e mando, de dentro dela, command -v para as ferramentas do projeto (node, python3, uv, o que ele usa). Se faltar alguma, o PATH do serviço está errado.
+- Na máquina, ps -eo args | grep -- '[-]-print' | grep -c '[b]ypassPermissions' conta as sessões em bypass. Com bypass, é o número de sessões abertas. Sem bypass, é 0. Os colchetes tiram da conta o próprio comando.
+- memoria mostra o teto de C8 na linha do agentes.slice, e o systemd-run de C8 termina em oom-kill.
+- Eu abro a sessão resgate pelo app e mando uma mensagem. Ela responde.
+- systemctl list-timers retomar-limite.timer mostra a próxima rodada, e o teste da sessão teste-limite de C8 terminou em entrega confirmada.
+- Peça minha confirmação e reinicie a máquina (no R3, sudo lxc restart &lt;maquina&gt;). Os serviços agente-rc e resgate-rc voltam sozinhos, e as sessões reaparecem no app.
+- Rode por ssh, dentro de ~/&lt;pasta&gt;: claude --dangerously-skip-permissions --bg "rode sleep 45 e responda ok" (sem bypass, sem a flag). Numa conexão nova, consulte claude agents --json até o estado chegar a done.
+- No R3, os serviços do host respondem igual ao início.
+
+======================================================================
+6. FASE 4: ENTREGA
+======================================================================
+Me peça para abrir claude.ai/code ou o app, conferir se a sessão com o nome da máquina aparece e mandar uma mensagem por ela. Feche com um resumo curto: o nome da sessão, o bloco do ~/.ssh/config, como abrir o app no navegador, como entrar no painel (tmux -L rc attach -t rc), como reiniciar os serviços (sudo systemctl restart agente-rc resgate-rc, que também aplica atualização do Claude Code), como ver a memória (memoria), como ver as retomadas depois do limite de uso (journalctl -u retomar-limite) e abrir a sessão resgate pelo app quando as sessões estiverem no teto, como renovar o login quando ele vencer (ssh -t &lt;maquina&gt; "tmux new -s login 'claude auth login'" e depois reiniciar os serviços) e o que ficou pendente. No R4, o resumo traz o link da sessão de teste, o nome do ambiente e o que ficou de fora, sem ssh, tmux nem systemctl.
+
+======================================================================
+7. SINTOMA, CAUSA E CONSERTO
+======================================================================
+- Sessão aberta pelo app pede permissão para tudo: o bypass foi para as configurações do projeto, que o Claude Code ignora. Ponha --permission-mode bypassPermissions depois de remote-control.
+- Serviço ativo e nenhuma sessão no app: o servidor está parado numa pergunta de primeira vez. tmux -L rc attach -t rc mostra qual. Rode o comando à mão uma vez, como em C7.
+- O app parou de abrir sessão e o painel mostra Login expired: o login do Claude venceu. Renove como na entrega.
+- O servidor sumiu: ele sai depois de uns 10 minutos sem rede. O laço do agente-rc devolve.
+- Sessão nova em outro branch e sem .env: --spawn worktree nasce do branch padrão do remoto, só com arquivos versionados. Use same-dir, ou .worktreeinclude mais worktree.baseRef "head".
+- Ferramenta do projeto some nas sessões do app: o serviço não carregou o .bashrc ou o .zshrc. Use bash -lic ou zsh -lic.
+- Container do LXD sem IP ou sem internet: faltam as regras do lxd-firewall, ou elas estão fora de ordem.
+- Regras do firewall somem ou duplicam no reboot: alguém rodou netfilter-persistent save com Docker no host. Mantenha as regras no serviço lxd-firewall.
+- exec format error: binário x86 numa máquina ARM. Baixe a versão arm64.
+- Remote-SSH não aparece no VS Code: foi instalada pelo WSL. Instale pelo VS Code do Windows.
+- Remote-SSH do Windows recusa a chave: a chave do Windows não está no authorized_keys da máquina. Veja C6.
+- MCP de banco não conecta depois do reboot: o banco de desenvolvimento ficou parado. docker update --restart unless-stopped nele.
+- Oracle recusa criar a VM com Out of host capacity: outro availability domain, ou mais tarde.
+- SSH leva de 20 a 77 segundos e as sessões do app param: a máquina está no limite de memória sem swap, e todo processo espera o disco. Ponha o swap e o teto de C8. Na hora, mate o comando pesado por uma sessão do resgate.
+- Build ou teste morre com Killed ou exit 137: o agentes.slice bateu no teto, e o kernel matou o maior processo. Rode com menos paralelismo ou suba &lt;teto&gt;.
+- Sessão parada por limite continua parada depois do horário de volta: o processo dela morreu, e o retomar-limite só escreve em processo vivo. journalctl -u retomar-limite mostra sem processo vivo. Me peça para mandar uma mensagem pelo app.
+- Todas as sessões caem juntas quando um comando morre por memória: falta OOMPolicy=continue no drop-in, e o padrão stop derruba o serviço. Acrescente e rode sudo systemctl daemon-reload.
+
+Comece pela fase 0.</pre></div>
+
+  <h2>Se a conversa cair</h2>
+  <p>O Claude guarda o progresso em <code>~/claude-always-on/progresso.md</code>, na sua máquina. Abra o Claude Code de novo, cole o pedido outra vez e acrescente:</p>
+  <div class="code"><div class="code-head"><span>retomar</span><button class="copy">Copiar</button></div><pre>Já começamos. Leia ~/claude-always-on/progresso.md e retome do próximo passo.</pre></div>
+
+  <h2>O que ele vai perguntar</h2>
+  <p>Ter as respostas em mente encurta a conversa. As três primeiras escolhem o caminho, e ele só faz as outras depois de recomendar um:</p>
+  <ol>
+    <li>Onde rodar: se você já tem VPS, se aceita pagar, se já tem conta na Oracle.</li>
+    <li>Sessões em bypass ou pedindo permissão pelo app.</li>
+    <li>De quais aparelhos vai acessar, e se usa VS Code ou terminal na máquina.</li>
+    <li>Quais repos levar, e se é para levar o ambiente atual ou começar do zero.</li>
+    <li>Ubuntu padrão ou os seus dotfiles.</li>
+    <li>O que levar do Claude Code: settings, skills, agents, plugins, servidores MCP.</li>
+    <li>Quais segredos o agente precisa lá, um por um.</li>
+    <li>Sessões paralelas no mesmo checkout ou em worktree.</li>
+    <li>O nome do usuário e da máquina.</li>
+    <li>Se o GitHub entra com login completo ou com um token só dos repos do agente.</li>
+  </ol>
+</article>
+
+<!-- ============ ORACLE ============ -->
+<article class="page" id="oracle" data-title="Oracle Cloud, Pay As You Go" data-prev="caminhos" data-next="preparar" hidden>
+  <div class="crumb">Onde hospedar</div>
+  <h1>Oracle Cloud com Pay As You Go</h1>
+  <p class="lead">A Oracle dá, sem prazo, uma VM ARM com 2 núcleos e 12 GB de memória, até 200 GB de disco e 10 TB de tráfego de saída por mês. Com a conta Pay As You Go, você continua sem pagar nada dentro desses limites, e a VM não é recolhida por ociosidade.</p>
+
+  <h2>O que vem de graça</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Recurso</th><th>Limite</th></tr>
+    <tr><td>VM ARM, <code>VM.Standard.A1.Flex</code></td><td>1.500 OCPU-hora e 9.000 GB-hora por mês, o que dá 2 OCPU e 12 GB ligados o mês inteiro</td></tr>
+    <tr><td>VM AMD, <code>VM.Standard.E2.1.Micro</code></td><td>Até duas, com 1/8 de OCPU e 1 GB cada. Pequenas demais para o agente</td></tr>
+    <tr><td>Disco</td><td>200 GB somando todos os volumes de boot e de bloco, com mínimo de 47 GB por VM, e 5 backups de volume</td></tr>
+    <tr><td>Tráfego de saída</td><td>10 TB por mês</td></tr>
+  </table></div>
+  <div class="callout warn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div><strong class="label">O número antigo ainda circula</strong><p>Até 15/06/2026 a cota ARM era de 4 OCPU e 24 GB, e muito tutorial ainda cita esse número. Hoje são 2 OCPU e 12 GB.</p></div></div>
+
+  <h2>Por que Pay As You Go</h2>
+  <ul>
+    <li>A Oracle não cobra o que cabe no Always Free depois do upgrade, e só cobra o que passar dos limites.</li>
+    <li>Em conta só gratuita, a Oracle pode recolher a VM que passa 7 dias com o percentil 95 de CPU abaixo de 20%, e com rede e memória abaixo de 20%. Um agente que passa a semana quase toda esperando pedido cai nisso. Na Pay As You Go essa regra não se aplica.</li>
+    <li>Quando a região responde "Out of host capacity", a própria Oracle sugere trocar o availability domain, esperar, ou fazer o upgrade, que dá acesso a mais tipos de máquina.</li>
+  </ul>
+
+  <h2>Criar a conta</h2>
+  <ol class="steps">
+    <li><b>Cadastro</b>Em <a href="https://www.oracle.com/cloud/free/">oracle.com/cloud/free</a>. A região que você escolhe ali é a região principal da conta. Ela não muda depois, e as VMs grátis só nascem nela. Escolha a mais perto de você.</li>
+    <li><b>Upgrade para Pay As You Go</b>No console, clique no link <b>Upgrade</b> do banner no topo. Se ele não aparecer, clique no logo da Oracle Cloud e procure <b>Upgrade</b> no painel à direita da página inicial. Escolha Pay As You Go.</li>
+    <li><b>Orçamento com alerta</b>Em Billing &amp; Cost Management, Budgets, crie um orçamento de US$ 1 com alerta por e-mail. Se algo sair da cota grátis, você fica sabendo no mesmo dia.</li>
+  </ol>
+
+  <h2>Criar a VM</h2>
+  <p>Sem chave SSH, gere uma na sua máquina e aperte Enter para aceitar o caminho padrão. No Windows, os mesmos comandos funcionam no PowerShell.</p>
+  <div class="code"><div class="code-head"><span>bash, na sua máquina</span><button class="copy">Copiar</button></div><pre>ssh-keygen -t ed25519
+cat ~/.ssh/id_ed25519.pub</pre></div>
+  <p>Em Compute, Instances, clique em <b>Create instance</b> e preencha os campos abaixo. No campo Add SSH keys, cole a linha que o <code>cat</code> mostrou.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Campo</th><th>Valor</th></tr>
+    <tr><td>Name</td><td>O nome da máquina, como <code>agente</code></td></tr>
+    <tr><td>Image</td><td>Canonical Ubuntu 24.04</td></tr>
+    <tr><td>Shape</td><td>Ampere, <code>VM.Standard.A1.Flex</code>, 2 OCPU e 12 GB de memória</td></tr>
+    <tr><td>Networking</td><td>Criar uma VCN nova e uma sub-rede pública, com endereço IPv4 público</td></tr>
+    <tr><td>Add SSH keys</td><td>Colar a sua chave pública, por exemplo o conteúdo de <code>~/.ssh/id_ed25519.pub</code></td></tr>
+    <tr><td>Boot volume</td><td>100 GB, sem política de backup, para sobrar cota de disco para outra VM. O volume de boot não encolhe depois</td></tr>
+  </table></div>
+  <p>Antes de clicar em <b>Create</b>, confira o selo Always Free-eligible na shape e na imagem. Na conta Pay As You Go, o que passa da cota grátis é cobrado.</p>
+  <p>Quando a VM ficar <b>Running</b>, copie o IP público e entre:</p>
+  <div class="code"><div class="code-head"><span>bash</span><button class="copy">Copiar</button></div><pre>ssh ubuntu@&lt;ip-publico&gt;</pre></div>
+  <div class="callout tip"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.6 1 1.4 1 2.5h6c0-1.1.3-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg><div><strong class="label">Se aparecer "Out of host capacity"</strong><p>Troque o availability domain no campo Placement, se a região tiver mais de um, ou tente de novo mais tarde.</p></div></div>
+
+  <h2>A rede da Oracle</h2>
+  <p>A imagem Ubuntu da Oracle vem com regras de iptables que fecham a entrada, e a security list da VCN filtra antes. Só o SSH entra, e o agente não precisa de mais nada. Não ligue o <code>ufw</code> nessa VM. Para abrir outra porta um dia, libere na security list da VCN e no iptables da VM.</p>
+  <p>Com o SSH funcionando, siga para <a href="#preparar">Preparar a máquina</a>.</p>
+</article>
+
+<!-- ============ VPS ============ -->
+<article class="page" id="vps" data-title="VPS dedicada paga" data-prev="caminhos" data-next="preparar" hidden>
+  <div class="crumb">Onde hospedar</div>
+  <h1>VPS dedicada paga</h1>
+  <p class="lead">Uma VPS só para o agente, paga em reais. É o caminho mais simples quando você aceita pagar, ou quando a Oracle está sem capacidade na sua região. A recomendação é a Hostinger, que cobra em reais, usa processador AMD EPYC (x86) e tem data center na América do Sul.</p>
+
+  <h2>Qual plano</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Plano Hostinger</th><th>Máquina</th><th>Preço no contrato de 24 meses</th><th>Renovação</th><th>Para quê</th></tr>
+    <tr><td>KVM 1</td><td>1 vCPU, 4 GB, 50 GB NVMe</td><td>R$ 29,99 por mês</td><td>R$ 59,99 por mês</td><td>Pouco. Um núcleo só trava o build e os testes</td></tr>
+    <tr class="rec"><td><b>KVM 2</b><br><span class="pill ok">recomendado</span></td><td>2 vCPU, 8 GB, 100 GB NVMe</td><td>R$ 43,99 por mês</td><td>R$ 77,99 por mês</td><td>O agente, git, Docker e testes. Próximo do que medimos neste guia</td></tr>
+    <tr><td>KVM 4</td><td>4 vCPU, 16 GB, 200 GB NVMe</td><td>R$ 59,99 por mês</td><td>R$ 149,99 por mês</td><td>App web pesado, várias sessões em paralelo e suíte grande de testes de tela</td></tr>
+  </table></div>
+  <div class="callout warn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div><strong class="label">O preço depende do contrato</strong><p>Os valores da tabela são os da página da Hostinger em 01/10/2026, para contrato de 24 meses. Na renovação, o KVM 2 passa de R$ 43,99 para R$ 77,99 por mês. Confira o preço do dia antes de contratar.</p></div></div>
+  <p>A máquina da Hostinger é x86, então binário e imagem Docker feitos para PC comum rodam sem ajuste. Qualquer outro provedor serve, desde que ofereça Ubuntu 24.04 e chave SSH.</p>
+
+  <h2>Criar</h2>
+  <ol class="steps">
+    <li><b>Plano e contrato</b>Escolha o KVM 2. O contrato mais longo baixa a mensalidade.</li>
+    <li><b>Sistema</b>No painel da VPS, escolha o modelo Ubuntu 24.04, sem painel de controle instalado.</li>
+    <li><b>Local</b>O data center da América do Sul, se aparecer na lista. O agente não sente a latência, mas o seu terminal e o VS Code sentem.</li>
+    <li><b>Acesso</b>Cadastre a sua chave SSH pública no painel e use uma senha de root longa, que você não vai digitar depois que o login por senha for desligado.</li>
+    <li><b>Entrar</b>Com o IP do painel, rode <code>ssh root@&lt;ip&gt;</code> e siga para <a href="#preparar">Preparar a máquina</a>. Lá, os comandos com <code>sudo</code> funcionam igual como root.</li>
+  </ol>
+</article>
+
+<!-- ============ CONTAINER ============ -->
+<article class="page" id="container" data-title="Container numa VPS compartilhada" data-prev="caminhos" data-next="acesso" hidden>
+  <div class="crumb">Onde hospedar</div>
+  <h1>Container numa VPS compartilhada</h1>
+  <p class="lead">Se você já tem uma VPS com folga rodando outros serviços, um container LXD dá ao agente um Linux próprio, com Docker próprio. O <code>docker ps</code> dele não mostra os seus serviços, e limites de memória, CPU e disco protegem o resto.</p>
+
+  <div class="callout danger"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg><div><strong class="label">Não faça no host</strong><p>Não rode os passos de <a href="#preparar">Preparar a máquina</a> no host. Eles mudam o hostname e ligam o ufw, que bloqueia os serviços. Não rode <code>netfilter-persistent save</code>. Não reinicie o host nem o Docker. Meça os serviços antes e depois de cada mudança de rede.</p></div></div>
+
+  <h2>Antes de começar</h2>
+  <p>Precisa de pelo menos 4 GB de memória e 30 GB de disco livres. Anote como os serviços respondem hoje:</p>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>free -h; df -h /; nproc
+ip -4 -br addr; ip route | grep default
+sudo iptables -S INPUT; sudo iptables -S FORWARD
+cat /etc/docker/daemon.json
+curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' https://seu-servico</pre></div>
+  <div class="callout warn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div><strong class="label">O primeiro lxc instala o LXD</strong><p>No Ubuntu 24.04, o primeiro comando <code>lxc</code>, mesmo um <code>lxc list</code> de leitura, instala o snap do LXD. Rode já sabendo disso.</p></div></div>
+
+  <h2>Montar</h2>
+  <ol class="steps">
+    <li><b>Instalar e iniciar o LXD</b>Se 192.168.200.0/24 aparece no <code>ip -4 -br addr</code> ou no <code>daemon.json</code>, troque por outra /24 em quatro lugares: no preseed, no <code>ipv4.address</code> do passo 3, no <code>HostName</code> do <code>~/.ssh/config</code> e no <code>.10</code> do container. Ponha em <code>size</code> menos que o espaço livre do <code>df</code>, com folga para o host. O arquivo do pool só ocupa o que o container grava, e o disco do host enche sem aviso se o teto passar do livre.</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>cat &gt; preseed.yaml &lt;&lt;'EOF'
+config: {}
+networks:
+- name: lxdbr0
+  type: bridge
+  config:
+    ipv4.address: 192.168.200.1/24
+    ipv4.nat: "true"
+    ipv6.address: none
+storage_pools:
+- name: default
+  driver: btrfs
+  config:
+    size: 60GiB
+profiles:
+- name: default
+  devices:
+    root: {path: /, pool: default, type: disk}
+    eth0: {name: eth0, network: lxdbr0, type: nic}
+EOF</pre></div>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>sudo snap install lxd
+sudo lxd init --preseed &lt; preseed.yaml</pre></div>
+
+  <ol class="steps" start="2" style="counter-reset: s 1">
+    <li><b>Liberar o container no firewall</b>O Docker põe a política do FORWARD em DROP, e imagens de nuvem terminam o INPUT em REJECT. As quatro primeiras regras deixam o container receber IP e DNS do host e mais nada do host. As duas últimas deixam ele sair para a internet só pela interface de saída. Troque <code>enp0s6</code> por ela, a do <code>ip route | grep default</code>. Sem Docker no host, troque <code>DOCKER-USER</code> por <code>FORWARD</code> nas duas últimas regras. Cada regra entra no topo da lista, então o REJECT vem primeiro no arquivo e os ACCEPT ficam acima dele.</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>sudo tee /usr/local/sbin/lxd-firewall.sh &gt; /dev/null &lt;&lt;'EOF'
+#!/bin/sh
+set -e
+regra() { iptables -C "$@" 2&gt;/dev/null || iptables -I "$@"; }
+regra INPUT -i lxdbr0 -j REJECT
+regra INPUT -i lxdbr0 -p udp --dport 67 -j ACCEPT
+regra INPUT -i lxdbr0 -p udp --dport 53 -j ACCEPT
+regra INPUT -i lxdbr0 -p tcp --dport 53 -j ACCEPT
+regra DOCKER-USER -i lxdbr0 -o enp0s6 -j ACCEPT
+regra DOCKER-USER -i enp0s6 -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+EOF
+sudo chmod 755 /usr/local/sbin/lxd-firewall.sh
+
+sudo tee /etc/systemd/system/lxd-firewall.service &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+After=netfilter-persistent.service docker.service snap.lxd.daemon.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lxd-firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target docker.service
+EOF
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now lxd-firewall</pre></div>
+  <p>Se o agente precisa do host, por exemplo para um túnel SSH até um banco, acrescente logo abaixo da linha do REJECT a regra <code>regra INPUT -i lxdbr0 -p tcp --dport 22 -j ACCEPT</code>. As regras moram num serviço porque <code>netfilter-persistent save</code> grava as regras do Docker junto, e elas entram em conflito no próximo boot. A saída fica restrita à interface de saída, então o container não alcança as redes do Docker do host. Meça os serviços de novo agora.</p>
+
+  <ol class="steps" start="3" style="counter-reset: s 2">
+    <li><b>Criar o container com limites</b>O peso de CPU 20, contra 100 do host, dá ao host uns 83% da CPU quando os dois disputam. Para a memória, some o que os serviços usam e o pico dos builds deles, e dê o resto. Troque <code>6GiB</code> pelo resultado da conta, e nunca use mais que a memória livre do <code>free -h</code>. O <code>security.nesting</code> deixa rodar Docker dentro.</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>sudo lxc init ubuntu:24.04 agente \
+  -c security.nesting=true \
+  -c security.syscalls.intercept.mknod=true \
+  -c security.syscalls.intercept.setxattr=true \
+  -c limits.memory=6GiB \
+  -c boot.autostart=true \
+  -c raw.lxc="lxc.cgroup2.cpu.weight = 20"
+sudo lxc config device override agente eth0 ipv4.address=192.168.200.10
+sudo lxc start agente
+sudo lxc exec agente -- cloud-init status --wait
+sudo lxc exec agente -- curl -sI https://github.com</pre></div>
+  <p>Prove o isolamento. Do container, nenhuma porta do host pode abrir, fora as que você liberou. Troque <code>22</code> pelas portas que o <code>sudo ss -ltnp</code> do host lista:</p>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>sudo lxc exec agente -- timeout 3 bash -c '&lt;/dev/tcp/192.168.200.1/22' &amp;&amp; echo ABRIU || echo fechada</pre></div>
+
+  <ol class="steps" start="4" style="counter-reset: s 3">
+    <li><b>Usuário e chave dentro do container</b>Troque o usuário da imagem pelo seu e dê sudo, sempre por <code>lxc exec</code>. Rodados no host por engano, esses comandos renomeariam o usuário do host e tirariam o sudo dele.</li>
+  </ol>
+  <div class="code"><div class="code-head"><span>bash, no host</span><button class="copy">Copiar</button></div><pre>sudo lxc exec agente -- sh -c 'usermod -l voce -d /home/voce -m ubuntu &amp;&amp; groupmod -n voce ubuntu &amp;&amp; echo "voce ALL=(ALL) NOPASSWD:ALL" &gt; /etc/sudoers.d/90-voce &amp;&amp; chmod 440 /etc/sudoers.d/90-voce &amp;&amp; rm -f /etc/sudoers.d/90-cloud-init-users &amp;&amp; hostnamectl set-hostname agente &amp;&amp; install -d -m 700 -o voce -g voce /home/voce/.ssh'</pre></div>
+  <p>A chave vem da sua máquina, e não do <code>authorized_keys</code> do host, que pode ter chave de deploy de outro serviço:</p>
+  <div class="code"><div class="code-head"><span>bash, na sua máquina</span><button class="copy">Copiar</button></div><pre>cat ~/.ssh/id_ed25519.pub | ssh host-do-agente 'sudo lxc exec agente -- sh -c "cat &gt; /home/voce/.ssh/authorized_keys &amp;&amp; chown voce:voce /home/voce/.ssh/authorized_keys &amp;&amp; chmod 600 /home/voce/.ssh/authorized_keys"'</pre></div>
+
+  <ol class="steps" start="5" style="counter-reset: s 4">
+    <li><b>Entrar pelo host</b>O container não tem porta pública. O SSH pula pelo host com <code>ProxyJump</code>, como mostra <a href="#acesso">Acesso por SSH e VS Code</a>. Depois siga de <a href="#acesso">Acesso por SSH e VS Code</a> em diante, dentro do container, e pule <a href="#preparar">Preparar a máquina</a>.</li>
+  </ol>
+</article>
+
+<!-- ============ 1 PREPARAR ============ -->
+<article class="page" id="preparar" data-title="Preparar a máquina" data-prev="caminhos" hidden>
+  <div class="crumb">Montar à mão · passo 1 de 8</div>
+  <h1>Preparar a máquina</h1>
+  <p class="lead">Crie o seu usuário, feche o login por senha e confira as atualizações automáticas. Vale para a Oracle e para a VPS dedicada. No container, pule esta página.</p>
+  <p>Se a sua máquina atual é Linux ou WSL, use o mesmo nome de usuário. Assim os caminhos absolutos das suas configurações, como <code>/home/voce/...</code>, valem lá sem mudar nada. Vindo do macOS, troque <code>/Users/voce</code> por <code>/home/voce</code> nas configurações que você levar.</p>
+
+  <h2>Usuário com sudo</h2>
+  <p>Entre com o usuário que o provedor criou, como <code>ubuntu</code>, e rode:</p>
+  <div class="code"><div class="code-head"><span>bash</span><button class="copy">Copiar</button></div><pre>sudo adduser --disabled-password --gecos '' voce
+echo 'voce ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-voce &amp;&amp; sudo chmod 440 /etc/sudoers.d/90-voce
+sudo install -d -m 700 -o voce -g voce /home/voce/.ssh
+sudo install -m 600 -o voce -g voce ~/.ssh/authorized_keys /home/voce/.ssh/authorized_keys
+sudo hostnamectl set-hostname agente</pre></div>
+
+  <h2>Login só por chave</h2>
+  <p>Abra uma segunda conexão com <code>ssh voce@&lt;ip&gt;</code> e confira que ela entra antes de fechar a primeira.</p>
+  <div class="code"><div class="code-head"><span>bash</span><button class="copy">Copiar</button></div><pre>echo 'PasswordAuthentication no' | sudo tee /etc/ssh/sshd_config.d/10-sem-senha.conf
+sudo systemctl reload ssh</pre></div>
+
+  <h2>Atualizações e firewall</h2>
+  <ul>
+    <li><code>systemctl is-active unattended-upgrades</code> deve responder <code>active</code>. No Ubuntu Server ele já vem ligado.</li>
+    <li>Numa VPS comum, feche a entrada a tudo menos o SSH com <code>sudo ufw allow OpenSSH &amp;&amp; sudo ufw --force enable</code>.</li>
+    <li>Na Oracle, não ligue o ufw. A imagem e a security list da VCN já fecham a entrada.</li>
+  </ul>
+  <div class="callout warn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div><strong class="label">O Docker passa por cima do ufw</strong><p>Porta publicada por container entra por regra própria de iptables, mesmo com o ufw fechado. Publique porta só no loopback, como <code>127.0.0.1:5432:5432</code>.</p></div></div>
+</article>
+
+<!-- ============ 2 ACESSO ============ -->
+<article class="page" id="acesso" data-title="Acesso por SSH e VS Code" hidden>
+  <div class="crumb">Montar à mão · passo 2 de 8</div>
+  <h1>Acesso por SSH e VS Code</h1>
+  <p class="lead">O celular fala com o agente pelo Remote Control, sem SSH. O SSH serve ao terminal, ao VS Code e a abrir no seu navegador o app que roda na máquina.</p>
+
+  <h2>O bloco do ~/.ssh/config</h2>
+  <p>Autorize na máquina todas as chaves de onde você vai entrar. No Windows com WSL, a chave do Windows e a do WSL são arquivos diferentes, então autorize as duas. Na máquina que já entra, mande a chave pública da outra. No WSL, a chave do Windows fica em <code>/mnt/c/Users/&lt;seu-usuario-windows&gt;/.ssh</code>.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina que já entra</span><button class="copy">Copiar</button></div><pre>cat /caminho/da/outra/id_ed25519.pub | ssh agente 'cat &gt;&gt; ~/.ssh/authorized_keys'</pre></div>
+  <div class="tabs" data-tabs>
+    <div class="tablist" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="tab-dir" id="t-dir">VM ou VPS</button>
+      <button role="tab" aria-selected="false" aria-controls="tab-jump" id="t-jump">Container</button>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tab-dir" aria-labelledby="t-dir">
+      <div class="code"><div class="code-head"><span>~/.ssh/config</span><button class="copy">Copiar</button></div><pre>Host agente
+    HostName &lt;ip-publico&gt;
+    User voce
+    IdentityFile ~/.ssh/id_ed25519</pre></div>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tab-jump" aria-labelledby="t-jump" hidden>
+      <div class="code"><div class="code-head"><span>~/.ssh/config</span><button class="copy">Copiar</button></div><pre>Host host-do-agente
+    HostName &lt;ip-publico-do-host&gt;
+    User ubuntu
+
+Host agente
+    HostName 192.168.200.10
+    User voce
+    ProxyJump host-do-agente</pre></div>
+    </div>
+  </div>
+  <p>No Windows, o arquivo é <code>C:\Users\voce\.ssh\config</code>, e é ele que o VS Code lê. No macOS e no Linux, <code>~/.ssh/config</code>. Depois disso, <code>ssh agente</code> entra direto.</p>
+
+  <h2>VS Code</h2>
+  <ol class="steps">
+    <li><b>Instale a extensão Remote-SSH</b>Pelo painel de extensões do VS Code. No Windows, instale na janela do Windows. O <code>code --install-extension</code> chamado de dentro do WSL instala no lado WSL, e a janela do Windows não enxerga.</li>
+    <li><b>Conecte</b>F1, "Remote-SSH: Connect to Host", <code>agente</code>, Linux.</li>
+    <li><b>Abra uma pasta</b>Na primeira vez, abra a pasta pessoal, porque o repo só chega em Código e segredos. A primeira conexão instala o servidor do VS Code na máquina, em cerca de 1 minuto. Quando um servidor de desenvolvimento abre uma porta lá, o VS Code encaminha a porta para a sua máquina sozinho.</li>
+  </ol>
+
+  <h2>O app no seu navegador</h2>
+  <div class="code"><div class="code-head"><span>bash</span><button class="copy">Copiar</button></div><pre>ssh -L 3000:localhost:3000 agente</pre></div>
+  <p>Abra <code>http://localhost:3000</code>. O endereço continua localhost, então login e callback de OAuth funcionam sem mudar configuração.</p>
+
+  <h2>Fechar a porta 22</h2>
+  <p>Opcional. O Tailscale põe a máquina numa rede privada sua, e o plano Personal é grátis para até 6 usuários.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up</pre></div>
+  <p>O <code>tailscale up</code> mostra um link. Abra o link, entre na sua conta e instale o Tailscale também no computador de onde você entra. Troque o <code>HostName</code> do <code>~/.ssh/config</code> pelo nome da máquina na rede privada, e confira que <code>ssh agente</code> entra por esse nome antes de seguir.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina, só numa VPS com ufw</span><button class="copy">Copiar</button></div><pre>sudo ufw allow in on tailscale0 to any port 22
+sudo ufw delete allow OpenSSH</pre></div>
+  <p>Na Oracle, pule o bloco acima e apague a regra da porta 22 na security list da VCN.</p>
+</article>
+
+<!-- ============ 3 AMBIENTE ============ -->
+<article class="page" id="ambiente" data-title="Ambiente e dotfiles" hidden>
+  <div class="crumb">Montar à mão · passo 3 de 8</div>
+  <h1>Ambiente e dotfiles</h1>
+  <p class="lead">Instale as ferramentas que todo caminho usa e decida entre o Ubuntu padrão e os seus dotfiles. Rode como o seu usuário, na máquina ou dentro do container.</p>
+
+  <h2>Ferramentas básicas</h2>
+  <div class="code"><div class="code-head"><span>bash</span><button class="copy">Copiar</button></div><pre>sudo apt-get update &amp;&amp; sudo apt-get install -y git curl tmux gh
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"   <span class="c"># vale a partir do próximo login</span>
+curl -fsSL https://claude.ai/install.sh | bash</pre></div>
+  <p>Saia com <code>exit</code> e entre de novo antes de seguir. O grupo <code>docker</code> e a pasta <code>~/.local/bin</code>, onde o instalador pôs o <code>claude</code>, só valem a partir do próximo login.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina, depois de entrar de novo</span><button class="copy">Copiar</button></div><pre>claude --version &amp;&amp; docker ps</pre></div>
+  <p>Na Oracle e na VPS dedicada, logo depois de instalar e ainda sem container rodando, faça o Docker publicar portas só no loopback. Ele publica por cima do ufw, e um <code>5432:5432</code> de compose abriria o banco para a internet. No container de uma VPS compartilhada isso é opcional, porque ele não tem IP público.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>echo '{"ip": "127.0.0.1"}' | sudo tee /etc/docker/daemon.json
+sudo systemctl restart docker</pre></div>
+
+  <h2>Ubuntu padrão ou seus dotfiles</h2>
+  <div class="tabs" data-tabs>
+    <div class="tablist" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="tab-padrao" id="t-padrao">Ubuntu padrão</button>
+      <button role="tab" aria-selected="false" aria-controls="tab-dot" id="t-dot">Meus dotfiles</button>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tab-padrao" aria-labelledby="t-padrao">
+      <p>Não exige repo de dotfiles nem leitura de script. O shell é o bash do Ubuntu, e você instala só o que o projeto pede, como Node, Python e o gerenciador de pacotes dele. Serve bem para uma máquina que você vai usar quase só pelo app.</p>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tab-dot" aria-labelledby="t-dot" hidden>
+      <p>Traz o seu shell, aliases e o <code>~/.claude/settings.json</code>, e deixa o terminal remoto igual ao seu.</p>
+      <ul>
+        <li>Se o repo de dotfiles é privado, faça antes o <a href="#logins">login do GitHub</a>.</li>
+        <li>Não aplique de uma vez. Com chezmoi, rode <code>chezmoi init &lt;repo&gt;</code> sem <code>--apply</code>, veja com <code>chezmoi managed --include=encrypted,scripts</code> o que é segredo e o que é script, e aplique com <code>chezmoi apply --exclude=encrypted,scripts</code>.</li>
+        <li>Depois, aplique só os scripts e segredos que fazem sentido no servidor. Passo feito para WSL, macOS ou interface gráfica não serve, e a chave SSH pessoal ou credencial de nuvem não precisa estar numa máquina que roda sozinha.</li>
+        <li>Se os dotfiles cifram segredos, traga a chave de decifrar à mão, pelo SSH, e apague no fim.</li>
+        <li>Depois, confira <code>file ~/.local/bin/*</code>. Dotfiles que baixam binário x86 fixo falham numa máquina ARM com <code>exec format error</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>O que levar do Claude Code</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Item</th><th>Como levar</th></tr>
+    <tr><td><code>settings.json</code></td><td>Pelos dotfiles, ou copiando <code>~/.claude/settings.json</code></td></tr>
+    <tr><td>Skills e agents</td><td>O comando abaixo, que leva <code>~/.claude/skills</code>, <code>~/.claude/agents</code> e <code>~/.agents</code>, onde ficam as skills instaladas pelo skills.sh</td></tr>
+    <tr><td>Plugins</td><td>Instalando de novo lá, com <code>/plugin</code></td></tr>
+    <tr><td>Servidores MCP</td><td>Os do projeto vêm no <code>.mcp.json</code> do repo. Os de escopo local e user ficam no <code>~/.claude.json</code> da sua máquina e não vêm. Rode <code>claude mcp list</code> aqui e adicione cada um lá com <code>claude mcp add</code>. Os que pedem OAuth precisam de login de novo</td></tr>
+    <tr><td><code>.credentials.json</code></td><td><span class="pill no">nunca</span> Cada máquina faz o próprio login</td></tr>
+  </table></div>
+  <div class="code"><div class="code-head"><span>bash, na sua máquina</span><button class="copy">Copiar</button></div><pre>cd ~ &amp;&amp; ls -d .claude/skills .claude/agents .agents 2&gt;/dev/null | tar czf - -T - | ssh agente 'tar xzf - -C ~'</pre></div>
+  <p>O comando leva só as pastas que existem na sua máquina.</p>
+</article>
+
+<!-- ============ 4 LOGINS ============ -->
+<article class="page" id="logins" data-title="Login do Claude e do GitHub" hidden>
+  <div class="crumb">Montar à mão · passo 4 de 8</div>
+  <h1>Login do Claude e do GitHub</h1>
+  <p class="lead">Cada máquina faz o próprio login. Os dois mostram um link ou um código e esperam você, então rode cada um dentro de um tmux, para a espera não morrer se o SSH cair.</p>
+  <div class="callout danger"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg><div><strong class="label">Não copie as credenciais</strong><p>Não copie o <code>~/.claude/.credentials.json</code> da sua máquina. O token de renovação gira, e a primeira máquina que renovar derruba a outra.</p></div></div>
+
+  <h2>Claude</h2>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>tmux new -s login 'claude auth login'</pre></div>
+  <p>Abra o link em qualquer aparelho e entre na conta. Se a página mostrar um código, cole no terminal, em "Paste code here if prompted". O tmux fecha quando o login termina.</p>
+  <p>O login vence. Três dias antes, uma sessão aberta no terminal avisa, mas o servidor do Remote Control não mostra o aviso, e a sessão que dura mais que o login para de andar. Para renovar, rode o mesmo comando e depois <code>sudo systemctl restart agente-rc</code>.</p>
+
+  <h2>GitHub</h2>
+  <p>A máquina ganha chave própria, que você revoga sem afetar a sua.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519 -C agente
+gh auth login -h github.com -p ssh -w</pre></div>
+  <p>O login do <code>gh</code> abre todos os repos da conta. Se o agente trabalha em poucos repos, crie no lugar um token fine-grained só deles, em <a href="https://github.com/settings/personal-access-tokens">github.com/settings/personal-access-tokens</a>, e use <code>gh auth login --with-token</code>. No login completo, escolha a chave da máquina quando ele oferecer subir uma. Ele mostra um código de 8 caracteres. Abra <a href="https://github.com/login/device">github.com/login/device</a> e digite o código em até 15 minutos. O aviso de que não achou navegador pode ser ignorado.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>git config --global user.name "Seu Nome"
+git config --global user.email voce@exemplo.com</pre></div>
+  <p>Servidores MCP com OAuth pedem login de novo nesta máquina. Compare <code>claude mcp list</code> nas duas e autentique com <code>/mcp</code> numa sessão.</p>
+</article>
+
+<!-- ============ 5 CÓDIGO ============ -->
+<article class="page" id="codigo" data-title="Código e segredos" hidden>
+  <div class="crumb">Montar à mão · passo 5 de 8</div>
+  <h1>Código e segredos</h1>
+  <p class="lead">Clone os repos e leve, à mão, só os arquivos ignorados que o agente precisa.</p>
+
+  <h2>Clonar</h2>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new' git clone git@github.com:&lt;dono&gt;/&lt;repo&gt;.git ~/projeto</pre></div>
+
+  <h2>O que o git ignora</h2>
+  <p>Na sua máquina, liste o que ficou de fora do clone e separe o que é gerado, como <code>node_modules</code> e <code>.next</code>, do que precisa ir junto:</p>
+  <div class="code"><div class="code-head"><span>bash, na sua máquina</span><button class="copy">Copiar</button></div><pre>git status --ignored --porcelain | grep '^!!'</pre></div>
+  <p>Leve o que precisa num <code>tar</code> pelo SSH, que preserva caminho e permissão. Rode na pasta do repo, na sua máquina, e troque a lista pelos arquivos que você separou. O exemplo leva só o <code>.env</code> da raiz.</p>
+  <div class="code"><div class="code-head"><span>bash, na sua máquina, na pasta do repo</span><button class="copy">Copiar</button></div><pre>tar czf - .env | ssh agente 'tar xzf - -C ~/projeto &amp;&amp; chmod 600 ~/projeto/.env'</pre></div>
+
+  <h2>Dependências e serviços</h2>
+  <p>Na máquina, dentro de <code>~/projeto</code>, instale o que o projeto pede pelo lockfile, como <code>npm ci</code> ou <code>uv sync</code>. Se ele usa Playwright, só então rode <code>npx playwright install --with-deps chromium</code>, que tem versão para Linux ARM. Depois suba os serviços com <code>docker compose up -d</code>. Os testes de <a href="#provar">Provar que funciona</a> dependem dos dois.</p>
+
+  <h2>Cuidados</h2>
+  <ul>
+    <li>Leve só o segredo que o agente usa. Uma chave root de nuvem não precisa estar numa máquina que roda sozinha 24 horas.</li>
+    <li>Se o agente precisa alcançar outra máquina, por exemplo para abrir um túnel até um banco, gere uma chave só dele e autorize lá.</li>
+    <li>Depois do primeiro <code>docker compose up -d</code>, ligue o reinício automático do banco de desenvolvimento com <code>docker update --restart unless-stopped &lt;container&gt;</code>. Sem isso, ele fica parado depois de um reboot, e um MCP que aponta para ele não conecta.</li>
+    <li>Pastas úteis que não estão em git nenhum, como relatórios e anotações, também não chegam sozinhas.</li>
+  </ul>
+</article>
+
+<!-- ============ 6 REMOTE CONTROL ============ -->
+<article class="page" id="remote" data-title="Remote Control como serviço" hidden>
+  <div class="crumb">Montar à mão · passo 6 de 8</div>
+  <h1>Remote Control como serviço</h1>
+  <p class="lead">No modo servidor, <code>claude remote-control</code> fica esperando e abre uma sessão nova sempre que você pede pelo app, até 32 ao mesmo tempo. O systemd mantém ele de pé e o devolve depois de um reboot.</p>
+
+  <h2>Primeira vez, à mão</h2>
+  <p>Rode, na pasta do repo, o mesmo comando que o serviço vai rodar. Responda <code>y</code> à confiança na pasta e ao Remote Control, aceite o aviso do bypass se aparecer, e saia com Ctrl+C. Sem bypass, troque <code>bypassPermissions</code> por <code>default</code> aqui e no script. Com bypass, rode antes também <code>claude --dangerously-skip-permissions</code> uma vez na pasta, aceite o aviso e saia com <code>/exit</code>.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cd ~/projeto &amp;&amp; claude remote-control --spawn same-dir --permission-mode bypassPermissions</pre></div>
+  <div class="callout warn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div><strong class="label">Sem este passo</strong><p>O serviço fica ativo e parado numa pergunta de primeira vez, e nenhuma sessão aparece no app.</p></div></div>
+
+  <h2>O script</h2>
+  <p>O laço existe porque o servidor sai sozinho depois de uns 10 minutos sem rede.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>mkdir -p ~/.local/bin &amp;&amp; cat &gt; ~/.local/bin/agente-rc &lt;&lt;'EOF'
+#!/bin/sh
+cd "$HOME/projeto" || exit 1
+while true; do
+    claude remote-control --spawn same-dir --permission-mode bypassPermissions
+    sleep 10
+done
+EOF
+chmod 755 ~/.local/bin/agente-rc</pre></div>
+
+  <h2>O serviço</h2>
+  <p>Ele roda o script num tmux de socket próprio. No socket padrão, o tmux que você abre pelo SSH nasceria dentro do serviço e morreria a cada reinício dele.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo tee /etc/systemd/system/agente-rc.service &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=voce
+ExecStart=/usr/bin/tmux -L rc new-session -d -s rc "bash -lic agente-rc"
+ExecStop=/usr/bin/tmux -L rc kill-server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now agente-rc</pre></div>
+  <p>Troque <code>bash -lic</code> por <code>zsh -lic</code> se o seu shell de login é zsh. O <code>-l</code> põe o <code>claude</code> no PATH, e o <code>-i</code> carrega o <code>.bashrc</code> ou o <code>.zshrc</code>, onde nvm, pyenv e afins põem o deles. O painel do servidor abre com <code>tmux -L rc attach -t rc</code>.</p>
+
+  <h2>As duas flags</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Flag</th><th>O que faz</th><th>Alternativa</th></tr>
+    <tr><td><code>--spawn same-dir</code></td><td>É o padrão. Toda sessão nova roda no checkout principal, no branch atual, com os <code>.env</code>. Duas sessões que editam o mesmo arquivo pisam uma na outra, e um <code>git checkout</code> numa troca o branch de todas</td><td><code>--spawn worktree</code> dá a cada sessão um worktree próprio, que nasce do branch padrão do remoto e sem os arquivos ignorados. Crie um <code>.worktreeinclude</code> com os <code>.env</code> e ponha <code>worktree.baseRef: "head"</code> nas configurações</td></tr>
+    <tr><td><code>--permission-mode bypassPermissions</code></td><td>A sessão não pede permissão para nada</td><td>Sem a flag, a sessão nasce no modo padrão, e o app só troca entre Manual, Accept edits e Plan. <code>defaultMode: "bypassPermissions"</code> nas configurações do projeto é ignorado</td></tr>
+  </table></div>
+  <div class="callout note"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div><strong class="label">Ordem das flags</strong><p>O servidor recusa flags globais escritas antes do subcomando, como <code>claude --dangerously-skip-permissions remote-control</code>. Ponha as opções sempre depois de <code>remote-control</code>.</p></div></div>
+  <p>Com o serviço de pé, ponha o teto de memória em <a href="#memoria">Limites de memória</a>.</p>
+</article>
+
+<!-- ============ 7 MEMÓRIA ============ -->
+<article class="page" id="memoria" data-title="Limites de memória" hidden>
+  <div class="crumb">Montar à mão · passo 7 de 8</div>
+  <h1>Limites de memória</h1>
+  <p class="lead">Sem limite, um comando pesado de uma sessão enche a memória da máquina, e as outras sessões e o SSH param junto. Com swap e um teto para as sessões, só o comando pesado morre, e um servidor de resgate com 1 GiB reservado continua abrindo sessão pelo celular. No mesmo grupo do resgate, um job retoma as sessões que pararam por limite de uso.</p>
+  <p>Na nossa montagem, num container com 2 núcleos e 7 GB e sem swap, um typecheck com dois <code>tsc</code> de 1 GB cada levou a memória ao limite. Cada conexão SSH passou de 1 segundo para 20 a 77 segundos, e as sessões do app pararam de responder. Esta página monta o swap, o teto das sessões, o servidor de resgate e os limites escritos onde as sessões leem.</p>
+
+  <h2>Swap</h2>
+  <p>Com o swap ligado e o typecheck ainda rodando, a pressão de memória da nossa máquina caiu de 45% para 32%, e 637 MB foram para o swap. Antes, confira com <code>findmnt -no FSTYPE /</code> que o disco é <code>ext4</code>, onde testamos, e com <code>df -h /</code> que sobram pelo menos 8 GB. Em btrfs, o arquivo de swap precisa de outro procedimento. Usamos 8 GB num host de 12 GB.</p>
+  <div class="tabs" data-tabs>
+    <div class="tablist" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="tab-mem-vm" id="t-mem-vm">VM ou VPS</button>
+      <button role="tab" aria-selected="false" aria-controls="tab-mem-ct" id="t-mem-ct">Container</button>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tab-mem-vm" aria-labelledby="t-mem-vm">
+      <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+cat /proc/swaps</pre></div>
+      <p>O <code>cat /proc/swaps</code> mostra o <code>/swapfile</code> com 8388604 KB. A linha do <code>/etc/fstab</code> liga o swap de novo depois de um reboot.</p>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="tab-mem-ct" aria-labelledby="t-mem-ct" hidden>
+      <p>O container não tem swap próprio, e usa o do host sem configuração extra no LXD. Rode no host os mesmos comandos da aba VM ou VPS. Depois, confira de dentro do container quanto swap ele pode usar, em bytes. Na nossa montagem, o valor foi igual ao <code>limits.memory</code>.</p>
+      <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cat /sys/fs/cgroup/memory.swap.max</pre></div>
+      <div class="callout warn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div><strong class="label">O swap do host vale para todos</strong><p>Os outros serviços do host passam a usar o mesmo swap. Crie o arquivo com a confirmação de quem cuida do host, e meça os serviços antes e depois, como na <a href="#container">página do container</a>.</p></div></div>
+    </div>
+  </div>
+
+  <h2>O teto das sessões</h2>
+  <p>O serviço do Remote Control entra num grupo do systemd com teto de memória, e tudo o que as sessões dele disparam entra junto: MCP, testes, build e navegador. Passou do alto, o grupo fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado, e a sessão que o rodou continua viva.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Valor</th><th>Conta</th><th>Na nossa máquina de 7 GB</th></tr>
+    <tr><td>Teto, <code>MemoryMax</code></td><td>O total do <code>free -m</code>, menos 1 GiB do resgate e 1 GiB do sistema e do Docker</td><td><code>5G</code></td></tr>
+    <tr><td>Alto, <code>MemoryHigh</code></td><td>O teto menos 512 MiB</td><td><code>4608M</code></td></tr>
+    <tr><td>Swap do grupo, <code>MemorySwapMax</code></td><td>Metade do swap</td><td><code>4G</code></td></tr>
+  </table></div>
+  <p>Cada sessão parada ocupou de 200 a 500 MB, contando o MCP do navegador, e um <code>tsc --noEmit</code> do nosso app web chegou a 1 GB. Troque os três valores pelos da sua conta:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo tee /etc/systemd/system/agentes.slice &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Sessões do Claude Code, com teto de memória somado
+
+[Slice]
+MemoryHigh=4608M
+MemoryMax=5G
+MemorySwapMax=4G
+EOF
+sudo mkdir -p /etc/systemd/system/agente-rc.service.d
+sudo tee /etc/systemd/system/agente-rc.service.d/memoria.conf &gt; /dev/null &lt;&lt;'EOF'
+[Service]
+Slice=agentes.slice
+OOMPolicy=continue
+EOF
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart agente-rc
+cat /proc/$(systemctl show -p MainPID --value agente-rc)/cgroup
+systemctl show -p OOMPolicy agente-rc</pre></div>
+  <p>As duas últimas linhas mostram <code>0::/agentes.slice/agente-rc.service</code> e <code>OOMPolicy=continue</code>. Sem o <code>OOMPolicy=continue</code>, vale o padrão do systemd, <code>stop</code>: quando o kernel mata um processo do serviço, o systemd derruba o servidor inteiro, com todas as sessões. Testamos os dois numa unidade de teste. Com <code>stop</code>, ela terminou em falha, e com <code>continue</code>, só o processo pesado morreu. O serviço só muda de grupo ao reiniciar, e o reinício derruba as sessões abertas. Na nossa montagem, as que estavam no meio de uma tarefa voltaram sozinhas em menos de 1 minuto.</p>
+  <p>Com mais de um projeto, cada um com o seu serviço do Remote Control, ponha o mesmo drop-in em cada serviço e acrescente nele um teto próprio, para um projeto não ocupar o grupo inteiro. Usamos <code>MemoryHigh=3G</code> e <code>MemoryMax=3584M</code> em cada um de dois projetos, dentro do teto de 5 GB.</p>
+
+  <h2>O servidor de resgate</h2>
+  <p>É um segundo servidor do Remote Control, numa pasta própria e fora do teto, com 1 GiB reservado. Quando as sessões do projeto estão no teto, você abre uma sessão nele pelo celular, e ela tem memória para ver o que está acontecendo. O <code>--capacity 2</code> segura o resgate em duas sessões, e o <code>OOMScoreAdjust</code> faz o kernel escolher outro processo antes dele se a máquina inteira ficar sem memória.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo tee /etc/systemd/system/resgate.slice &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Reserva de memória do servidor de resgate
+
+[Slice]
+MemoryMin=1G
+MemoryMax=1536M
+CPUWeight=1000
+EOF
+mkdir -p ~/resgate ~/.local/bin &amp;&amp; cat &gt; ~/.local/bin/resgate-rc &lt;&lt;'EOF'
+#!/bin/sh
+cd "$HOME/resgate" || exit 1
+while true; do
+    claude remote-control --name resgate --remote-control-session-name-prefix resgate --spawn same-dir --capacity 2 --permission-mode bypassPermissions
+    sleep 10
+done
+EOF
+chmod 755 ~/.local/bin/resgate-rc</pre></div>
+  <p>A sessão do resgate lê as instruções da pasta dela. Escreva o que ela faz quando você a abre:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cat &gt; ~/resgate/CLAUDE.md &lt;&lt;'EOF'
+# Servidor de resgate
+
+Esta sessão roda em resgate.slice, com 1 GiB reservado, para responder quando as sessões do projeto estão no teto de memória. Rode `memoria` primeiro.
+
+Libere do menos destrutivo para o mais destrutivo, e rode `memoria` depois de cada passo:
+1. Mate o comando pesado (tsc, vitest, build, navegador) com kill. A sessão que o rodou continua viva.
+2. Mate a sessão que sozinha passa de 1 GiB.
+3. Com o servidor do projeto inteiro preso, rode `tmux -L rc send-keys -t rc C-c` e depois `sudo systemctl restart agente-rc`.
+
+Me diga o que ocupava a memória, com MB e a sessão dona, e o que você matou.
+EOF</pre></div>
+  <p>Rode o servidor à mão uma vez na pasta, como em <a href="#remote">Remote Control como serviço</a>. Responda <code>y</code> à confiança na pasta e saia com Ctrl+C:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina, interativo</span><button class="copy">Copiar</button></div><pre>cd ~/resgate &amp;&amp; claude remote-control --name resgate --remote-control-session-name-prefix resgate --spawn same-dir --capacity 2 --permission-mode bypassPermissions</pre></div>
+  <p>Depois crie o serviço. Ele usa o socket <code>-L resgate</code> do tmux, separado do <code>-L rc</code> do projeto:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo tee /etc/systemd/system/resgate-rc.service &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=voce
+Slice=resgate.slice
+OOMPolicy=continue
+OOMScoreAdjust=-900
+ExecStart=/usr/bin/tmux -L resgate new-session -d -s resgate "bash -lic resgate-rc"
+ExecStop=/usr/bin/tmux -L resgate kill-server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now resgate-rc
+sleep 10 &amp;&amp; tmux -L resgate capture-pane -p -t resgate</pre></div>
+  <p>O painel mostra <code>resgate</code> e <code>Capacity: 0/2</code>. No app, a sessão do resgate aparece na lista com o título <code>resgate</code>. Troque <code>bash -lic</code> por <code>zsh -lic</code> se o seu shell de login é zsh.</p>
+
+  <h2>O comando memoria</h2>
+  <p>Mostra quanto cada grupo usa, o alto e o teto dele, e a pressão de memória da máquina. Com a nossa máquina travada, a pressão estava em 45%, e normal ela fica perto de 0%.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cat &gt; ~/.local/bin/memoria &lt;&lt;'EOF'
+#!/bin/sh
+# Mostra quanto cada grupo de memória usa, os limites dele e a pressão de memória da máquina.
+mb() { case "$1" in max) echo "sem limite" ;; *) echo "$(( $1 / 1048576 )) MB" ;; esac; }
+for cg in agentes.slice agentes.slice/agente-rc.service resgate.slice system.slice; do
+    p=/sys/fs/cgroup/$cg
+    [ -d "$p" ] || continue
+    printf '%-34s usa %-8s swap %-8s alto %-11s teto %s\n' "$cg" "$(mb "$(cat $p/memory.current)")" \
+        "$(mb "$(cat $p/memory.swap.current)")" "$(mb "$(cat $p/memory.high)")" "$(mb "$(cat $p/memory.max)")"
+done
+echo
+free -m | sed -n '1,3p'
+echo
+printf 'pressão de memória (full avg10): %s%%\n' "$(sed -n 's/^full avg10=\([0-9.]*\).*/\1/p' /sys/fs/cgroup/memory.pressure)"
+EOF
+chmod 755 ~/.local/bin/memoria &amp;&amp; memoria</pre></div>
+
+  <h2>Os limites no CLAUDE.md</h2>
+  <p>As sessões não enxergam o teto sozinhas. Escreva os números no <code>~/.claude/CLAUDE.md</code> da máquina, que toda sessão lê ao começar, para elas conferirem a folga antes de um comando pesado e entenderem quando um comando morre no teto. Se esse arquivo vem dos seus dotfiles, acrescente a seção na fonte deles.</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cat &gt;&gt; ~/.claude/CLAUDE.md &lt;&lt;'EOF'
+
+# Memória desta máquina
+
+Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e para tudo que ela dispara: MCP, testes, build, navegador.
+
+| Grupo systemd | Quem roda lá | Alto | Teto |
+|---|---|---|---|
+| `agentes.slice` | as sessões do projeto | 4,5 GiB | 5 GiB |
+| `resgate.slice` | o servidor de resgate | 1 GiB reservado | 1,5 GiB |
+
+Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado.
+
+Antes de typecheck, suíte de teste, build ou Playwright, rode `memoria` e confira a folga do grupo. Um comando que morre com exit 137 bateu no teto: rode de novo com menos paralelismo, por exemplo `turbo run ... --concurrency=1`.
+EOF</pre></div>
+  <p>Troque os números da tabela pelos que você pôs no <code>agentes.slice</code>.</p>
+
+  <h2>Provar o teto</h2>
+  <p>Um processo de teste com teto de 200 MB tenta alocar 400 MB. O kernel tem de matá-lo:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo systemd-run --wait -p MemoryMax=200M -p MemorySwapMax=0 python3 -c "a=bytearray(400*1024*1024)"</pre></div>
+  <div class="callout tip"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><strong class="label">Funcionou</strong><p>A saída termina em <code>Finished with result: oom-kill</code>. Com <code>MemoryMax=600M</code>, o mesmo comando termina em <code>success</code>. O <code>memoria</code> mostra o teto que você calculou na linha do <code>agentes.slice</code>.</p></div></div>
+
+  <h2>Retomar as sessões paradas por limite de uso</h2>
+  <p>Quando a conta bate o limite de uso, a sessão que estava trabalhando para com <code>You've hit your session limit · resets 9:50am (UTC)</code> e fica parada até alguém escrever nela. Um job do systemd confere os históricos a cada 5 minutos. Depois do horário de volta, ele manda uma mensagem a cada sessão parada, uma vez por limite. A mensagem diz que a sessão estourou o limite e quantos subagentes ela abriu nas 5 horas antes da parada, pede que ela confira se foi ela quem gastou, e pede que siga sem subagentes em paralelo e com cautela de tokens.</p>
+  <p>O job roda no <code>resgate.slice</code>, com teto próprio de 512 MB, e não disputa memória com as sessões do projeto. Ele só gasta token quando retoma uma sessão, com um turno curto de Haiku por sessão. Na nossa máquina, a rodada sem sessão parada levou 0,4 s de CPU, e o mensageiro chegou a 284 MB.</p>
+  <h3>Como ele decide</h3>
+  <ul>
+    <li>Parada por limite: a última fala da conversa principal, em <code>~/.claude/projects/&lt;pasta&gt;/&lt;id&gt;.jsonl</code>, é uma linha com <code>"error": "rate_limit"</code>. Se alguém já escreveu na sessão depois disso, ela não entra.</li>
+    <li>Horário de volta: lido do próprio texto do limite, no fuso entre parênteses. Sem texto legível, vale a parada mais 5 horas.</li>
+    <li>Subagentes: um arquivo por subagente em <code>&lt;id&gt;/subagents/</code>. Na nossa máquina, a sessão que estourou o limite tinha aberto 26 nas 5 horas anteriores, com 9 rodando na hora da parada. As outras abriram de 1 a 6.</li>
+    <li>Entrega: o processo vivo da sessão aparece em <code>~/.claude/sessions/&lt;pid&gt;.json</code>, com o nome dela. Um <code>claude -p</code> mensageiro em bypass manda o texto com <code>SendMessage</code>. Uma sessão em bypass retém a mensagem de um remetente que não está em bypass, então o mensageiro também roda em bypass.</li>
+    <li>Uma vez por limite: o estado fica em <code>~/.local/state/retomar-limite/estado.json</code>, e a entrega só conta quando o texto aparece no histórico da sessão.</li>
+  </ul>
+  <div class="callout note"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div><strong class="label">Sessões sem bypass</strong><p>Testamos só com sessões em bypass. Pela documentação, uma sessão que pede permissão retém a mensagem de um remetente em bypass. Sem bypass, tire <code>--permission-mode bypassPermissions</code> da função <code>enviar</code>, ponha <code>--allowedTools SendMessage</code> e repita o teste abaixo antes de ligar o timer.</p></div></div>
+  <p>Grave o script. Com mais de um projeto, acrescente a pasta de cada um em <code>PASTAS</code>, relativa à sua pasta pessoal:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cat &gt; ~/.local/bin/retomar-limite &lt;&lt;'EOF'
+#!/usr/bin/env python3
+"""Retoma as sessões do Remote Control que pararam por limite de uso da conta.
+
+Roda pelo retomar-limite.timer. Lê os históricos das pastas em PASTAS, acha a sessão cuja
+última fala é o erro de limite, espera o horário de volta e manda uma mensagem nela
+por um `claude -p` mensageiro, que usa SendMessage. Cada limite é retomado uma vez.
+"""
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+CASA = Path.home()
+PROJETOS = CASA / ".claude" / "projects"
+SESSOES = CASA / ".claude" / "sessions"
+PASTAS = [re.sub(r"[^A-Za-z0-9]", "-", str(CASA / p)) for p in ("projeto", "resgate")]
+ESTADO = CASA / ".local" / "state" / "retomar-limite" / "estado.json"
+
+MARGEM = timedelta(minutes=2)
+JANELA_SUBAGENTES = timedelta(hours=5)
+JANELA_ATIVOS = timedelta(minutes=5)
+TENTATIVAS = 3
+
+MENSAGEM = (
+    "Esta sessão parou às {hora_parada} UTC porque a conta bateu o limite de uso "
+    '("{mensagem_limite}"). O limite voltou às {hora_volta} UTC. Antes de continuar, '
+    "confira se foi esta sessão que gastou o limite. Nas 5 horas antes da parada ela abriu "
+    "{n_subagentes} subagentes, e {n_ativos} estavam rodando na hora da parada. Se foi aqui, "
+    "por exemplo por ter disparado 10 ou 15 subagentes em paralelo, não retome do mesmo jeito. "
+    "Siga a tarefa sem subagentes em paralelo, com no máximo um por vez e só quando uma pesquisa "
+    "exigir. Se não foi aqui, outra sessão em paralelo pode ter consumido o limite, e está tudo "
+    "certo. Nos dois casos, siga com cautela de tokens: leia trechos em vez de arquivos inteiros "
+    "e corte saída longa. Depois continue de onde parou. [{marca}]"
+)
+
+MENSAGEIRO = """Você é só um mensageiro. Faça isto e nada mais:
+1. Use a ferramenta SendMessage com to="{nome}" e, como message, o texto entre as linhas INICIO e FIM, exatamente igual, sem mudar uma letra.
+2. Se a ferramenta recusar ou não achar a sessão, não tente outro caminho.
+3. Responda numa linha só: ENVIADO, ou FALHOU seguido do motivo.
+
+INICIO
+{texto}
+FIM"""
+
+RE_LIMITE = re.compile(r"resets (?P&lt;quando&gt;.+?)\s*\((?P&lt;fuso&gt;[^)]+)\)")
+RE_HORA = re.compile(r"(?P&lt;h&gt;\d{1,2})(?::(?P&lt;m&gt;\d{2}))?\s*(?P&lt;ap&gt;am|pm)", re.I)
+RE_DATA = re.compile(r"(?P&lt;mes&gt;[A-Z][a-z]{2})[a-z]*\.?\s+(?P&lt;dia&gt;\d{1,2})")
+MESES = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def data(ts):
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def texto_de(entrada):
+    conteudo = entrada.get("message", {}).get("content")
+    if isinstance(conteudo, list):
+        return " ".join(p.get("text", "") for p in conteudo if isinstance(p, dict))
+    return conteudo if isinstance(conteudo, str) else ""
+
+
+def horario_de_volta(mensagem, parada):
+    """Lê "resets 9:50am (UTC)" ou "resets Oct 7, 5pm (UTC)". Devolve (horário, lido)."""
+    achado = RE_LIMITE.search(mensagem)
+    hora = RE_HORA.search(achado.group("quando")) if achado else None
+    if not hora:
+        return parada + timedelta(hours=5), False
+    try:
+        fuso = ZoneInfo(achado.group("fuso").strip())
+    except Exception:
+        return parada + timedelta(hours=5), False
+    h = int(hora.group("h")) % 12 + (12 if hora.group("ap").lower() == "pm" else 0)
+    m = int(hora.group("m") or 0)
+    local = parada.astimezone(fuso)
+    dia = RE_DATA.search(achado.group("quando"))
+    if dia and dia.group("mes") in MESES:
+        volta = local.replace(month=MESES.index(dia.group("mes")) + 1, day=int(dia.group("dia")),
+                              hour=h, minute=m, second=0, microsecond=0)
+        if volta &lt; local - timedelta(days=1):
+            volta = volta.replace(year=volta.year + 1)
+    else:
+        volta = local.replace(hour=h, minute=m, second=0, microsecond=0)
+        if volta &lt;= local:
+            volta += timedelta(days=1)
+    return volta.astimezone(timezone.utc), True
+
+
+def parada_por_limite(historico):
+    """Devolve a última fala se ela for o erro de limite, ou None."""
+    ultima = None
+    with open(historico, encoding="utf-8", errors="replace") as f:
+        for linha in f:
+            try:
+                e = json.loads(linha)
+            except ValueError:
+                continue
+            if e.get("type") in ("user", "assistant") and not e.get("isSidechain"):
+                ultima = e
+    if ultima and ultima.get("isApiErrorMessage") and ultima.get("error") == "rate_limit":
+        return ultima
+    return None
+
+
+def pontas(arquivo):
+    """Primeiro e último timestamp de um histórico de subagente."""
+    primeiro = ultimo = None
+    with open(arquivo, "rb") as f:
+        for linha in f:
+            ts = json.loads(linha).get("timestamp") if b'"timestamp"' in linha else None
+            if ts:
+                primeiro = ts
+                break
+        f.seek(max(0, os.path.getsize(arquivo) - 65536))
+        for linha in f.read().splitlines():
+            try:
+                ts = json.loads(linha).get("timestamp")
+            except ValueError:
+                continue
+            ultimo = ts or ultimo
+    return primeiro and data(primeiro), ultimo and data(ultimo)
+
+
+def subagentes(historico, parada):
+    pasta = historico.with_suffix("") / "subagents"
+    abertos = ativos = 0
+    for arquivo in pasta.glob("agent-*.jsonl"):
+        inicio, fim = pontas(arquivo)
+        if not inicio:
+            continue
+        if parada - JANELA_SUBAGENTES &lt;= inicio &lt;= parada:
+            abertos += 1
+        if inicio &lt;= parada and fim and fim &gt;= parada - JANELA_ATIVOS:
+            ativos += 1
+    return abertos, ativos
+
+
+def detectar(projetos, pastas, agora, janela):
+    for pasta in pastas:
+        for historico in sorted((projetos / pasta).glob("*.jsonl")):
+            idade = agora.timestamp() - historico.stat().st_mtime
+            if janela and idade &gt; janela.total_seconds():
+                continue
+            e = parada_por_limite(historico)
+            if not e:
+                continue
+            parada = data(e["timestamp"])
+            mensagem = texto_de(e).strip()
+            volta, lido = horario_de_volta(mensagem, parada)
+            abertos, ativos = subagentes(historico, parada)
+            yield {
+                "sessao": historico.stem, "pasta": pasta, "historico": str(historico),
+                "parada": parada.isoformat(), "volta": volta.isoformat(), "volta_lida": lido,
+                "mensagem_limite": mensagem, "subagentes": abertos, "ativos": ativos,
+            }
+
+
+def processo_vivo(sessao):
+    for arquivo in SESSOES.glob("*.json"):
+        try:
+            s = json.loads(arquivo.read_text())
+        except (ValueError, OSError):
+            continue
+        if s.get("sessionId") != sessao:
+            continue
+        try:
+            inicio = Path(f"/proc/{s['pid']}/stat").read_text().rsplit(")", 1)[1].split()[19]
+        except (OSError, IndexError, KeyError):
+            continue
+        if inicio == str(s.get("procStart")):
+            return s
+    return None
+
+
+def entregue(historico, parada, marca):
+    """A marca aparece no histórico depois da parada."""
+    with open(historico, encoding="utf-8", errors="replace") as f:
+        return any(marca in linha for linha in f if '"timestamp"' in linha
+                   and json.loads(linha).get("timestamp", "") &gt; parada)
+
+
+def enviar(nome, texto, cwd):
+    prompt = MENSAGEIRO.format(nome=nome, texto=texto)
+    r = subprocess.run(
+        ["claude", "-p", "--model", "haiku", "--permission-mode", "bypassPermissions",
+         "--no-session-persistence", "--strict-mcp-config", "--tools", "SendMessage,ListAgents"],
+        input=prompt, capture_output=True, text=True, timeout=300, cwd=cwd,
+    )
+    return (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--detectar", action="store_true", help="só lista, sem estado e sem mensagem")
+    p.add_argument("--projetos", type=Path, default=PROJETOS)
+    p.add_argument("--pasta", action="append", help="pasta de projetos, repetível")
+    p.add_argument("--estado", type=Path, default=ESTADO)
+    p.add_argument("--agora", help="horário ISO, para teste")
+    p.add_argument("--horas", type=float, default=24, help="idade máxima do histórico, 0 = todos")
+    a = p.parse_args()
+
+    agora = data(a.agora) if a.agora else datetime.now(timezone.utc)
+    janela = timedelta(hours=a.horas) if a.horas else None
+    achados = list(detectar(a.projetos, a.pasta or PASTAS, agora, janela))
+
+    if a.detectar:
+        for s in achados:
+            log(json.dumps(s, ensure_ascii=False))
+        log(f"{len(achados)} sessões paradas por limite")
+        return
+
+    a.estado.parent.mkdir(parents=True, exist_ok=True)
+    trava = open(a.estado.with_suffix(".lock"), "w")
+    fcntl.flock(trava, fcntl.LOCK_EX)
+    estado = json.loads(a.estado.read_text()) if a.estado.exists() else {}
+
+    for s in achados:
+        chave = f"{s['sessao']}@{s['volta']}"
+        reg = estado.setdefault(chave, {**s, "situacao": "esperando", "tentativas": 0})
+        marca = f"retomada-limite {s['sessao'][:8]} {s['volta'][:16]}"
+        if reg["situacao"] in ("retomada", "desistiu"):
+            continue
+        if reg["tentativas"] and entregue(s["historico"], s["parada"], marca):
+            reg["situacao"] = "retomada"
+            log(f"{chave}: entrega confirmada no histórico")
+            continue
+        if agora &lt; datetime.fromisoformat(s["volta"]) + MARGEM:
+            if not reg.get("avisado"):
+                log(f"{chave}: parada às {s['parada'][11:16]}, esperando o limite voltar")
+                reg["avisado"] = True
+            continue
+        vivo = processo_vivo(s["sessao"])
+        if not vivo:
+            if reg["situacao"] != "sem processo":
+                log(f"{chave}: sem processo vivo, retome pelo app")
+            reg["situacao"] = "sem processo"
+            continue
+        if reg["tentativas"] &gt;= TENTATIVAS:
+            reg["situacao"] = "desistiu"
+            log(f"{chave}: {TENTATIVAS} tentativas sem confirmação, desisti")
+            continue
+        texto = MENSAGEM.format(
+            hora_parada=s["parada"][11:16], hora_volta=s["volta"][11:16],
+            mensagem_limite=s["mensagem_limite"], n_subagentes=s["subagentes"],
+            n_ativos=s["ativos"], marca=marca,
+        )
+        reg["tentativas"] += 1
+        resposta = enviar(vivo["name"], texto, a.estado.parent)
+        reg["resposta"] = resposta
+        log(f"{chave}: mensageiro para {vivo['name']} respondeu {resposta}")
+        for _ in range(12):
+            if entregue(s["historico"], s["parada"], marca):
+                reg["situacao"] = "retomada"
+                log(f"{chave}: entrega confirmada no histórico")
+                break
+            time.sleep(5)
+        a.estado.write_text(json.dumps(estado, ensure_ascii=False, indent=1))
+
+    a.estado.write_text(json.dumps(estado, ensure_ascii=False, indent=1))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+chmod 755 ~/.local/bin/retomar-limite
+retomar-limite --detectar --horas 0</pre></div>
+  <p>O <code>--detectar</code> só lista, sem mandar nada. Ele termina em <code>0 sessões paradas por limite</code> quando todas as sessões que já pararam foram retomadas. Depois crie o serviço e o timer, ainda sem ligar:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo tee /etc/systemd/system/retomar-limite.service &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Retoma as sessões do Remote Control paradas por limite de uso
+
+[Service]
+Type=oneshot
+User=voce
+Slice=resgate.slice
+MemoryMax=512M
+OOMScoreAdjust=-900
+Environment=PATH=/home/voce/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /home/voce/.local/bin/retomar-limite
+TimeoutStartSec=20min
+EOF
+sudo tee /etc/systemd/system/retomar-limite.timer &gt; /dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Procura sessões paradas por limite de uso a cada 5 minutos
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
+EOF
+sudo systemctl daemon-reload</pre></div>
+  <p>Teste a retomada numa sessão sua, numa pasta só dela. O teste grava no histórico dela uma linha de limite falsa, com parada há uma hora e volta há meia hora, e roda o job só nessa pasta:</p>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>mkdir -p ~/teste-limite &amp;&amp; cd ~/teste-limite
+tmux -L teste new-session -d -s teste "claude --permission-mode bypassPermissions --model haiku -n teste-limite"
+sleep 8 &amp;&amp; tmux -L teste send-keys -t teste "responda só: pronto" Enter
+sleep 15 &amp;&amp; H=$(ls -t ~/.claude/projects/-home-voce-teste-limite/*.jsonl | head -1)
+P=$(date -u -d '-1 hour' +%FT%T.000Z); V=$(date -u -d '-30 min' +%-I:%M%P)
+printf '{"type":"assistant","isSidechain":false,"isApiErrorMessage":true,"error":"rate_limit","timestamp":"%s","message":{"role":"assistant","content":[{"type":"text","text":"You'"'"'ve hit your session limit · resets %s (UTC)"}]}}\n' "$P" "$V" &gt;&gt; "$H"
+retomar-limite --pasta=-home-voce-teste-limite --estado /tmp/estado-teste.json
+sleep 20 &amp;&amp; tmux -L teste capture-pane -p -t teste | tail -12</pre></div>
+  <div class="callout tip"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><strong class="label">Funcionou</strong><p>O job responde <code>mensageiro para teste-limite respondeu ENVIADO</code> e <code>entrega confirmada no histórico</code>. O painel mostra <code>Message from @...</code> e a resposta da sessão. Rodar o mesmo comando de novo não manda nada. Feche com <code>tmux -L teste kill-server</code>.</p></div></div>
+  <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo systemctl enable --now retomar-limite.timer
+systemctl list-timers retomar-limite.timer
+journalctl -u retomar-limite -n 20 --no-pager</pre></div>
+  <p>O <code>list-timers</code> mostra a próxima rodada em até 5 minutos. O log mostra uma linha quando uma sessão para, outra quando ela é retomada, e fica quieto no resto do tempo.</p>
+</article>
+
+<!-- ============ 8 PROVAR ============ -->
+<article class="page" id="provar" data-title="Provar que funciona" hidden>
+  <div class="crumb">Montar à mão · passo 8 de 8</div>
+  <h1>Provar que funciona</h1>
+  <p class="lead">Confira cada item antes de deixar a máquina sozinha. Na nossa montagem, os testes, os servidores MCP e o modo de permissão pegaram defeito. Dias depois, foi a memória.</p>
+  <ul class="checklist">
+    <li>A suíte de testes do projeto passa na máquina. Em 2 núcleos, um teste que sobe banco em container estourou o limite padrão de 5s, e três testes de tela reprovaram por lentidão, mas passaram rodando sozinhos.</li>
+    <li><code>claude mcp list</code> mostra os mesmos servidores conectados aqui e lá.</li>
+    <li>As sessões do app nascem em bypass. Abra uma pelo app e, na máquina, <code>ps -eo args | grep -- '[-]-print' | grep -c '[b]ypassPermissions'</code> conta as que têm a flag. Os colchetes tiram da conta o próprio comando. O seletor do app não mostra o bypass.</li>
+    <li>O Remote Control volta sozinho depois de reiniciar a máquina, ou o container com <code>sudo lxc restart agente</code>.</li>
+    <li>Uma sessão em segundo plano continua com o SSH fechado. Com bypass, rode <code>claude --dangerously-skip-permissions</code> uma vez e aceite o aviso. Depois rode <code>claude --bg --dangerously-skip-permissions "rode sleep 45 e responda ok"</code>, saia, entre de novo e confira com <code>claude agents</code>. Sem bypass, tire a flag e aprove o <code>sleep</code> com <code>claude attach &lt;id&gt;</code> se ele pedir.</li>
+    <li>As sessões estão no teto. O <code>memoria</code> mostra o teto que você calculou na linha do <code>agentes.slice</code>, e o teste do <code>systemd-run</code> de <a href="#memoria">Limites de memória</a> termina em <code>oom-kill</code>.</li>
+    <li>A sessão <code>resgate</code> aparece no app e responde, e o <code>resgate-rc</code> volta sozinho depois do reboot.</li>
+    <li>No host compartilhado, os outros serviços respondem igual ao início.</li>
+  </ul>
+  <div class="callout tip"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><strong class="label">Pronto</strong><p>Abra o <a href="https://claude.ai/code">claude.ai/code</a> ou a aba Code do app do Claude e escolha a sessão com o nome da máquina.</p></div></div>
+</article>
+
+<!-- ============ DIA A DIA ============ -->
+<article class="page" id="dia" data-title="No dia a dia" hidden>
+  <div class="crumb">Referência</div>
+  <h1>No dia a dia</h1>
+  <p class="lead">Os comandos que você vai usar depois que tudo estiver de pé.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Quero</th><th>Faço</th></tr>
+    <tr><td>Falar com o agente pelo celular ou navegador</td><td>Abro o claude.ai/code ou a aba Code do app e escolho a sessão com o nome da máquina</td></tr>
+    <tr><td>Uma sessão nova do zero</td><td>Toco em nova sessão no app, e o servidor cria outra</td></tr>
+    <tr><td>Um terminal na máquina</td><td><code>ssh agente</code></td></tr>
+    <tr><td>Sessão pelo terminal que sobreviva ao SSH</td><td><code>tmux new -s trabalho</code>, abro o Claude, saio com Ctrl+b e depois d, volto com <code>tmux attach -t trabalho</code></td></tr>
+    <tr><td>Ver pelo celular uma sessão do terminal</td><td><code>/remote-control</code> dentro dela, ou abro com <code>claude --rc</code></td></tr>
+    <tr><td>Deixar trabalhando e desligar o meu PC</td><td><code>/bg</code>, a seta ← no prompt vazio, ou <code>claude --bg "pedido"</code></td></tr>
+    <tr><td>Ver as sessões em segundo plano</td><td><code>claude agents</code> lista, <code>claude attach &lt;id&gt;</code> entra, <code>claude logs &lt;id&gt;</code> mostra sem entrar</td></tr>
+    <tr><td>Ver o painel do servidor</td><td><code>tmux -L rc attach -t rc</code>, e saio com Ctrl+b e depois d</td></tr>
+    <tr><td>Ver quanto as sessões usam de memória</td><td><code>memoria</code></td></tr>
+    <tr><td>Abrir uma sessão com as do projeto no teto</td><td>Abro a sessão <code>resgate</code> no claude.ai/code ou no app. Ela roda com 1 GiB reservado fora do teto</td></tr>
+    <tr><td>Saber se alguma sessão parou por limite de uso e quando volta</td><td><code>journalctl -u retomar-limite</code>. O job retoma sozinho depois do horário de volta, e <code>retomar-limite --detectar</code> lista as paradas sem mandar nada</td></tr>
+    <tr><td>Atualizar o Claude Code</td><td>Ele baixa a versão nova sozinho, mas cada sessão roda a versão em que nasceu. <code>sudo systemctl restart agente-rc resgate-rc</code> aplica, e as sessões voltam em uns 20 segundos</td></tr>
+    <tr><td>Renovar o login do Claude</td><td>Quando o app parar de abrir sessão, entro com <code>ssh agente</code>, rodo <code>tmux new -s login 'claude auth login'</code> e depois <code>sudo systemctl restart agente-rc resgate-rc</code>. Três dias antes de vencer, uma sessão aberta no terminal avisa</td></tr>
+    <tr><td>Mudar um servidor MCP</td><td>Abro uma sessão nova, que lê a configuração ao começar. Numa sessão antiga, <code>/mcp</code> reconecta</td></tr>
+    <tr><td>Abrir o app no navegador</td><td><code>ssh -L 3000:localhost:3000 agente</code> e <code>http://localhost:3000</code></td></tr>
+  </table></div>
+  <h2>Segundo plano e bypass</h2>
+  <p><code>claude --bg</code> sem flag nasce no modo padrão das suas configurações: Auto quando a conta e o modelo permitem, Manual nos outros casos. Para segundo plano em bypass, rode <code>claude --dangerously-skip-permissions</code> uma vez no terminal e aceite o aviso. Até lá, o <code>--bg</code> em bypass é recusado. Depois:</p>
+  <div class="code"><div class="code-head"><span>bash</span><button class="copy">Copiar</button></div><pre>claude --bg --dangerously-skip-permissions "pedido"</pre></div>
+  <p>Todas as sessões dividem as portas da máquina. Duas sessões subindo o servidor de desenvolvimento ao mesmo tempo disputam a mesma porta.</p>
+</article>
+
+<!-- ============ PROBLEMAS ============ -->
+<article class="page" id="problemas" data-title="Problemas comuns" hidden>
+  <div class="crumb">Referência</div>
+  <h1>Problemas comuns</h1>
+  <p class="lead">Quase todos aconteceram na nossa montagem. Procure pelo sintoma.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Sintoma</th><th>Causa</th><th>Conserto</th></tr>
+    <tr><td>A sessão aberta pelo app pede permissão para tudo</td><td>O Claude Code ignora <code>defaultMode: "bypassPermissions"</code> vindo das configurações do projeto</td><td><code>--permission-mode bypassPermissions</code> depois de <code>remote-control</code></td></tr>
+    <tr><td>Serviço ativo e nenhuma sessão no app</td><td>O servidor está parado numa pergunta de primeira vez</td><td><code>tmux -L rc attach -t rc</code> mostra qual. Rode o comando à mão uma vez</td></tr>
+    <tr><td>Um tmux aberto pelo SSH some quando o serviço reinicia</td><td>O serviço usa o socket padrão do tmux</td><td><code>tmux -L rc</code> no serviço</td></tr>
+    <tr><td>A sessão nova está em outro branch e sem os <code>.env</code></td><td><code>--spawn worktree</code> nasce do branch padrão do remoto, só com arquivos versionados</td><td><code>--spawn same-dir</code>, ou <code>.worktreeinclude</code> mais <code>worktree.baseRef: "head"</code></td></tr>
+    <tr><td>O servidor sumiu e não voltou</td><td>Ele sai depois de uns 10 minutos sem rede</td><td>O laço do script <code>agente-rc</code></td></tr>
+    <tr><td>O app parou de abrir sessão, e o painel mostra <code>Login expired</code></td><td>O login do Claude na máquina venceu. Sessão que dura mais que o login para de andar até um login novo</td><td><code>claude auth login</code> num tmux, e depois <code>sudo systemctl restart agente-rc</code></td></tr>
+    <tr><td>A sessão de uma máquina cai quando a outra renova o login</td><td>As duas dividem o mesmo <code>.credentials.json</code></td><td>Login próprio em cada máquina</td></tr>
+    <tr><td>Um MCP de banco não conecta</td><td>O banco de desenvolvimento ficou parado depois do reboot</td><td><code>docker update --restart unless-stopped</code> no container do banco</td></tr>
+    <tr><td>Um teste que sobe banco estoura 5s</td><td>Máquina de 2 núcleos com a suíte inteira em paralelo</td><td>Limite de 30s nos testes que sobem container</td></tr>
+    <tr><td>O SSH leva de 20 a 77 segundos para entrar, e as sessões do app param de responder</td><td>A máquina chegou ao limite de memória sem swap. O kernel descarta o cache de disco, e todo processo espera o disco</td><td>Swap e o teto das sessões, em <a href="#memoria">Limites de memória</a>. Na hora, abra uma sessão no <code>resgate</code> e mate o comando pesado</td></tr>
+    <tr><td>Um build ou uma suíte de testes morre com <code>Killed</code> ou exit 137</td><td>O grupo das sessões bateu no teto, e o kernel matou o maior processo</td><td>Menos paralelismo, como <code>turbo run --concurrency=1</code>, ou um teto maior no <code>agentes.slice</code></td></tr>
+    <tr><td>Todas as sessões caem juntas quando um comando morre por falta de memória</td><td>Sem <code>OOMPolicy=continue</code>, o systemd para o serviço inteiro quando o kernel mata um processo dele</td><td><code>OOMPolicy=continue</code> no drop-in do serviço, e <code>sudo systemctl daemon-reload</code></td></tr>
+    <tr><td>A sessão parou com <code>You've hit your session limit</code> e continua parada depois do horário de volta</td><td>O processo dela morreu, por exemplo num reinício do servidor, e o job só manda mensagem para processo vivo</td><td><code>journalctl -u retomar-limite</code> mostra <code>sem processo vivo</code>. Abra a sessão pelo app e mande uma mensagem</td></tr>
+    <tr><td>Um binário falha com <code>exec format error</code></td><td>Binário x86 numa máquina ARM</td><td>Baixar a versão arm64 e conferir com <code>file</code></td></tr>
+    <tr><td>A extensão Remote-SSH não aparece no VS Code</td><td>O <code>code</code> chamado do WSL instalou do lado WSL</td><td>Instalar pelo VS Code do Windows</td></tr>
+    <tr><td><code>gh auth login</code> reclama que não achou navegador</td><td>A máquina não tem interface gráfica</td><td>Ignorar e digitar o código em github.com/login/device</td></tr>
+    <tr><td>O container do LXD não recebe IP nem sai para a internet</td><td>O Docker põe o FORWARD em DROP, e a imagem da nuvem fecha o INPUT em REJECT</td><td>O serviço <code>lxd-firewall</code>, com as regras na ordem da página do container</td></tr>
+    <tr><td>Uma ferramenta do projeto some nas sessões do app</td><td>O serviço não carregou o <code>.bashrc</code> ou o <code>.zshrc</code>, onde nvm e afins põem o PATH</td><td><code>bash -lic</code> ou <code>zsh -lic</code> no <code>ExecStart</code></td></tr>
+    <tr><td>O VS Code do Windows recusa a chave</td><td>A chave do Windows não está no <code>authorized_keys</code> da máquina</td><td>Autorizar a chave pública do Windows, como em Acesso por SSH e VS Code</td></tr>
+    <tr><td>As regras do firewall somem ou duplicam no reboot</td><td><code>netfilter-persistent save</code> grava as regras do Docker junto</td><td>Regras num serviço <code>oneshot</code> que confere antes de inserir</td></tr>
+    <tr><td>Um <code>lxc list</code> instalou o LXD</td><td>No Ubuntu 24.04, o <code>lxc</code> sem o snap é um instalador</td><td>Saber antes de rodar num host que importa</td></tr>
+    <tr><td>A Oracle recusa criar a VM com "Out of host capacity"</td><td>Falta máquina ARM livre naquele availability domain</td><td>Outro availability domain, mais tarde, ou o upgrade para Pay As You Go</td></tr>
+    <tr><td>A VM grátis da Oracle aparece parada</td><td>Conta só gratuita para a VM que passa 7 dias ociosa</td><td>Ligar de novo em Compute, Instances, Start, e fazer o upgrade para Pay As You Go</td></tr>
+  </table></div>
+</article>
+
+<!-- ============ SEGURANÇA ============ -->
+<article class="page" id="seguranca" data-title="Segurança e custos" hidden>
+  <div class="crumb">Referência</div>
+  <h1>Segurança e custos</h1>
+  <p class="lead">Uma máquina que trabalha sozinha 24 horas faz tudo o que as chaves dela permitem. Dê a ela só o necessário.</p>
+  <ul>
+    <li>Dê ao agente só as chaves que ele usa, cada uma revogável sem afetar as suas.</li>
+    <li>O login do Claude na máquina vence. A sessão que dura mais que ele para de andar até um login novo, então renove quando o app parar de abrir sessão.</li>
+    <li>As sessões gastam a mesma cota da sua conta do Claude, seja na sua máquina, na Oracle ou na nuvem da Anthropic. Uma noite inteira de trabalho do agente consome o limite que seria seu de manhã.</li>
+    <li>Uma máquina com IP público recebe tentativas de login no SSH o tempo todo. Login por senha desligado e atualização automática são o mínimo, e o Tailscale tira a porta da internet.</li>
+    <li>Num host compartilhado, um build pesado do agente deixa os outros serviços mais lentos. O peso de CPU dá prioridade ao host, mas não zera a disputa.</li>
+    <li>Um reboot interrompe as sessões em segundo plano. Por até 48 horas, elas aparecem como <code>failed</code> e voltam de onde pararam quando você entra nelas. Depois disso aparecem como <code>stopped</code>.</li>
+    <li>Na Oracle Pay As You Go, nada é cobrado dentro da cota, e o orçamento com alerta avisa se algo sair dela. Uma VPS paga custa a mensalidade mesmo parada.</li>
+  </ul>
+</article>
+
+<!-- ============ FONTES ============ -->
+<article class="page" id="fontes" data-title="Fontes" hidden>
+  <div class="crumb">Referência</div>
+  <h1>Fontes</h1>
+  <p class="lead">Páginas consultadas em 01/10/2026, e as de memória em 05/10/2026. Os números de tempo e tamanho vêm da nossa montagem, num container com 2 núcleos e 7 GB.</p>
+  <ul>
+    <li><a href="https://code.claude.com/docs/en/remote-control">Remote Control</a>, documentação do Claude Code. Modo servidor, flags, planos, a saída depois de 10 minutos sem rede, o <code>--capacity</code> e o <code>--name</code>, que dá o título da sessão.</li>
+    <li><a href="https://code.claude.com/docs/en/cross-session-messaging">Message your other Claude Code sessions</a>, consultada em 05/10/2026. O socket de cada sessão, o <code>SendMessage</code>, e a regra de que uma sessão em bypass só entrega a mensagem de um remetente que também está em bypass. O formato da linha de limite, os subagentes em <code>subagents/</code> e o <code>~/.claude/sessions/&lt;pid&gt;.json</code> vêm dos históricos da nossa máquina.</li>
+    <li><a href="https://code.claude.com/docs/en/authentication">Authentication</a>. O código colado em "Paste code here if prompted" e o vencimento do login, que para as sessões do Remote Control.</li>
+    <li><a href="https://code.claude.com/docs/en/agent-view">Background sessions e agent view</a>. <code>/bg</code>, <code>claude --bg</code>, o supervisor e o que acontece no reboot.</li>
+    <li><a href="https://code.claude.com/docs/en/permission-modes">Permission modes</a>. O <code>bypassPermissions</code> ignorado nas configurações do projeto, e os modos da nuvem.</li>
+    <li><a href="https://code.claude.com/docs/en/worktrees">Worktrees</a>. O branch de onde o worktree nasce e o <code>.worktreeinclude</code>.</li>
+    <li><a href="https://code.claude.com/docs/en/claude-code-on-the-web">Use Claude Code in the cloud</a>. Planos, GitHub, <code>--cloud</code>, <code>--teleport</code> e limites.</li>
+    <li><a href="https://code.claude.com/docs/en/cloud-environments">Configure cloud environments</a>. Rede, setup script, cache, ferramentas instaladas e pausa por inatividade.</li>
+    <li><a href="https://code.claude.com/docs/en/self-hosted-environments">Self-hosted environments</a>. Runner, planos e o que fica na sua rede.</li>
+    <li><a href="https://docs.oracle.com/en-us/iaas/Content/FreeTier/resourceref.htm">Oracle, Always Free Resources</a>. Cota ARM, VMs AMD, disco, tráfego, região principal, a regra de VM ociosa, "Out of host capacity" e a cobrança depois do upgrade.</li>
+    <li><a href="https://docs.oracle.com/iaas/Content/FreeTier/freetier.htm">Oracle Cloud Infrastructure Free Tier</a>. Como fazer o upgrade pelo console.</li>
+    <li><a href="https://blog.51sec.org/2023/02/oracle-cloud-cleaning-up-idle-compute.html">51sec, Oracle Cloud Cleaning Up Idle Compute Instances</a>. A conta Pay As You Go fora da regra de VM ociosa.</li>
+    <li><a href="https://www.infoq.com/news/2026/07/oracle-cloud-free-tier-limits/">InfoQ, julho de 2026</a>. O corte da cota ARM da Oracle.</li>
+    <li><a href="https://www.hostinger.com/br/servidor-vps">Hostinger, servidor VPS</a>. Planos KVM, preços em reais no contrato de 24 meses e na renovação, processador AMD EPYC e data centers.</li>
+    <li><a href="https://tailscale.com/pricing">Tailscale, preços</a>. Plano Personal grátis para até 6 usuários.</li>
+    <li><a href="https://man7.org/linux/man-pages/man5/systemd.resource-control.5.html">systemd.resource-control</a>, cópia do man7.org. <code>MemoryHigh</code>, <code>MemoryMax</code>, <code>MemoryMin</code>, <code>MemorySwapMax</code> e <code>CPUWeight</code>.</li>
+    <li><a href="https://man7.org/linux/man-pages/man5/systemd.slice.5.html">systemd.slice</a> e <a href="https://man7.org/linux/man-pages/man5/systemd.unit.5.html">systemd.unit</a>. Limites de um slice valem para tudo que está dentro dele, e os drop-ins em <code>.service.d/</code>.</li>
+    <li><a href="https://man7.org/linux/man-pages/man5/systemd.service.5.html">systemd.service</a> e <a href="https://man7.org/linux/man-pages/man5/systemd.exec.5.html">systemd.exec</a>. <code>OOMPolicy</code> e <code>OOMScoreAdjust</code>. O padrão <code>stop</code> conferimos com <code>systemctl show -p OOMPolicy</code>.</li>
+    <li><a href="https://docs.kernel.org/admin-guide/cgroup-v2.html">Control Group v2</a>, documentação do kernel. O alto nunca chama o OOM killer, e o teto chama dentro do grupo.</li>
+    <li><a href="https://docs.kernel.org/accounting/psi.html">Pressure Stall Information</a>, documentação do kernel. O que <code>full</code> e <code>avg10</code> medem na pressão de memória.</li>
+    <li><a href="https://canonical.com/lxd/docs/latest/reference/instance_options/">LXD, opções de instância</a>. <code>limits.memory.swap</code> vem ligado por padrão. O limite de swap do container igual ao <code>limits.memory</code> vem da nossa medição.</li>
+    <li><a href="https://man7.org/linux/man-pages/man8/swapon.8.html">swapon(8)</a>. Arquivos de swap, e o cuidado com btrfs e arquivos com buracos. O <code>fallocate</code> em ext4 vem da nossa montagem.</li>
+  </ul>
+</article>
+
+<nav class="pager" id="pager" aria-label="Página anterior e próxima"></nav>
+<div class="foot">Claude Code Always-On · Guia independente, sem vínculo com a Anthropic · Revisado em 5 de outubro de 2026</div>
+</main>
+
+<aside class="toc" id="toc" aria-label="Nesta página"><h5>Nesta página</h5><div id="tocList"></div></aside>
+</div>
+
+<script>
+(function () {
+  var pages = Array.prototype.slice.call(document.querySelectorAll('article.page'));
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.sidebar a'));
+  var tocList = document.getElementById('tocList');
+  var pager = document.getElementById('pager');
+  var sidebar = document.getElementById('sidebar');
+  var menuBtn = document.getElementById('menuBtn');
+  var current = null;
+
+  function pageById(id) { for (var i = 0; i < pages.length; i++) if (pages[i].id === id) return pages[i]; return null; }
+
+  function buildToc(page) {
+    tocList.innerHTML = '';
+    var hs = page.querySelectorAll('h2');
+    hs.forEach(function (h, i) {
+      if (!h.id) h.id = page.id + '-s' + i;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = h.textContent;
+      b.addEventListener('click', function () { h.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); });
+      b.dataset.target = h.id;
+      tocList.appendChild(b);
+    });
+    document.getElementById('toc').style.visibility = hs.length ? 'visible' : 'hidden';
+  }
+
+  function buildPager(idx) {
+    pager.innerHTML = '';
+    var cur = pages[idx];
+    var pick = function (key, fallback) { var v = cur.dataset[key]; return v === undefined ? fallback : (v ? pageById(v) : null); };
+    var prev = pick('prev', pages[idx - 1]), next = pick('next', pages[idx + 1]);
+    if (prev) { var a = document.createElement('a'); a.href = '#' + prev.id; a.innerHTML = '<small>Anterior</small><b></b>'; a.querySelector('b').textContent = '← ' + prev.dataset.title; pager.appendChild(a); }
+    if (next) { var n = document.createElement('a'); n.href = '#' + next.id; n.className = 'next'; n.innerHTML = '<small>Próxima</small><b></b>'; n.querySelector('b').textContent = next.dataset.title + ' →'; pager.appendChild(n); }
+  }
+
+  function route() {
+    var id = (location.hash || '#inicio').slice(1);
+    var page = pageById(id) || pages[0];
+    pages.forEach(function (p) { p.hidden = p !== page; });
+    navLinks.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + page.id); });
+    var side = document.querySelector('.sidebar a[href="#' + page.id + '"]');
+    var group = side ? side.closest('.nav-group').querySelector('h4').textContent : '';
+    document.querySelectorAll('.topnav a').forEach(function (a) { a.classList.toggle('on', a.dataset.group === group); });
+    buildToc(page);
+    buildPager(pages.indexOf(page));
+    if (current !== page) window.scrollTo(0, 0);
+    current = page;
+    sidebar.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
+  window.addEventListener('hashchange', route);
+
+  // sumário acompanha a rolagem
+  window.addEventListener('scroll', function () {
+    var btns = tocList.querySelectorAll('button');
+    var on = null;
+    btns.forEach(function (b) { var h = document.getElementById(b.dataset.target); if (h && h.getBoundingClientRect().top < 140) on = b; });
+    btns.forEach(function (b) { b.classList.toggle('on', b === on); });
+  }, { passive: true });
+
+  menuBtn.addEventListener('click', function () {
+    var open = sidebar.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // copiar
+  document.querySelectorAll('.code').forEach(function (box) {
+    var btn = box.querySelector('.copy');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var pre = box.querySelector('pre');
+      var text = pre.textContent;
+      var done = function () { var old = btn.textContent; btn.textContent = 'Copiado'; btn.classList.add('done'); setTimeout(function () { btn.textContent = old; btn.classList.remove('done'); }, 1600); };
+      var fallback = function () { var old = btn.textContent; var r = document.createRange(); r.selectNodeContents(pre); var s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selecionado, use Ctrl+C'; setTimeout(function () { btn.textContent = old; }, 3000); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+        else fallback();
+      } catch (e) { fallback(); }
+    });
+  });
+
+  // abas
+  document.querySelectorAll('[data-tabs]').forEach(function (tabs) {
+    var btns = tabs.querySelectorAll('[role="tab"]');
+    btns.forEach(function (o) { o.tabIndex = o.getAttribute('aria-selected') === 'true' ? 0 : -1; });
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        btns.forEach(function (o) { o.setAttribute('aria-selected', o === b ? 'true' : 'false'); o.tabIndex = o === b ? 0 : -1; document.getElementById(o.getAttribute('aria-controls')).hidden = o !== b; });
+      });
+    });
+    tabs.querySelector('[role="tablist"]').addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      var list = Array.prototype.slice.call(btns), i = list.indexOf(document.activeElement);
+      var n = list[(i + (e.key === 'ArrowRight' ? 1 : list.length - 1)) % list.length];
+      n.click(); n.focus();
+    });
+  });
+
+  // escolha do caminho
+  var form = document.getElementById('chooser');
+  var verdict = document.getElementById('verdict');
+  var answers = {
+    nuvem: ['Nuvem da Anthropic', 'O seu projeto cabe nela, e não há máquina para manter. Se quiser uma máquina sua mesmo assim, use a Oracle.', 'nuvem', 'Ver como funciona'],
+    container: ['Container numa VPS que você já tem', 'Sai de graça e isola o agente dos seus serviços, com limites de memória, CPU e disco.', 'container', 'Montar o container'],
+    oracle: ['Oracle Cloud com Pay As You Go', '2 núcleos ARM, 12 GB e até 200 GB de disco, ligados o mês todo sem custo.', 'oracle', 'Criar a VM na Oracle'],
+    vps: ['VPS dedicada paga', 'O caminho mais simples quando você aceita pagar. Se quiser economizar, a Oracle continua valendo.', 'vps', 'Escolher a VPS']
+  };
+  function decide() {
+    var f = new FormData(form);
+    var q1 = f.get('q1'), q2 = f.get('q2'), q3 = f.get('q3');
+    if (!q1 || !q2 || !q3) return;
+    var key = q1 === 'nao' ? 'nuvem' : (q2 === 'sim' ? 'container' : (q3 === 'zero' ? 'oracle' : 'vps'));
+    var r = answers[key];
+    verdict.className = 'verdict on';
+    verdict.innerHTML = '<b></b><p></p><p style="margin-top:8px"><a></a> · <a href="#setup">ou deixe o Claude montar</a></p>';
+    verdict.querySelector('b').textContent = r[0];
+    verdict.querySelector('p').textContent = r[1];
+    var a = verdict.querySelector('p + p a');
+    a.href = '#' + r[2]; a.textContent = r[3] + ' →';
+  }
+  form.addEventListener('change', decide);
+  form.addEventListener('submit', function (e) { e.preventDefault(); });
+
+  // busca
+  var q = document.getElementById('q');
+  var results = document.getElementById('results');
+  var norm = function (s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
+  var index = pages.map(function (p) { return { id: p.id, title: p.dataset.title, text: norm(p.textContent.replace(/\s+/g, ' ')), raw: p.textContent.replace(/\s+/g, ' ') }; });
+  var sel = -1;
+  function show() {
+    var term = norm(q.value.trim());
+    if (term.length < 2) { results.hidden = true; return; }
+    var hits = index.filter(function (it) { return it.text.indexOf(term) !== -1; }).slice(0, 8);
+    results.innerHTML = '';
+    if (!hits.length) { results.innerHTML = '<div class="empty">Nada encontrado.</div>'; results.hidden = false; return; }
+    hits.forEach(function (it) {
+      var pos = it.text.indexOf(term);
+      var snip = it.raw.slice(Math.max(0, pos - 40), pos + 70);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = '<span></span><small></small>';
+      b.querySelector('span').textContent = it.title;
+      b.querySelector('small').textContent = (pos > 40 ? '…' : '') + snip + '…';
+      b.addEventListener('click', function () { location.hash = it.id; results.hidden = true; q.value = ''; });
+      results.appendChild(b);
+    });
+    sel = -1;
+    results.hidden = false;
+  }
+  q.addEventListener('input', show);
+  q.addEventListener('keydown', function (e) {
+    var items = results.querySelectorAll('button');
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!items.length) return;
+      sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items.forEach(function (b, i) { b.classList.toggle('on', i === sel); });
+    } else if (e.key === 'Enter') {
+      if (items.length) (items[sel >= 0 ? sel : 0]).click();
+    } else if (e.key === 'Escape') { results.hidden = true; q.blur(); }
+  });
+  document.addEventListener('click', function (e) { if (!e.target.closest('.search')) results.hidden = true; });
+  document.addEventListener('keydown', function (e) { if (e.key === '/' && document.activeElement !== q && !/input|textarea/i.test(document.activeElement.tagName)) { e.preventDefault(); q.focus(); } });
+
+  route();
+})();
+</script>
+
+</body></html>

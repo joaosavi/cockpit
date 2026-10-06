@@ -1,0 +1,11 @@
+[Unit]
+Description=Faxina semanal do zippi-datawarehouse, pela skill /faxina (#216)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sv
+WorkingDirectory=/home/sv/getdemo/zippi-datawarehouse
+# O mesmo --permission-mode do zippi-rc.service. A skill cria o worktree dela fora da pasta principal.
+ExecStart=/usr/bin/zsh -lic 'git fetch --quiet origin dev && claude -p "/faxina" --model claude-opus-5-5 --permission-mode bypassPermissions'

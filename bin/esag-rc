@@ -1,0 +1,7 @@
+#!/bin/sh
+# O modo servidor do Remote Control sai depois de uns 10 minutos sem rede, e o laço o devolve.
+cd "$HOME/esag" || exit 1
+while true; do
+    claude remote-control --name esag --remote-control-session-name-prefix esag --spawn same-dir --permission-mode bypassPermissions
+    sleep 10
+done

@@ -1,0 +1,10 @@
+[Unit]
+Description=Abre a sessão sessoes-limite uma vez
+
+[Timer]
+OnCalendar=2026-10-05 15:26:00 UTC
+Persistent=true
+Unit=sessoes-limite.service
+
+[Install]
+WantedBy=timers.target

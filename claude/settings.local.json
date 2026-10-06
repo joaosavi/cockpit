@@ -1,0 +1,5 @@
+{
+  "skillOverrides": {
+    "abnt-esag": "user-invocable-only"
+  }
+}

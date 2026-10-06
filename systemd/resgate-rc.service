@@ -1,0 +1,17 @@
+[Unit]
+Description=Remote Control do Claude Code para o agente de resgate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=sv
+Slice=resgate.slice
+OOMScoreAdjust=-900
+ExecStart=/usr/bin/tmux -L resgate new-session -d -s resgate "zsh -lic resgate-rc"
+ExecStop=/usr/bin/tmux -L resgate kill-server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

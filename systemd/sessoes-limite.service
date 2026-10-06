@@ -1,0 +1,12 @@
+[Unit]
+Description=Sessão única que monta a retomada de sessões paradas por limite de uso
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=sv
+Slice=agentes.slice
+OOMPolicy=continue
+ExecStart=/usr/bin/tmux -L limite new-session -d -s limite "zsh -lic sessoes-limite"
+ExecStop=/usr/bin/tmux -L limite kill-server

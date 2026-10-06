@@ -1,0 +1,13 @@
+[Unit]
+Description=Retoma as sessões do Remote Control paradas por limite de uso
+
+[Service]
+Type=oneshot
+User=sv
+Slice=resgate.slice
+MemoryMax=512M
+OOMScoreAdjust=-900
+Environment=PATH=/home/sv/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/sv/tarefas/sessoes-limite
+ExecStart=/usr/bin/python3 /home/sv/tarefas/sessoes-limite/retomar.py
+TimeoutStartSec=20min
