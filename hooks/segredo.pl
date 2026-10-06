@@ -90,7 +90,14 @@ sub candidatos {
   }
   # Na URL, o segredo é a senha. A URL inteira é o endereço do serviço, que aparece em log e em erro.
   return @pares if $valor =~ m{^[A-Za-z][A-Za-z0-9+.-]*://};
-  push @pares, [$nome, $valor] if $todo_nome_vale || $nome =~ $NOME_DE_SEGREDO;
+  if ($todo_nome_vale || $nome =~ $NOME_DE_SEGREDO) {
+    push @pares, [$nome, $valor];
+    # O pedaço também é segredo. O token do Coolify tem a forma `id|segredo`, e em 06/10/2026 o shell
+    # cortou no `|` e imprimiu só o segredo, que a lista não conhecia sozinho. O pedaço curto cai no
+    # `aceita`, como o `7` do id.
+    my @pedacos = split /[|:;,\s]+/, $valor;
+    push @pares, map { [$nome, $_] } @pedacos if @pedacos > 1;
+  }
   return @pares;
 }
 
@@ -430,6 +437,9 @@ sub teste {
   require File::Path;
   require File::Temp;
   require Time::HiRes;
+  # O caso roda o hook de dentro de outra pasta, e o `perl hooks/segredo.pl --teste` relativo
+  # reprovava 11 casos sem defeito nenhum.
+  $SELF = Cwd::abs_path($SELF);
   $T = File::Temp::tempdir('segredo-teste.XXXXXX', TMPDIR => 1, CLEANUP => 1);
   my ($aviso) = roda('', undef, $^X, '-Mwarnings', '-c', $SELF);
   caso('o arquivo compila sem aviso', $aviso =~ /syntax OK\s*\z/ && $aviso !~ /line \d+/);
@@ -439,6 +449,7 @@ sub teste {
   my $falso_bi   = 'senha-falsa-do-bi-4567';
   my $falso_novo = 'token-falso-que-chegou-depois';
   my $publicada  = 'senha-publicada-no-exemplo';
+  my $falso_api  = 'TokenFalsoDoPainelSemSeparador0123456789';
 
   File::Path::make_path("$T/repos/bi/apps/bi", "$T/repos/bi/sub", "$T/home");
   escreve("$T/secrets", "# falso\nexport GITHUB_TOKEN=$falso_gh\nexport BI_MCP_PG_URL=postgres://mcp:$falso_pg\@db:5432/x\n");
@@ -448,6 +459,7 @@ sub teste {
     "PORT=3000",
     "DATABASE_URL=postgres://bi:$falso_bi\@127.0.0.1:5432/bi",
     "WAREHOUSE_DATABASE_URL=postgres://w:$publicada\@localhost/w",
+    "PAINEL_TOKEN=7|$falso_api",
     '');
   escreve("$T/repos/bi/.env.example", "WAREHOUSE_DATABASE_URL=postgres://w:$publicada\@localhost/w\n");
   my $env_bi = "$T/repos/bi/apps/bi/.env";
@@ -467,7 +479,7 @@ sub teste {
 
   my $nao_vaza = sub {
     my ($saida) = @_;
-    return !grep { index($saida, $_) >= 0 } ($falso_gh, $falso_auth, $falso_pg, $falso_bi);
+    return !grep { index($saida, $_) >= 0 } ($falso_gh, $falso_auth, $falso_pg, $falso_bi, $falso_api);
   };
 
   my ($s) = roda_como_o_claude('env', $T);
@@ -488,6 +500,13 @@ sub teste {
   caso('o env | grep GIT de 02/10/2026 sai com o valor trocado', $nao_vaza->($s) && $s =~ /<oculto:GITHUB_TOKEN>/);
   ($s) = roda_como_o_claude("sed -n '1,20p' $env_bi", $T);
   caso('o sed do .env de 02/10/2026 sai com o valor trocado', $nao_vaza->($s) && $s =~ /<oculto:BETTER_AUTH_SECRET>/);
+
+  # O vazamento de 06/10/2026: o token do Coolify tem a forma `id|segredo`, o shell cortou no `|` e
+  # imprimiu só o segredo no erro, e a lista conhecia só o valor inteiro.
+  ($s) = roda_como_o_claude("set -a; . $env_bi", $T);
+  caso('o .env carregado no shell não vaza o pedaço do token no erro', $nao_vaza->($s) && $s =~ /<oculto:PAINEL_TOKEN>/);
+  ($s) = roda_como_o_claude("grep PAINEL $env_bi | cut -d'|' -f2", $T);
+  caso('o pedaço do token depois do | sai trocado', $s eq "<oculto:PAINEL_TOKEN>\n");
 
   my $outro_gh = 'ghp_' . ('Outro1' x 6);
   ($s) = roda_como_o_claude("echo $outro_gh sk-ant-api03-falsofalsofalsofalso AKIAFALSOFALSO123456 xoxb-falso-falso-falso", $T);
