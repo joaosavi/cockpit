@@ -1,0 +1,9 @@
+[Unit]
+Description=Procura sessões esquecidas de hora em hora
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

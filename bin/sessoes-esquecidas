@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Encerra as sessões do Remote Control paradas há mais de 48 horas.
+
+Roda pelo sessoes-esquecidas.timer. Uma sessão encerrada não volta: a ponte marca
+"Session failed" e recusa a mensagem seguinte. Por isso o prazo é longo, e o normal
+continua sendo arquivar pelo claude.ai.
+  sessoes-esquecidas            encerra
+  sessoes-esquecidas --simular  só lista o que encerraria
+"""
+
+import json
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+CASA = Path.home()
+SESSOES = CASA / ".claude" / "sessions"
+PROJETOS = CASA / ".claude" / "projects"
+PRAZO = 48 * 3600
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def inicio_do_processo(pid):
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+def descendentes(pid):
+    filhos = {}
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit():
+            try:
+                pai = int((d / "stat").read_text().rsplit(")", 1)[1].split()[1])
+            except (OSError, IndexError, ValueError):
+                continue
+            filhos.setdefault(pai, []).append(int(d.name))
+    todos, fila = [], [pid]
+    while fila:
+        for f in filhos.get(fila.pop(), []):
+            todos.append(f)
+            fila.append(f)
+    return todos
+
+
+def ultima_atividade(s):
+    """O mais recente entre a última mudança de estado e a última escrita no histórico."""
+    ultima = max(s.get("statusUpdatedAt", 0), s.get("updatedAt", 0)) / 1000
+    for historico in PROJETOS.glob(f"*/{s.get('sessionId')}.jsonl"):
+        ultima = max(ultima, historico.stat().st_mtime)
+    return ultima
+
+
+def encerrar(pid):
+    alvos = [pid] + descendentes(pid)
+    for p in alvos:
+        try:
+            os.kill(p, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    time.sleep(10)
+    for p in alvos:
+        try:
+            os.kill(p, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def main():
+    simular = "--simular" in sys.argv
+    agora = time.time()
+    for arquivo in sorted(SESSOES.glob("*.json")):
+        try:
+            s = json.loads(arquivo.read_text())
+        except (ValueError, OSError):
+            continue
+        # Só as sessões que a ponte abriu. As de tmux, como a sessoes-limite, ficam de fora.
+        if not s.get("bridgeSessionId") or s.get("status") == "busy":
+            continue
+        pid = s.get("pid")
+        if not pid or inicio_do_processo(pid) != str(s.get("procStart")):
+            continue
+        parada = agora - ultima_atividade(s)
+        if parada < PRAZO:
+            continue
+        log(f"{'encerraria' if simular else 'encerrando'} {s['bridgeSessionId']} "
+            f"({s.get('name')}, pid {pid}), parada há {parada / 3600:.0f} h")
+        if not simular:
+            encerrar(pid)
+
+
+if __name__ == "__main__":
+    main()

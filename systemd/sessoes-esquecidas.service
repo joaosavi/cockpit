@@ -1,0 +1,8 @@
+[Unit]
+Description=Encerra as sessões do Remote Control paradas há mais de 48 horas
+
+[Service]
+Type=oneshot
+User=sv
+MemoryMax=128M
+ExecStart=/usr/bin/python3 /home/sv/.local/bin/sessoes-esquecidas
