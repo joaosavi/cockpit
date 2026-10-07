@@ -69,6 +69,7 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 | `skill-loader` | Entrega a skill certa junto com a ação: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, `technical-writing` em README, commit e PR. Lê o `SKILL.md` do disco, porque a ferramenta Skill chamada por um mod não põe o texto na conversa |
 | `audit` | Grava toda chamada MCP de escrita (Slack, Gmail, HubSpot, Notion, Calendar, Drive) num arquivo por dia em `~/.local/state/mods/audit/`, sem recusar nada, e guarda 30 dias. Na dúvida entre leitura e escrita, grava |
 | `loop-breaker` | Avisa o agente que ele está andando em círculo: 5 edições no mesmo arquivo enquanto um comando segue falhando, o mesmo erro 3 vezes, ou a mesma chamada 3 vezes seguidas. Não recusa nada: o aviso entra no resultado da ferramenta. Reconhece a falha pelo texto mesmo quando um `\| head` esconde o código de saída |
+| `secret-guard` | O porte do `segredo.pl`: troca todo valor de segredo por `<hidden:NOME>` no resultado de qualquer ferramenta, MCP e subagente inclusive, e devolve o valor real quando o agente escreve o placeholder num `.env`. Lê as mesmas fontes do Perl. Roda junto com o `segredo.pl` até o Perl sair do `settings.json` |
 
 Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit`, `/ram` e `/audit [quantidade] [filtro]`.
 

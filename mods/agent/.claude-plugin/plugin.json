@@ -1,6 +1,6 @@
 {
   "name": "agent",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "The bundle with all of the agent's mods. Installing this plugin installs each mod as a dependency",
   "author": {
     "name": "João Savi"
@@ -10,6 +10,7 @@
     "memory-guard",
     "skill-loader",
     "audit",
-    "loop-breaker"
+    "loop-breaker",
+    "secret-guard"
   ]
 }

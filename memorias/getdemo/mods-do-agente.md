@@ -18,7 +18,7 @@ Em 07/10/2026 entrou o `audit` (`/audit`), que grava as chamadas MCP de escrita 
 
 Também entrou o `loop-breaker`.
 
-A ordem que falta: o `segredo.pl` portado para mod (rodam juntos até o mod passar nos casos do `--teste`).
+O `secret-guard` (porte do `segredo.pl`, placeholder `<hidden:NOME>`, aceita `<oculto:NOME>` no restore) entrou em 07/10/2026 rodando junto com o Perl. O Perl roda antes do mod, então comparar os dois lado a lado não prova nada: a prova foi a sessão isolada (`CLAUDE_CONFIG_DIR` próprio, sem os hooks, segredos falsos), com zero vazamento. Erro de hook no mod fecha a saída com `deny`. Falta decidir quando tirar o Perl do `settings.json`.
 
 No mod `usage-limit`, o João escolheu: em 98% a sessão pausa e retoma sozinha quando a janela volta; um prompt dele (terminal, Remote Control ou `claude -p`) ganha um turno sem subagente; prompt automático fica guardado para a retomada.
 

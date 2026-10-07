@@ -34,6 +34,11 @@
       "name": "loop-breaker",
       "source": "./mods/loop-breaker",
       "description": "Notices when the agent goes in circles and tells it to stop and change approach. Refuses nothing"
+    },
+    {
+      "name": "secret-guard",
+      "source": "./mods/secret-guard",
+      "description": "Replaces every secret value in tool output with <hidden:NAME> before the agent reads it, and puts the real value back when the agent writes the placeholder into a secret file"
     }
   ]
 }

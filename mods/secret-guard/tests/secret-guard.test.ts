@@ -1,0 +1,398 @@
+import { expect, mock, test } from 'claude-code/testing'
+import { accepts, buildTable, candidates, expandHome, options } from '../hooks/rules.ts'
+
+// Every secret here is fake and assembled at run time, so no file of the mod holds a string that looks
+// like a real token, and the tests never touch the real filesystem or environment.
+const FAKE_GH = 'ghp_' + 'Test00'.repeat(6)
+const FAKE_AUTH = 'fake-session-secret-' + 'x'.repeat(40)
+const FAKE_PG = 'fake-db-password-123'
+const FAKE_BI = 'fake-bi-password-4567'
+const FAKE_NEW = 'fake-token-that-came-later'
+const PUBLISHED = 'password-published-in-example'
+const FAKE_API = 'FakePanelTokenWithoutSeparator0123456789'
+// `p@ss/word:xyz-fake` written in a URL, where it must be percent-encoded.
+const FAKE_ENCODED = 'p%40ss%2Fword%3Axyz-fake'
+const FAKE_DECODED = 'p@ss/word:xyz-fake'
+const OTHER_GH = 'ghp_' + 'Other1'.repeat(6)
+const FAKE_ANTHROPIC = 'sk-' + 'ant-' + 'fake' + 'A'.repeat(24)
+const FAKE_AWS = 'AK' + 'IA' + 'FAKE' + '0'.repeat(12)
+const FAKE_SLACK = 'xo' + 'xb-' + 'fake-1234567890'
+const SHORT = 'short-pw'
+
+const HOME = '/home/u'
+const SECRETS = `${HOME}/.secrets`
+const ROOT = `${HOME}/getdemo`
+const ENV_BI = `${ROOT}/bi/apps/bi/.env`
+const EXAMPLE = `${ROOT}/bi/.env.example`
+const NOTES = `${ROOT}/bi/notes.md`
+const START = 1_000_000_000
+
+const ALL_FAKES = [FAKE_GH, FAKE_AUTH, FAKE_PG, FAKE_BI, FAKE_API, FAKE_ENCODED, FAKE_DECODED, FAKE_NEW]
+const leaks = (s: string) => ALL_FAKES.filter((v) => s.includes(v))
+
+type FakeFile = { text: string; mtimeMs: number }
+type ToolAnswer = { result: unknown; text?: string } | { isError: true; result: unknown; text: string }
+type World = {
+  files: Map<string, FakeFile>
+  environ: Record<string, string>
+  // The inputs each tool call reached core with, after the mod's hook.
+  calls: Record<string, unknown>[]
+  answers: ToolAnswer[]
+  // What each tool call does while it runs, in order; a missing one does nothing.
+  effects: Array<() => void>
+  writes: Map<string, string>
+}
+
+function envBi(extra = ''): string {
+  return [
+    `BETTER_AUTH_SECRET=${FAKE_AUTH}`,
+    'BETTER_AUTH_URL=http://localhost:3000',
+    'PORT=3000',
+    `DATABASE_URL=postgres://bi:${FAKE_BI}@127.0.0.1:5432/bi`,
+    `WAREHOUSE_DATABASE_URL=postgres://w:${PUBLISHED}@localhost/w`,
+    `PANEL_TOKEN=7|${FAKE_API}`,
+    `ENCODED_URL=postgres://e:${FAKE_ENCODED}@db/e`,
+    `SHORT_TOKEN=${SHORT}`,
+    extra,
+  ].join('\n')
+}
+
+function freshWorld(): World {
+  return {
+    files: new Map([
+      [SECRETS, { text: `# fake\nexport GITHUB_TOKEN=${FAKE_GH}\nexport BI_MCP_PG_URL=postgres://mcp:${FAKE_PG}@db:5432/x\n`, mtimeMs: 0 }],
+      [ENV_BI, { text: envBi(), mtimeMs: 0 }],
+      [EXAMPLE, { text: `WAREHOUSE_DATABASE_URL=postgres://w:${PUBLISHED}@localhost/w\n`, mtimeMs: 0 }],
+      [NOTES, { text: '# notes\n', mtimeMs: 0 }],
+      [`${ROOT}/bi/node_modules/pkg/.env`, { text: `NODE_MODULES_TOKEN=${'n'.repeat(30)}\n`, mtimeMs: 0 }],
+    ]),
+    environ: { HOME, PATH: '/usr/bin:/bin', GITHUB_TOKEN: FAKE_GH, LANG: 'C.UTF-8' },
+    calls: [],
+    answers: [],
+    effects: [],
+    writes: new Map(),
+  }
+}
+
+function isDir(w: World, path: string): boolean {
+  const prefix = path.endsWith('/') ? path : path + '/'
+  for (const f of w.files.keys()) if (f.startsWith(prefix)) return true
+  return false
+}
+
+function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
+  const clock = mock.clock(on, { now: START })
+  mock.env(on, { HOME })
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('fs.read', ($, e) => {
+    if (e.path === '/proc/self/environ') return { value: Object.entries(w.environ).map(([k, v]) => `${k}=${v}`).join('\0') + '\0' }
+    const written = w.writes.get(e.path)
+    if (written !== undefined) return { value: written }
+    const f = w.files.get(e.path)
+    return f === undefined ? { deny: 'ENOENT' } : { value: f.text }
+  })
+  on('fs.write', ($, e) => {
+    w.writes.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('fs.list', ($, e) => {
+    if (!isDir(w, e.path)) return { deny: 'ENOTDIR' }
+    const prefix = e.path + '/'
+    const names = new Map<string, 'file' | 'dir'>()
+    for (const f of w.files.keys()) {
+      if (!f.startsWith(prefix)) continue
+      const rest = f.slice(prefix.length)
+      const slash = rest.indexOf('/')
+      names.set(slash < 0 ? rest : rest.slice(0, slash), slash < 0 ? 'file' : 'dir')
+    }
+    return { value: [...names].sort().map(([name, kind]) => ({ name, kind, size: 0, mtimeMs: 0, isLink: false })) }
+  })
+  on('fs.stat', ($, e) => {
+    const f = w.files.get(e.path)
+    const realPath = e.resolve ? e.path : undefined
+    if (f !== undefined) return { value: { kind: 'file', size: f.text.length, mtimeMs: f.mtimeMs, isLink: false, realPath } }
+    if (isDir(w, e.path)) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false, realPath } }
+    return { deny: 'ENOENT' }
+  })
+  on('tool.call', ($, e) => {
+    w.calls.push({ ...e })
+    w.effects.shift()?.()
+    return w.answers.shift() ?? { result: 'ok', text: 'ok' }
+  })
+  return clock
+}
+
+function bash(stdout: string): ToolAnswer {
+  return { result: { stdout, stderr: '', interrupted: false }, text: stdout }
+}
+
+function stdoutOf(r: unknown): string {
+  const result: unknown = typeof r === 'object' && r !== null ? Reflect.get(r, 'result') : undefined
+  const out: unknown = typeof result === 'object' && result !== null ? Reflect.get(result, 'stdout') : undefined
+  return typeof out === 'string' ? out : ''
+}
+
+function dump(r: unknown): string {
+  return JSON.stringify(r)
+}
+
+// --- the cases of segredo.pl --teste --------------------------------------------------------------
+
+test('env output hides the environment token', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`HOME=${HOME}\nGITHUB_TOKEN=${FAKE_GH}\nLANG=C.UTF-8\n`))
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'env' })
+  expect(leaks(dump(r))).toEqual([])
+  expect(stdoutOf(r)).toMatch(/^GITHUB_TOKEN=<hidden:GITHUB_TOKEN>$/m)
+})
+
+test('printenv output hides the environment token', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`GITHUB_TOKEN=${FAKE_GH}\n`))
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'printenv' })
+  expect(stdoutOf(r)).toBe('GITHUB_TOKEN=<hidden:GITHUB_TOKEN>\n')
+})
+
+test('cat of a .env hides the secret and the URL password', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(envBi()))
+  setup(on, w)
+  const s = stdoutOf(await $.tool.call({ tool: 'Bash', command: `cat ${ENV_BI}` }))
+  expect(leaks(s)).toEqual([])
+  expect(s).toMatch(/^BETTER_AUTH_SECRET=<hidden:BETTER_AUTH_SECRET>$/m)
+  expect(s).toMatch(/^DATABASE_URL=postgres:\/\/bi:<hidden:DATABASE_URL>@127\.0\.0\.1/m)
+})
+
+test('cat of a .env leaves what is not a secret, and the value published in .env.example', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(envBi()))
+  setup(on, w)
+  const s = stdoutOf(await $.tool.call({ tool: 'Bash', command: `cat ${ENV_BI}` }))
+  expect(s).toMatch(/^BETTER_AUTH_URL=http:\/\/localhost:3000$/m)
+  expect(s).toMatch(/^PORT=3000$/m)
+  expect(s).toContain(PUBLISHED)
+})
+
+test('reading the secrets file hides every value, whatever its name', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(w.files.get(SECRETS)?.text ?? ''))
+  setup(on, w)
+  const s = stdoutOf(await $.tool.call({ tool: 'Bash', command: `sed -n p ${SECRETS}` }))
+  expect(leaks(s)).toEqual([])
+  expect(s).toContain('<hidden:GITHUB_TOKEN>')
+  expect(s).toContain('postgres://mcp:<hidden:BI_MCP_PG_URL>@db')
+})
+
+test('echo of the token prints only the placeholder', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(FAKE_GH + '\n'))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'echo $GITHUB_TOKEN' }))).toBe('<hidden:GITHUB_TOKEN>\n')
+})
+
+test('the env | grep GIT of a subagent on 2026-10-02 is hidden too', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`GITHUB_TOKEN=${FAKE_GH}\n`))
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'env | grep GIT', agentId: 'subagent-1' })
+  expect(w.calls[0]).toMatchObject({ agentId: 'subagent-1' })
+  expect(stdoutOf(r)).toBe('GITHUB_TOKEN=<hidden:GITHUB_TOKEN>\n')
+})
+
+test('the Read of a .env keeps the result shape and names what it hid', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push({ result: { type: 'text', file: { filePath: ENV_BI, content: `BETTER_AUTH_SECRET=${FAKE_AUTH}\n`, numLines: 1 } } })
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Read', file_path: ENV_BI })
+  expect(r).toMatchObject({
+    result: { type: 'text', file: { filePath: ENV_BI, content: 'BETTER_AUTH_SECRET=<hidden:BETTER_AUTH_SECRET>\n', numLines: 1 } },
+    context: [expect.stringContaining('BETTER_AUTH_SECRET')],
+  })
+  expect(Reflect.get(r, 'ref')).toBeUndefined()
+})
+
+test('a failed command loading the .env does not leak the token piece in its error', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push({ isError: true, result: `zsh: command not found: ${FAKE_API}`, text: `Exit code 127\nzsh: command not found: ${FAKE_API}` })
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: `set -a; . ${ENV_BI}` })
+  expect(leaks(dump(r))).toEqual([])
+  expect(r).toMatchObject({ deny: expect.stringContaining('zsh: command not found: <hidden:PANEL_TOKEN>') })
+  expect(r).toMatchObject({ deny: expect.stringContaining('Exit code 127') })
+})
+
+test('the piece of the token after the | is hidden', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(FAKE_API + '\n'))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: `grep PANEL ${ENV_BI} | cut -d'|' -f2` }))).toBe('<hidden:PANEL_TOKEN>\n')
+})
+
+test('a known token format is hidden even when it is in no list', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`${OTHER_GH} ${FAKE_ANTHROPIC} ${FAKE_AWS} ${FAKE_SLACK}\n`))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'echo tokens' }))).toBe('<hidden:github> <hidden:anthropic> <hidden:aws> <hidden:slack>\n')
+})
+
+test('an output without a secret passes as it came, the same object', async ($, on) => {
+  const w = freshWorld()
+  const answer = { result: { type: 'text', file: { content: 'PORT=3000' } }, text: 'PORT=3000' }
+  w.answers.push(answer)
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Read', file_path: NOTES })
+  expect(r).toEqual(answer)
+  expect(Reflect.get(r, 'context')).toBeUndefined()
+})
+
+test('in an MCP result the list of blocks keeps its shape', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push({ result: [{ type: 'text', text: `url ${FAKE_GH}` }] })
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'mcp__database__query', sql: 'select 1' })
+  expect(r).toMatchObject({ result: [{ type: 'text', text: 'url <hidden:GITHUB_TOKEN>' }] })
+})
+
+test('an Edit of a .env gets back the hidden value, in both placeholder spellings', async ($, on) => {
+  const w = freshWorld()
+  setup(on, w)
+  const r = await $.tool.call({
+    tool: 'Edit',
+    file_path: ENV_BI,
+    old_string: 'BETTER_AUTH_SECRET=<hidden:BETTER_AUTH_SECRET>',
+    new_string: 'BETTER_AUTH_SECRET=<hidden:BETTER_AUTH_SECRET>\nCOPY=<oculto:BETTER_AUTH_SECRET>\nOTHER=<hidden:UNKNOWN_NAME>',
+  })
+  expect(w.calls[0]).toMatchObject({
+    file_path: ENV_BI,
+    old_string: `BETTER_AUTH_SECRET=${FAKE_AUTH}`,
+    new_string: `BETTER_AUTH_SECRET=${FAKE_AUTH}\nCOPY=${FAKE_AUTH}\nOTHER=<hidden:UNKNOWN_NAME>`,
+  })
+  expect(r).toMatchObject({ context: [expect.stringContaining('real value')] })
+})
+
+test('a Write of a .env restores the whole token and the URL password as written', async ($, on) => {
+  const w = freshWorld()
+  setup(on, w)
+  await $.tool.call({ tool: 'Write', file_path: ENV_BI, content: 'PANEL_TOKEN=<hidden:PANEL_TOKEN>\nDATABASE_URL=postgres://bi:<hidden:DATABASE_URL>@h/bi\nGH=<hidden:GITHUB_TOKEN>' })
+  expect(w.calls[0]).toMatchObject({ content: `PANEL_TOKEN=7|${FAKE_API}\nDATABASE_URL=postgres://bi:${FAKE_BI}@h/bi\nGH=${FAKE_GH}` })
+})
+
+test('an Edit of a normal file restores nothing', async ($, on) => {
+  const w = freshWorld()
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Edit', file_path: NOTES, old_string: '# notes', new_string: 'COPY=<hidden:BETTER_AUTH_SECRET>' })
+  expect(w.calls[0]).toMatchObject({ new_string: 'COPY=<hidden:BETTER_AUTH_SECRET>' })
+  expect(Reflect.get(r, 'context')).toBeUndefined()
+})
+
+test('the list is rebuilt when a .env changes', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('first'), bash(envBi(`NEW_TOKEN=${FAKE_NEW}`)))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(2000)
+  w.files.set(ENV_BI, { text: envBi(`NEW_TOKEN=${FAKE_NEW}`), mtimeMs: clock.now() })
+  const s = stdoutOf(await $.tool.call({ tool: 'Bash', command: `cat ${ENV_BI}` }))
+  expect(s).not.toContain(FAKE_NEW)
+  expect(s).toContain('<hidden:NEW_TOKEN>')
+})
+
+// --- beyond segredo.pl --teste -------------------------------------------------------------------
+
+test('a value the tool itself just wrote to a .env is hidden in that same result', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('warm-up'), bash(`NEW_TOKEN=${FAKE_NEW}\n`))
+  const clock = setup(on, w)
+  // The second call writes the file while it runs, as a Bash `echo >> .env` would.
+  w.effects.push(() => undefined, () => w.files.set(ENV_BI, { text: envBi(`NEW_TOKEN=${FAKE_NEW}`), mtimeMs: clock.now() }))
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  const s = stdoutOf(await $.tool.call({ tool: 'Bash', command: `echo NEW_TOKEN=... >> ${ENV_BI}; cat ${ENV_BI}` }))
+  expect(s).toBe('NEW_TOKEN=<hidden:NEW_TOKEN>\n')
+})
+
+test('the list is rebuilt after 10 minutes even when no watched source changed', async ($, on) => {
+  const w = freshWorld()
+  const deep = `${ROOT}/a/b/c/d/e/.env`
+  w.answers.push(bash('first'), bash(`DEEP_TOKEN=${'d'.repeat(20)}\n`), bash(`DEEP_TOKEN=${'d'.repeat(20)}\n`))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  // A file in a folder whose mtime is not watched: the stub leaves every folder's mtime at 0.
+  w.files.set(deep, { text: `DEEP_TOKEN=${'d'.repeat(20)}\n`, mtimeMs: 0 })
+  await clock.advance(60_000)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: `cat ${deep}` }))).toContain('d'.repeat(20))
+  await clock.advance(10 * 60_000)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: `cat ${deep}` }))).toBe('DEEP_TOKEN=<hidden:DEEP_TOKEN>\n')
+})
+
+test('the URL password is hidden as written and URL-decoded', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`raw ${FAKE_ENCODED}\ndecoded ${FAKE_DECODED}\n`))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe('raw <hidden:ENCODED_URL>\ndecoded <hidden:ENCODED_URL>\n')
+})
+
+test('a value shorter than the minimum length is left alone', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`SHORT_TOKEN=${SHORT}\n`))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe(`SHORT_TOKEN=${SHORT}\n`)
+})
+
+test('a .env under node_modules is not read', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('n'.repeat(30)))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe('n'.repeat(30))
+})
+
+test('secrets nested deep in an MCP result are hidden, and other fields kept', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push({ result: { rows: [{ id: 1, conf: { url: `postgres://bi:${FAKE_BI}@h/bi`, tags: ['a', FAKE_AUTH] }, ok: true }], count: 1 } })
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'mcp__database__query', sql: 'select 1' })
+  expect(r).toMatchObject({
+    result: { rows: [{ id: 1, conf: { url: 'postgres://bi:<hidden:DATABASE_URL>@h/bi', tags: ['a', '<hidden:BETTER_AUTH_SECRET>'] }, ok: true }], count: 1 },
+  })
+})
+
+test('the result of a subagent call itself is hidden', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push({ result: { content: [{ type: 'text', text: `found ${FAKE_GH}` }] } })
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Agent', description: 'look', prompt: 'look', subagent_type: 'Explore' })
+  expect(leaks(dump(r))).toEqual([])
+  expect(dump(r)).toContain('found <hidden:GITHUB_TOKEN>')
+})
+
+test('the diary records names and counts, never a value', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`${FAKE_GH} ${FAKE_GH} ${FAKE_AUTH}`))
+  setup(on, w)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.tool.call({ tool: 'Bash', command: 'x' })
+  const diary = [...w.writes].find(([p]) => p.includes('/.local/state/mods/secret-guard/'))
+  expect(diary?.[0]).toMatch(/\/home\/u\/\.local\/state\/mods\/secret-guard\/\d{4}-\d\d-\d\d-abcdef12\.jsonl$/)
+  const text = diary?.[1] ?? ''
+  expect(leaks(text)).toEqual([])
+  expect(text).toContain('"event":"redacted","tool":"Bash","agent":null,"names":["BETTER_AUTH_SECRET","GITHUB_TOKEN"],"count":3')
+})
+
+test('the rules: candidates, accepts, options', () => {
+  expect(candidates('PANEL_TOKEN', `7|${FAKE_API}`, false)).toEqual([['PANEL_TOKEN', `7|${FAKE_API}`], ['PANEL_TOKEN', '7'], ['PANEL_TOKEN', FAKE_API]])
+  expect(candidates('BETTER_AUTH_URL', 'http://localhost:3000', false)).toEqual([])
+  expect(candidates('PLAIN', 'not-a-secret-name-value', false)).toEqual([])
+  expect(candidates('PLAIN', 'not-a-secret-name-value', true)).toEqual([['PLAIN', 'not-a-secret-name-value']])
+  expect(accepts('/an/absolute/path/value', 12)).toBe(false)
+  expect(accepts('${SOME_VARIABLE}', 12)).toBe(false)
+  expect(accepts('<oculto:GITHUB_TOKEN>', 12)).toBe(false)
+  expect(accepts('<hidden:GITHUB_TOKEN>', 12)).toBe(false)
+  expect(accepts('long-enough-value', 12)).toBe(true)
+  expect(options({ minLength: 8, secretsFile: '~/s' })).toEqual({ secretsFile: '~/s', envRoot: '~/getdemo', minLength: 8 })
+  expect(expandHome('~/getdemo', HOME)).toBe(`${HOME}/getdemo`)
+  const t = buildTable({ secrets: null, envFiles: [], environ: [['SEGREDO_CACHE_TOKEN', 'ignored-perl-test-var'], ['API_KEY', 'env-api-key-value-fake']], minLength: 12 })
+  expect([...t.nameOf]).toEqual([['env-api-key-value-fake', 'API_KEY']])
+})
