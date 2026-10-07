@@ -1,0 +1,6 @@
+{
+  "name": "skills",
+  "version": "0.1.0",
+  "description": "Carrega a skill certa na hora certa: typescript-best-practices ao ler .ts, writing-for-agents em SKILL.md, AGENTS.md e CLAUDE.md, domain-modeling em CONTEXT.md e ADR, technical-writing em README, commit e PR, e lembra a diagnosing-bugs quando o prompt traz um erro",
+  "author": { "name": "João Savi" }
+}

@@ -1,10 +1,29 @@
 {
   "name": "agente",
-  "owner": { "name": "João Savi" },
+  "owner": {
+    "name": "João Savi"
+  },
   "description": "Os mods do agente: o que antes era regra no CLAUDE.md ou script no timer, agora roda dentro do Claude Code",
   "plugins": [
-    { "name": "agente", "source": "./mods/agente", "description": "O pacote com todos os mods do agente. Instalar este plugin instala cada mod como dependência" },
-    { "name": "limite", "source": "./mods/limite", "description": "Segura o limite de uso da conta: um subagente por vez acima de 90%, pausa com reserva em 98% e retoma sozinho quando a janela volta" },
-    { "name": "memoria", "source": "./mods/memoria", "description": "Segura typecheck, build, teste e Playwright abaixo do alto de memória: roda com um processo só, espera ou recusa, e repete o comando que morreu com exit 137" }
+    {
+      "name": "agente",
+      "source": "./mods/agente",
+      "description": "O pacote com todos os mods do agente. Instalar este plugin instala cada mod como dependência"
+    },
+    {
+      "name": "limite",
+      "source": "./mods/limite",
+      "description": "Segura o limite de uso da conta: um subagente por vez acima de 90%, pausa com reserva em 98% e retoma sozinho quando a janela volta"
+    },
+    {
+      "name": "memoria",
+      "source": "./mods/memoria",
+      "description": "Segura typecheck, build, teste e Playwright abaixo do alto de memória: roda com um processo só, espera ou recusa, e repete o comando que morreu com exit 137"
+    },
+    {
+      "name": "skills",
+      "source": "./mods/skills",
+      "description": "Carrega a skill certa na hora certa: typescript-best-practices ao ler .ts, writing-for-agents em SKILL.md, AGENTS.md e CLAUDE.md, domain-modeling em CONTEXT.md e ADR, technical-writing em README, commit e PR"
+    }
   ]
 }

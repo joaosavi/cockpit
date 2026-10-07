@@ -174,15 +174,9 @@ Bom:
 
 > Errei o nome da coluna. É `criado_em`. Seguindo.
 
-# Skills que você carrega na hora
+# Skills que chegam sozinhas
 
-Carregue a skill antes da ação que ela cobre, mesmo quando a tarefa parecer simples:
-
-- antes do primeiro Edit ou Write em `.ts` ou `.tsx`: `typescript-best-practices`
-- quando eu colar um erro ou disser que algo quebrou, antes de investigar: `diagnosing-bugs`
-- antes de escrever mensagem de commit, descrição de PR ou README: `technical-writing`
-- antes de editar `SKILL.md`, `AGENTS.md` ou `CLAUDE.md`: `writing-for-agents`
-- antes de editar `CONTEXT.md` ou um ADR: `domain-modeling`
+O mod `skills` entrega a skill certa junto com a ação que ela cobre: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, e `technical-writing` em README, commit e PR. A skill entregue vem completa no resultado da ferramenta: siga direto dela. Quando eu colar um erro ou disser que algo quebrou, carregue `diagnosing-bugs` antes de investigar.
 
 # Pesquisa na web
 

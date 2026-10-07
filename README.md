@@ -66,6 +66,7 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 | `agente` | O pacote. Não tem código: instala os outros como dependência |
 | `limite` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta |
 | `memoria` | Antes de typecheck, teste, build ou Playwright, confere se o comando cabe no alto de memória do grupo, menos 2%. Se não cabe, roda com um processo só, espera até 2 minutos ou recusa. Repete com um processo só o comando que morreu com exit 137, e guarda o pico de cada comando para a próxima conta |
+| `skills` | Entrega a skill certa junto com a ação: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, `technical-writing` em README, commit e PR. Lê o `SKILL.md` do disco, porque a ferramenta Skill chamada por um mod não põe o texto na conversa |
 
 Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`.
 
@@ -81,7 +82,7 @@ Para mudar um mod:
 	```
 
 2. Suba o `version` no `.claude-plugin/plugin.json` do mod. Sem a versão nova, o Claude Code mantém a cópia antiga.
-3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/agente/.claude-plugin/plugin.json`, suba o `version` do `agente` e registre o mod no `.claude-plugin/marketplace.json`.
+3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/agente/.claude-plugin/plugin.json`, suba o `version` do `agente` e registre o mod no `.claude-plugin/marketplace.json`. Para instalar na hora, sem esperar a atualização automática, rode `claude plugin install agente@agente`. O `claude plugin update` sozinho atualiza o pacote mas não instala a dependência nova.
 
 O marketplace `agente` tem atualização automática ligada no `settings.json`. Depois da mudança, a primeira sessão que abre atualiza a cópia instalada e instala a dependência que entrou, e as sessões abertas a partir daí carregam a versão nova. As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
 
