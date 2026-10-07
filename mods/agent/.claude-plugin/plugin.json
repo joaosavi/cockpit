@@ -1,7 +1,7 @@
 {
   "name": "agent",
-  "version": "1.1.0",
-  "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings and /wtf.",
+  "version": "1.2.0",
+  "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner tip line.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
@@ -27,6 +27,7 @@
     "mod-report",
     "rating",
     "wtf",
-    "hud"
+    "hud",
+    "tip"
   ]
 }

@@ -8,7 +8,7 @@
     {
       "name": "agent",
       "source": "./mods/agent",
-      "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings and /wtf."
+      "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner tip line."
     },
     {
       "name": "usage-limit",
@@ -69,6 +69,11 @@
       "name": "hud",
       "source": "./mods/hud",
       "description": "A heads-up display above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view"
+    },
+    {
+      "name": "tip",
+      "source": "./mods/tip",
+      "description": "Replaces the tip under the spinner with one short line from Haiku: where this session stands, or a tip about your mods and their commands that fits the moment"
     }
   ]
 }

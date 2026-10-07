@@ -21,6 +21,7 @@ claude plugin install agent@agent
 - `mod-report`: `/mods`, what each mod did and what it cost per tool call.
 - `rating`: records every turn as a dataset with your 1-5 ratings and weak labels. `/rate`, `/ratings` and a band above the prompt.
 - `wtf`: `/wtf`, a cheap Haiku summary of where the session is and what it needs from you.
+- `tip`: replaces the tip under the spinner with one Haiku line: where the session stands, or a tip about these mods. Needs `"spinnerTipsEnabled": false` in settings.
 
 Each mod has its own README with its options, what it records and what it costs.
 

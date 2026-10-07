@@ -97,7 +97,8 @@
     "mod-report@agent": true,
     "rating@agent": true,
     "wtf@agent": true,
-    "hud@agent": true
+    "hud@agent": true,
+    "tip@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -161,6 +162,11 @@
       "options": {
         "configRepo": "~/claude-devcontainer"
       }
+    },
+    "tip@agent": {
+      "options": {
+        "language": "Portuguese"
+      }
     }
   },
   "autoUpdatesChannel": "latest",
@@ -171,5 +177,6 @@
   "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "autoCompactWindow": 400000
+  "autoCompactWindow": 733000,
+  "spinnerTipsEnabled": false
 }
