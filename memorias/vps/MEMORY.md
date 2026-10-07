@@ -8,3 +8,4 @@
 - [Download por scp](download-por-scp.md) — entregas em /home/sv/esag/entrega, com comando scp pronto
 - [Validar por cadeia](validar-por-cadeia.md) — para o João conferir fato ou raciocínio, usar a skill global chain-check
 - [TeamSpeak na VPS](teamspeak-na-vps.md) — TS6 da galera no Coolify, ts.joaosavi.cloud; admin por ~/tsq/q.sh
+- [Testar no PC](testar-no-pc.md) — mudou algo para o João testar: push e comandos para atualizar no PC dele

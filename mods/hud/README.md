@@ -18,9 +18,10 @@ Set it in `~/.claude/settings.json`, and set `band` to `off` so the rows do not 
 }
 ```
 
-The path above is a clone of the repo. An installed copy lives under the `installPath` that
-`~/.claude/plugins/installed_plugins.json` lists for `hud@agent`, and that path changes with each
-version, so a clone is the steadier target. The script needs Node 22.18 or later, which runs its
+The path above is a clone of the repo. When the marketplace was added from GitHub, Claude Code keeps
+its own clone at `~/.claude/plugins/marketplaces/agent`, and `claude plugin marketplace update agent`
+keeps it current, so `~/.claude/plugins/marketplaces/agent/mods/hud/statusline/statusline.sh` works
+too. The `installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18 or later, which runs its
 TypeScript as is.
 
 The status line reads the model, the folder, the context window and the plan limits from the JSON
