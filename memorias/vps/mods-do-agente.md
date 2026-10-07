@@ -40,9 +40,10 @@ Em 07/10/2026 (noite) entraram o `hud` (faixa `panel` + atividade, `/hud`), o `w
 Pendências do João (atualizado em 07/10/2026, fim da noite):
 - tirar o `segredo.pl` do `settings.json` depois de uns dias de `secret-guard` sem erro (olhar o diário e o `/mods`)
 - instalar o pacote no PC de casa: `claude plugin marketplace add joaosavi/claude-devcontainer`, `claude plugin install agent@agent`, ligar autoUpdate, e conferir o `hud`
-- decidir se desliga a statusline do `claude-hud`, que repete o que a faixa do `hud` mostra
 - para publicar o marketplace de verdade: o repo é privado e tem memória da empresa, então os mods precisam ir para um repo público próprio, com arquivo LICENSE
 - julgar cada mod pelo `/mods` e pelo `/ratings` depois de alguns dias de uso real
+
+Em 07/10/2026 o João escolheu o painel do `hud` embaixo do prompt. Mod não desenha embaixo do prompt (só `$.ui.status`, uma linha com `⚠ hud:`, e o `tail` da linha de dica), então o `hud` 1.2.0 traz `statusline/statusline.sh`, que lê o JSON nativo da statusline e o arquivo `~/.local/state/mods/hud/live/<sessão>.json` com as chamadas. Na VPS ele substituiu o `claude-hud` (desligado) e a faixa de cima ficou com `band: off`, mostrando só a atividade do turno. Próximo pedido dele: trocar a dica do spinner por uma linha do Haiku (dica dos mods e resumo da sessão), com `spinnerTipsEnabled: false` e gancho no `Spinner`.
 
 **Why:** regra em CLAUDE.md depende de o modelo lembrar; o mod é determinístico.
 **How to apply:** mod novo entra no marketplace `agent`, em inglês, com teste. Ver [[vps-claude-devcontainer]].
