@@ -1,6 +1,6 @@
 {
   "name": "secret-guard",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Replaces the value of every secret with <hidden:NAME> in every tool result, MCP and subagent calls included, and puts the real value back when the agent writes the placeholder into a .env file. Refuses nothing",
   "author": { "name": "João Savi" },
   "userConfig": {

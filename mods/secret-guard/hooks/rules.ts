@@ -53,6 +53,9 @@ export const SKIPPED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git'
 export const SCAN_DEPTH = 5
 export const WATCHED_FROM_DEPTH = 2
 
+// The folders are checked for a new `.env` at most this often, unless a call touched a secret file.
+export const DIRS_CHECK_MS = 60 * 1000
+
 // The list is rebuilt at least this often even when no source changed, to catch a `.env` born in a
 // folder deeper than the ones whose mtime is watched.
 export const MAX_AGE_MS = 10 * 60 * 1000

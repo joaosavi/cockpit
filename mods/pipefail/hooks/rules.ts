@@ -5,9 +5,10 @@
 // `|` or `(`, with optional `VAR=value` and `timeout N` in front.
 const START = String.raw`(?:^|[;&|(]\s*)(?:[A-Z_]+=\S+\s+)*(?:timeout\s+\d+\s+)?`
 const MANAGER = String.raw`(?:yarn(?:\s+workspace\s+\S+)?|npm\s+run|pnpm(?:\s+--filter\s+\S+)?|bun\s+run)`
+// The runner alone is the first group, so the diary can name it without the rest of the command.
 const RUNNER = new RegExp(
   START +
-    String.raw`(?:` +
+    String.raw`(` +
     String.raw`${MANAGER}\s+(?:turbo\s+run\s+)?(?:test|e2e|typecheck|lint|check|verificar|regras|vitest|playwright)\S*` +
     String.raw`|npm\s+test|(?:npx\s+|yarn\s+|bunx\s+)?(?:turbo\s+run\s+\S+|vitest|jest|playwright\s+test|tsc|vue-tsc|eslint)` +
     String.raw`|pytest|python3?\s+-m\s+pytest|go\s+test|cargo\s+test` +
@@ -35,8 +36,19 @@ export function executable(command: string): string {
 // pipeline's exit code is the filter's and a failing test exits 0.
 export function needsPipefail(command: string): boolean {
   if (/\bpipefail\b/.test(command)) return false
-  // `2>&1` holds an `&` that is not a command separator.
-  return RUNNER.test(executable(command).replace(/\s\d?>&\d/g, ' '))
+  return RUNNER.test(runnable(command))
+}
+
+// `2>&1` holds an `&` that is not a command separator.
+function runnable(command: string): string {
+  return executable(command).replace(/\s\d?>&\d/g, ' ')
+}
+
+// The runner part of a command that needs pipefail, as `yarn vitest` or `npx tsc`, without its
+// arguments, so the diary groups the rewrites by runner and never holds a whole command.
+export function runnerKey(command: string): string {
+  const m = RUNNER.exec(runnable(command))
+  return (m?.[1] ?? '').trim().replace(/\s+/g, ' ')
 }
 
 export function withPipefail(command: string): string {

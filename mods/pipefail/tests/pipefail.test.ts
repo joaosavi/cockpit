@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { needsPipefail } from '../hooks/rules.ts'
+import { needsPipefail, runnerKey } from '../hooks/rules.ts'
 
 // The pipe cases of zippi's .claude/hooks/guard-bash.sh --teste: what it refuses gets pipefail here.
 test('a runner piped into tail, head or grep gets pipefail', () => {
@@ -30,4 +30,12 @@ test('what does not hide a runner exit code is left alone', () => {
     'echo "rode yarn vitest | tail depois" && ls',
     "git commit -F - <<'EOF'\nyarn vitest run | tail\nEOF",
   ]) expect([c, needsPipefail(c)]).toEqual([c, false])
+})
+
+test('the diary key is the runner without its arguments', () => {
+  expect(runnerKey('cd apps/bi && yarn vitest run src/x.test.ts 2>&1 | tail -20')).toBe('yarn vitest')
+  expect(runnerKey('timeout 590 yarn turbo run test --filter=@getdemo/bi | head -40')).toBe('yarn turbo run test')
+  expect(runnerKey('CI=1 yarn playwright test --reporter=list 2>&1 | tail -14')).toBe('yarn playwright')
+  expect(runnerKey('npx tsc --noEmit -p . | head -30')).toBe('npx tsc')
+  expect(runnerKey('pytest -q | tail -3')).toBe('pytest')
 })

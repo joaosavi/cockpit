@@ -3,6 +3,10 @@
 //
 // All sessions share the day's file. The mod appends with `cat >>`, which the kernel writes in one
 // piece for a line under 4 KiB, so two sessions writing at once do not erase each other's lines.
+//
+// At the end of each session, one summary line goes to the same day file: the MCP calls the mod saw,
+// how many it recorded, and the time its tool.call hook spent outside `next`. `/audit` skips it,
+// because it has no `action`.
 
 import type { Elements, Hook, On, PluginOptions, RenderElement } from 'claude-code'
 import {
@@ -25,6 +29,7 @@ import {
   request,
   summarize,
 } from './rules.ts'
+import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
@@ -41,6 +46,7 @@ let o: Options = DEFAULTS
 let folder = ''
 let session = ''
 let cwd = ''
+let tally = newTally()
 
 async function today($: Api): Promise<string> {
   return new Date(await $.clock.now()).toISOString().slice(0, 10)
@@ -50,6 +56,33 @@ async function append($: Api, entry: Entry) {
   if (folder === '') return
   const file = `${folder}/${fileName(entry.at.slice(0, 10))}`
   await $.process.run(['sh', '-c', 'cat >> "$1"', 'sh', file], { stdin: line(entry) + '\n' })
+}
+
+// The session summary, appended to the day file like an entry.
+async function appendSummary($: Api, fields: Record<string, unknown>) {
+  if (folder === '') return
+  const at = new Date(await $.clock.now()).toISOString()
+  const file = `${folder}/${fileName(at.slice(0, 10))}`
+  await $.process.run(['sh', '-c', 'cat >> "$1"', 'sh', file], { stdin: JSON.stringify({ at, ...fields }) + '\n' })
+}
+
+// Runs the tool.call hook's body and adds its own wall time, outside `next`, to the session tally.
+async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: (input: I) => Promise<R>) => Promise<R>): Promise<R> {
+  const started = await $.clock.now()
+  let inside = 0
+  const pass = async (input: I): Promise<R> => {
+    const at = await $.clock.now()
+    try {
+      return await next(input)
+    } finally {
+      inside += (await $.clock.now()) - at
+    }
+  }
+  try {
+    return await body(pass)
+  } finally {
+    countCall(tally, (await $.clock.now()) - started - inside)
+  }
 }
 
 // Removes the audit files older than the retention.
@@ -176,25 +209,40 @@ export function register(on: On, values: PluginOptions) {
     )
   })
 
-  on('tool.call', { tool: /^mcp__/ }, async ($, e, next) => {
-    const t = mcpTool(e.tool)
-    if (t === null || !isWrite(t.action)) return next(e)
-    const start = await $.clock.now()
-    const r = await next(e)
-    const outcome: Entry['outcome'] = 'deny' in r ? 'denied' : r.isError === true ? 'error' : 'ok'
-    const error = 'deny' in r ? r.deny : r.isError === true ? r.text : undefined
-    await append($, {
-      at: new Date(start).toISOString(),
-      session,
-      cwd,
-      ...(e.agentId === undefined ? {} : { agentId: e.agentId }),
-      server: t.server,
-      action: t.action,
-      input: summarize(e),
-      outcome,
-      ...(error === undefined ? {} : { error: error.slice(0, 500) }),
-      ms: Math.round((await $.clock.now()) - start),
-    })
-    return r
+  on('tool.call', { tool: /^mcp__/ }, async ($, e, next) =>
+    timed($, next, async (pass) => {
+      const t = mcpTool(e.tool)
+      if (t === null || !isWrite(t.action)) return pass(e)
+      const start = await $.clock.now()
+      const r = await pass(e)
+      const outcome: Entry['outcome'] = 'deny' in r ? 'denied' : r.isError === true ? 'error' : 'ok'
+      const error = 'deny' in r ? r.deny : r.isError === true ? r.text : undefined
+      countAction(tally, 'recorded')
+      await append($, {
+        at: new Date(start).toISOString(),
+        session,
+        cwd,
+        ...(e.agentId === undefined ? {} : { agentId: e.agentId }),
+        server: t.server,
+        action: t.action,
+        input: summarize(e),
+        outcome,
+        ...(error === undefined ? {} : { error: error.slice(0, 500) }),
+        ms: Math.round((await $.clock.now()) - start),
+      })
+      return r
+    }),
+  )
+
+  // One summary line per session. `/clear`, `/resume` and `/branch` end a session without reloading the mod.
+  on('session.end', async ($, e, next) => {
+    const t = tally
+    tally = newTally()
+    try {
+      await appendSummary($, sessionSummary(t, e.sessionId, cwd))
+    } catch {
+      // a summary that cannot be written does not hold up the end of the session
+    }
+    return next(e)
   })
 }

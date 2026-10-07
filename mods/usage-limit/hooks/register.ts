@@ -5,11 +5,14 @@
 // window resets. A prompt the user types during the pause gets one turn without subagents, spent from
 // the reserve. An automatic prompt (routine, another session, task notification) is held and goes into
 // the resume.
+//
+// At the end of each session, one summary line in the diary counts the tool calls the mod saw, what it
+// held back, and the time its tool.call hook spent outside `next`.
 
 import type { Elements, Hook, On, PluginOptions, RenderElement } from 'claude-code'
 import {
-  bandRow,
   type BandRow,
+  bandRows,
   classify,
   DEFAULTS,
   fullest,
@@ -28,6 +31,7 @@ import {
   withoutExpired,
   type Zone,
 } from './rules.ts'
+import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 let o: Options = DEFAULTS
 let windows: readonly Window[] = []
@@ -44,6 +48,8 @@ const alive = new Set<string>()
 let starting = 0
 // When the reading in use was taken, by this session or by another one that stored it.
 let readAt = 0
+let cwd = ''
+let tally = newTally()
 
 // The limit belongs to the account, so the last reading from any session applies to all of them.
 const KEY = 'windows'
@@ -65,7 +71,9 @@ async function log($: Api, entry: Record<string, unknown>) {
 
 function update($: Api, fresh: readonly Window[]) {
   windows = fresh
+  const before = zone.kind
   zone = classify(windows, o)
+  if (zone.kind === 'paused' && before !== 'paused') countAction(tally, 'paused')
   if (zone.kind === 'free') $.ui.status(undefined)
   else $.ui.status(summary(windows, zone, o).split('\n')[0] ?? '')
   $.ui.invalidate('ui.render')
@@ -110,6 +118,7 @@ async function scheduleResume($: Api, window: Window, reason: string) {
     await log($, { event: 'no-reset-time', reason, window })
     return
   }
+  countAction(tally, 'resume-scheduled')
   await log($, { event: 'resume-scheduled', reason, window, waitMin: Math.round(wait / 60_000) })
   resume = $.clock.after(wait, async () => {
     resume = null
@@ -118,15 +127,36 @@ async function scheduleResume($: Api, window: Window, reason: string) {
     $.ui.status(undefined)
     $.ui.invalidate('ui.render')
     const text = resumeText(window, queue.splice(0))
+    countAction(tally, 'resumed')
     await log($, { event: 'resuming' })
     await $.prompt.submit({ text })
   })
+}
+
+// Runs the tool.call hook's body and adds its own wall time, outside `next`, to the session tally.
+async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: (input: I) => Promise<R>) => Promise<R>): Promise<R> {
+  const started = await $.clock.now()
+  let inside = 0
+  const pass = async (input: I): Promise<R> => {
+    const at = await $.clock.now()
+    try {
+      return await next(input)
+    } finally {
+      inside += (await $.clock.now()) - at
+    }
+  }
+  try {
+    return await body(pass)
+  } finally {
+    countCall(tally, (await $.clock.now()) - started - inside)
+  }
 }
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
 
   on('session.start', async ($, e, next) => {
+    cwd = e.cwd
     const home = await $.env.get('HOME')
     if (home !== undefined) {
       const dir = `${home}/.local/state/mods/usage-limit`
@@ -167,7 +197,7 @@ export function register(on: On, values: PluginOptions) {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey || !showsBand(windows, zone, o)) return next(e)
     const ui = $.ui.resolve(e)
-    const rows = windows.map((w) => windowRow(ui, bandRow(w, e.props.bodyColumns, o)))
+    const rows = bandRows(windows, e.props.bodyColumns, o).map((r) => windowRow(ui, r))
     const paused = pausedText(zone, o)
     if (paused !== null) rows.push(ui.Text({ color: 'error', bold: true, wrap: 'truncate', children: [paused] }))
     return ui.Box({ flexDirection: 'column', children: [...rows, await next(e)] })
@@ -186,10 +216,12 @@ export function register(on: On, values: PluginOptions) {
     if (zone.kind !== 'paused') return next(e)
     if (!isAutomatic(e.origin)) {
       reserveTurn = true
+      countAction(tally, 'reserve-turn')
       await log($, { event: 'reserve-turn', origin: e.origin.kind })
       return next({ ...e, context: [...(e.context ?? []), reserveTurnText(zone.window)] })
     }
     queue.push(e.text)
+    countAction(tally, 'prompt-held')
     await log($, { event: 'prompt-held', origin: e.origin.kind })
     await scheduleResume($, zone.window, 'automatic prompt during the pause')
     return { drop: 'The usage limit is in its reserve. The message will be delivered when the session resumes.' }
@@ -201,17 +233,21 @@ export function register(on: On, values: PluginOptions) {
     return next(e)
   })
 
-  on('tool.call', async ($, e, next) => {
-    await expire($)
-    if (zone.kind !== 'paused' || reserveTurn) return next(e)
-    await log($, { event: 'tool-refused', tool: e.tool, agentId: e.agentId })
-    await scheduleResume($, zone.window, 'work interrupted by the pause')
-    return { deny: pauseText(zone.window, o) }
-  })
+  on('tool.call', async ($, e, next) =>
+    timed($, next, async (pass) => {
+      await expire($)
+      if (zone.kind !== 'paused' || reserveTurn) return pass(e)
+      countAction(tally, 'tool-refused')
+      await log($, { event: 'tool-refused', tool: e.tool, agentId: e.agentId })
+      await scheduleResume($, zone.window, 'work interrupted by the pause')
+      return { deny: pauseText(zone.window, o) }
+    }),
+  )
 
   on('agent.spawn', async ($, e, next) => {
     await expire($)
     if (zone.kind === 'paused') {
+      countAction(tally, 'subagent-refused')
       return { deny: 'The usage limit is in its reserve, and no subagent runs in the reserve. Do the task directly, reading only the part you need.' }
     }
     const list = await $.agent.list()
@@ -219,6 +255,7 @@ export function register(on: On, values: PluginOptions) {
     // There is no await from here to `starting += 1`: two requests in the same response cannot both pass.
     const running = Math.max(list.filter((a) => a.status === 'running').length, starting + alive.size)
     if (zone.kind === 'throttled' && running > 0) {
+      countAction(tally, 'subagent-refused')
       await log($, { event: 'subagent-refused', running })
       return {
         deny:
@@ -238,19 +275,27 @@ export function register(on: On, values: PluginOptions) {
   })
 
   // `/clear`, `/resume` and `/branch` switch the conversation without reloading the mod. The scheduled
-  // resume and the held messages belonged to the previous conversation.
+  // resume and the held messages belonged to the previous conversation. One summary line per session.
   on('session.end', async ($, e, next) => {
     resume?.cancel()
     resume = null
     reserveTurn = false
     alive.clear()
     const lost = queue.splice(0)
-    if (lost.length > 0 || e.reason !== 'other') await log($, { event: 'conversation-switched', reason: e.reason, lost: lost.length })
+    const t = tally
+    tally = newTally()
+    try {
+      if (lost.length > 0) await log($, { event: 'conversation-switched', reason: e.reason, lost: lost.length })
+      await log($, sessionSummary(t, e.sessionId, cwd))
+    } catch {
+      // a diary that cannot be written does not hold up the end of the session
+    }
     return next(e)
   })
 
   on('classic.StopFailure', async ($, e, next) => {
     if (Reflect.get(e, 'error') === 'rate_limit') {
+      countAction(tally, 'hit-100')
       await log($, { event: 'hit-100', resumeOnError: o.resumeOnError })
       if (o.resumeOnError) {
         const full = fullest((await $.session.usage()).rateLimits)

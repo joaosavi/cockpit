@@ -198,20 +198,37 @@ export function bar(width: number, percent: number, markAt: number | null): Run[
 
 const SHORT_NAMES: Record<string, string> = { five_hour: '5-hour', seven_day: '7-day' }
 
-// One row of the band: the window's name, its bar sized to what the columns leave, the percent and the reset time.
+// One row of the band: the window's name, its bar, the percent and the reset time.
 export type BandRow = { label: string; runs: Run[]; tone: Tone; percent: string; reset: string }
 
-export function bandRow(w: Window, columns: number, o: Options): BandRow {
-  const name = SHORT_NAMES[w.kind] ?? w.kind
-  const label = name.padEnd(Math.max(7, name.length + 1))
-  const percent = `${Math.round(w.percentUsed)}%`.padStart(5)
-  let reset = w.resetsAt === undefined ? '' : `  resets ${formatTime(w.resetsAt, o.timeZone)}`
-  let width = columns - label.length - percent.length - reset.length
-  if (width < 10) {
-    reset = ''
-    width = columns - label.length - percent.length
-  }
-  return { label, runs: bar(Math.max(5, width), w.percentUsed, 100 - o.reserve), tone: tone(w.percentUsed, o), percent, reset }
+// The widest the bar gets, so the rows read as a compact block instead of spanning the whole terminal.
+export const BAR_MAX = 40
+
+// The band's rows, one per window. Every row gets the same bar width, so the pause marks, the percents
+// and the reset times line up in columns.
+export function bandRows(windows: readonly Window[], columns: number, o: Options): BandRow[] {
+  const rows = windows.map((w) => {
+    const name = SHORT_NAMES[w.kind] ?? w.kind
+    return {
+      w,
+      label: name.padEnd(Math.max(7, name.length + 1)),
+      percent: `${Math.round(w.percentUsed)}%`.padStart(5),
+      reset: w.resetsAt === undefined ? '' : `  resets ${formatTime(w.resetsAt, o.timeZone)}`,
+    }
+  })
+  const labelWidth = Math.max(0, ...rows.map((r) => r.label.length))
+  const resetWidth = Math.max(0, ...rows.map((r) => r.reset.length))
+  let width = columns - labelWidth - 5 - resetWidth
+  const showReset = width >= 10
+  if (!showReset) width = columns - labelWidth - 5
+  width = Math.max(5, Math.min(BAR_MAX, width))
+  return rows.map((r) => ({
+    label: r.label.padEnd(labelWidth),
+    runs: bar(width, r.w.percentUsed, 100 - o.reserve),
+    tone: tone(r.w.percentUsed, o),
+    percent: r.percent,
+    reset: showReset ? r.reset : '',
+  }))
 }
 
 export function pausedText(zone: Zone, o: Pick<Options, 'timeZone'>): string | null {

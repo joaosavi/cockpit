@@ -5,7 +5,9 @@
 // placeholder back in an edit of a secret file, the real value goes to the file in its place.
 //
 // The list of values lives only in this module's memory, never on disk, and the diary records only
-// event names and secret names, never a value or a tool's output.
+// event names and secret names, never a value or a tool's output. At the end of each session, one
+// summary line counts the tool calls the mod saw, the results it redacted, the inputs it restored, and
+// the time its tool.call hook spent outside `next`, which is where the stat of every source goes.
 
 import type { Hook, On, PluginOptions, ToolCallInput, ToolCallResult } from 'claude-code'
 import {
@@ -17,6 +19,7 @@ import {
   isEnvFileName,
   isEnvPath,
   isExample,
+  DIRS_CHECK_MS,
   MAX_AGE_MS,
   type Options,
   options,
@@ -34,21 +37,34 @@ import {
   valuesForFile,
   WATCHED_FROM_DEPTH,
 } from './rules.ts'
+import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
 
 type Paths = { secretsFile: string; envRoot: string }
 
+// What the last folder scan found: the `.env*` files, and the folders where a new one would appear.
+type Scan = { envFiles: string[]; dirs: string[]; at: number }
+
 type Built = {
   table: Table
   builtAt: number
-  // Every file and folder whose change makes the list stale: the secrets file, the `.env*` files, and
-  // the folders where a new `.env` would appear.
-  sources: string[]
+  // The source files the list was read from, and whether each existed then: the secrets file and every
+  // `.env*` the scan found. Their mtimes are checked on every call.
+  files: ReadonlyMap<string, boolean>
+  scan: Scan
+  // When the folders' mtimes were last checked.
+  dirsCheckedAt: number
 }
+
+// How the folders are looked at on this call: not at all unless 60 s passed, their mtimes checked, or
+// scanned again without asking.
+type Rescan = 'due' | 'check' | 'force'
 
 let o: Options = DEFAULTS
 let diary = ''
+let cwd = ''
+let tally = newTally()
 let built: Built | null = null
 // Parallel tool calls share one rebuild.
 let building: Promise<Built> | null = null
@@ -108,13 +124,18 @@ async function scan($: Api, dir: string, depth: number, files: string[], watched
   await Promise.all(nested)
 }
 
-async function build($: Api): Promise<Built> {
+// Reads every source again. The folders are scanned only when `prior` is null.
+async function build($: Api, prior: Scan | null): Promise<Built> {
   const builtAt = await $.clock.now()
   const p = await paths($)
-  const files: string[] = []
-  const watched: string[] = []
-  await scan($, p.envRoot, SCAN_DEPTH, files, watched)
-  files.sort()
+  let s = prior
+  if (s === null) {
+    const found: string[] = []
+    const dirs: string[] = []
+    await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
+    s = { envFiles: found.sort(), dirs, at: builtAt }
+  }
+  const files = s.envFiles
   const secrets = await readOrNull($, p.secretsFile)
   const envFiles: EnvFile[] = []
   for (const path of files) {
@@ -124,41 +145,84 @@ async function build($: Api): Promise<Built> {
   // `$.env.get` takes only literal names, so the names come from the process's own environment.
   const environ = parseEnviron((await readOrNull($, '/proc/self/environ')) ?? '')
   const table = buildTable({ secrets, envFiles, environ, minLength: o.minLength })
-  const sources = [...(secrets === null ? [] : [p.secretsFile]), ...files, ...watched]
+  const known = new Map<string, boolean>([[p.secretsFile, secrets !== null], ...envFiles.map((f): [string, boolean] => [f.path, true])])
   await log($, {
     event: 'list-built',
+    scanned: prior === null,
     values: table.nameOf.size,
     envFiles: envFiles.filter((f) => !isExample(f.path)).length,
     exampleFiles: envFiles.filter((f) => isExample(f.path)).length,
     environment: environ.length,
   })
-  return { table, builtAt, sources }
+  return { table, builtAt, files: known, scan: s, dirsCheckedAt: builtAt }
 }
 
-// The mtime is compared with `>=`, so a change in the same millisecond the list was built also rebuilds it.
-async function isFresh($: Api, b: Built): Promise<boolean> {
-  if ((await $.clock.now()) - b.builtAt >= MAX_AGE_MS) return false
+// A source changed when it appeared, disappeared, or has an mtime from the build's millisecond on: `>=`,
+// so a change in the same millisecond the list was built also rebuilds it.
+async function filesChanged($: Api, b: Built): Promise<boolean> {
   const checks = await Promise.all(
-    b.sources.map(async (path) => {
+    [...b.files].map(async ([path, existed]) => {
       try {
-        return (await $.fs.stat(path)).mtimeMs < b.builtAt
+        const mtime = (await $.fs.stat(path)).mtimeMs
+        return !existed || mtime >= b.builtAt
       } catch {
-        return false
+        return existed
       }
     }),
   )
-  return checks.every((ok) => ok)
+  return checks.some((changed) => changed)
 }
 
-async function currentTable($: Api): Promise<Table> {
-  if (built !== null && (await isFresh($, built))) return built.table
+// A folder's mtime moves when a file is created, removed or renamed in it, so a new `.env` there shows.
+async function dirsChanged($: Api, b: Built): Promise<boolean> {
+  const checks = await Promise.all(
+    b.scan.dirs.map(async (path) => {
+      try {
+        return (await $.fs.stat(path)).mtimeMs >= b.scan.at
+      } catch {
+        return true
+      }
+    }),
+  )
+  return checks.some((changed) => changed)
+}
+
+// The source files are checked on every call, which is a handful of stats. The folders, about 140 of
+// them under ~/getdemo, are checked at most every 60 s, or right away when the call touched a secret file.
+async function isFresh($: Api, b: Built, rescan: Rescan): Promise<{ isFresh: boolean; prior: Scan | null }> {
+  const now = await $.clock.now()
+  if (now - b.builtAt >= MAX_AGE_MS || rescan === 'force') return { isFresh: false, prior: null }
+  if (rescan === 'check' || now - b.dirsCheckedAt >= DIRS_CHECK_MS) {
+    b.dirsCheckedAt = now
+    if (await dirsChanged($, b)) return { isFresh: false, prior: null }
+  }
+  return (await filesChanged($, b)) ? { isFresh: false, prior: b.scan } : { isFresh: true, prior: b.scan }
+}
+
+async function currentTable($: Api, rescan: Rescan = 'due'): Promise<Table> {
+  let prior: Scan | null = null
+  if (built !== null) {
+    const f = await isFresh($, built, rescan)
+    if (f.isFresh) return built.table
+    prior = f.prior
+  }
   if (building === null) {
-    building = build($).finally(() => {
+    building = build($, prior).finally(() => {
       building = null
     })
   }
   built = await building
   return built.table
+}
+
+// Whether this call may have created or changed a secret file the folder check would miss for up to 60 s.
+async function rescanFor($: Api, e: ToolCallInput): Promise<Rescan> {
+  if (e.tool === 'Bash') return /\.env|\.secrets/.test(e.command) ? 'check' : 'due'
+  const path = e.tool === 'Edit' || e.tool === 'Write' ? e.file_path : e.tool === 'NotebookEdit' ? e.notebook_path : null
+  if (path === null) return 'due'
+  const { secretsFile } = await paths($)
+  if (!isEnvPath(path) && path !== secretsFile) return 'due'
+  return built?.files.has(path) === true ? 'check' : 'force'
 }
 
 async function isSecretFile($: Api, path: string): Promise<{ isSecret: boolean; isSecretsFile: boolean }> {
@@ -219,10 +283,30 @@ function redactResult(r: ToolCallResult, t: Table, found: Found, extra: readonly
   return { result, context: [...context, ...extra, redactedNotice(sortedNames(found))] }
 }
 
+// Runs the tool.call hook's body and adds its own wall time, outside `next`, to the session tally.
+async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: (input: I) => Promise<R>) => Promise<R>): Promise<R> {
+  const started = await $.clock.now()
+  let inside = 0
+  const pass = async (input: I): Promise<R> => {
+    const at = await $.clock.now()
+    try {
+      return await next(input)
+    } finally {
+      inside += (await $.clock.now()) - at
+    }
+  }
+  try {
+    return await body(pass)
+  } finally {
+    countCall(tally, (await $.clock.now()) - started - inside)
+  }
+}
+
 export function register(on: On, values: PluginOptions) {
   o = options(values)
 
   on('session.start', async ($, e, next) => {
+    cwd = e.cwd
     const home = await $.env.get('HOME')
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
@@ -231,20 +315,27 @@ export function register(on: On, values: PluginOptions) {
     return next(e)
   })
 
-  on('tool.call', async ($, e, next) => {
-    const restored = await restoreInput($, e)
-    if (restored !== null) await log($, { event: 'restored', tool: e.tool, names: restored.names })
-    const r = await next(restored?.input ?? e)
-    // The list is read after the tool ran, so a value the tool itself just wrote to a `.env` is already in it.
-    const t = await currentTable($)
-    const found: Found = new Map()
-    const out = redactResult(r, t, found, restored === null ? [] : [RESTORED_NOTICE])
-    if (found.size > 0) {
-      await log($, { event: 'redacted', tool: e.tool, agent: e.agentId ?? null, names: sortedNames(found), count: total(found), isError: r.isError === true })
-    }
-    return out
-  }).catch(async ($, e, next) => {
+  on('tool.call', async ($, e, next) =>
+    timed($, next, async (pass) => {
+      const restored = await restoreInput($, e)
+      if (restored !== null) {
+        countAction(tally, 'restored')
+        await log($, { event: 'restored', tool: e.tool, names: restored.names })
+      }
+      const r = await pass(restored?.input ?? e)
+      // The list is read after the tool ran, so a value the tool itself just wrote to a `.env` is already in it.
+      const t = await currentTable($, await rescanFor($, e))
+      const found: Found = new Map()
+      const out = redactResult(r, t, found, restored === null ? [] : [RESTORED_NOTICE])
+      if (found.size > 0) {
+        countAction(tally, 'redacted')
+        await log($, { event: 'redacted', tool: e.tool, agent: e.agentId ?? null, names: sortedNames(found), count: total(found), isError: r.isError === true })
+      }
+      return out
+    }),
+  ).catch(async ($, e, next) => {
     // Fails closed: an output the mod could not check never reaches the model.
+    countAction(tally, 'failed')
     try {
       await log($, { event: 'failed', tool: e.tool, kind: next.error.kind, afterTool: next.called })
     } catch {
@@ -255,5 +346,17 @@ export function register(on: On, values: PluginOptions) {
         ? `The secret-guard mod failed (${next.error.kind}) while hiding secrets in this tool's output, so the output was withheld. The call did run. Check its effect before running it again.`
         : `The secret-guard mod failed (${next.error.kind}) before this call ran, so it did not run. Try again.`,
     }
+  })
+
+  // One summary line per session. `/clear`, `/resume` and `/branch` end a session without reloading the mod.
+  on('session.end', async ($, e, next) => {
+    const t = tally
+    tally = newTally()
+    try {
+      await log($, sessionSummary(t, e.sessionId, cwd))
+    } catch {
+      // a summary that cannot be written does not hold up the end of the session
+    }
+    return next(e)
   })
 }

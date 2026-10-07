@@ -1,9 +1,10 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bandRows, DEFAULTS } from '../hooks/rules.ts'
 
 const NOW = Date.parse('2026-10-06T20:00:00Z')
 const RESET = '2026-10-06T22:30:00.000Z'
 
-type Stubs = { submitted: string[]; running: number; initialUsage: number | null; stored?: Record<string, unknown> }
+type Stubs = { submitted: string[]; running: number; initialUsage: number | null; stored?: Record<string, unknown>; written?: string[] }
 
 function windows(fiveHour: number) {
   return [
@@ -21,7 +22,10 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], s: Stubs) {
   on('session.usage', () => ({ value: { startedAt: NOW, context: { tokens: 0, window: 200000, percent: 0 }, rateLimits: s.initialUsage === null ? [] : windows(s.initialUsage) } }))
   on('command.register', () => ({ value: undefined }))
   on('fs.read', () => ({ deny: 'no file' }))
-  on('fs.write', () => ({ value: undefined }))
+  on('fs.write', ($, e) => {
+    s.written?.push(e.text)
+    return { value: undefined }
+  })
   on('ui.status', () => ({ value: undefined }))
   on('agent.list', () => ({ value: Array.from({ length: s.running }, (_, i) => ({ id: `a${i}`, description: '', type: 'Explore', status: 'running' })) }))
   on('session.start', () => ({ cwd: '/work' }))
@@ -208,6 +212,9 @@ test('the band shows each window with its bar and percent at 91%, and keeps the 
   expect(percent).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '5-hour' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /resets Oct 6, 19:30/ })).toBeDefined()
+  // Each bar stops at 40 columns, though the band has 80: two rows of 40 cells.
+  const cells = (await ui.findAll({ type: 'Text', text: /^[█░│]+$/ })).map((t) => t.text).join('')
+  expect(cells.length).toBe(80)
   // The used part of the 5-hour bar is yellow, past the 90% alert, and the pause mark sits at 98%.
   expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'warning' } })
   expect(await ui.find({ type: 'Text', text: '│' })).toBeDefined()
@@ -245,4 +252,41 @@ test('from bandFrom (75% by default), the band shows, green below the alert', as
   const ui = await $.ui.mount(BAND)
   // 80% is past the default of 75, below the 90% alert: green.
   expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'success' } })
+})
+
+test('narrow or wide, both bars get the same width, so marks, percents and reset times line up', () => {
+  for (const columns of [50, 80, 200]) {
+    const rows = bandRows(windows(91), columns, DEFAULTS)
+    const widths = rows.map((r) => r.runs.map((x) => x.text).join('').length)
+    expect(widths[0]).toBe(widths[1])
+    expect((widths[0] ?? 0) <= 40).toBe(true)
+    expect(rows.map((r) => r.label.length + (widths[0] ?? 0) + r.percent.length)).toEqual([7 + (widths[0] ?? 0) + 5, 7 + (widths[0] ?? 0) + 5])
+  }
+  expect(bandRows(windows(91), 200, DEFAULTS)[0]?.runs.map((x) => x.text).join('').length).toBe(40)
+  expect(bandRows(windows(91), 50, DEFAULTS)[0]?.runs.map((x) => x.text).join('').length).toBe(16)
+})
+
+test('the session ends with one summary line: tool calls, what the mod held back, and its own time', async ($, on) => {
+  const written: string[] = []
+  const s = { submitted: [], running: 0, initialUsage: 97, written }
+  setup(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.session.measure({ rateLimits: windows(98), context: { tokens: 0, window: 200000, percent: 0 }, changed: ['rateLimits'] })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.agent.spawn({ prompt: 'read', description: 'read', subagentType: 'Explore' })
+  await $.prompt.submit({ text: 'routine', wait: false, origin: { kind: 'scheduled-trigger' } })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  const last: unknown = JSON.parse(written.at(-1) ?? '{}')
+  expect(last).toEqual({
+    at: '2026-10-06T20:00:00.000Z',
+    event: 'session-summary',
+    session: 'abcdef12',
+    cwd: '/work',
+    toolCalls: 2,
+    actions: { paused: 1, 'tool-refused': 1, 'resume-scheduled': 1, 'subagent-refused': 1, 'prompt-held': 1 },
+    hookMs: 0,
+    maxHookMs: 0,
+  })
+  expect(written.filter((l) => l.includes('session-summary')).length).toBe(1)
 })

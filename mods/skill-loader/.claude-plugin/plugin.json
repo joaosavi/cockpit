@@ -1,6 +1,6 @@
 {
   "name": "skill-loader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Loads the right skill at the right time: typescript-best-practices when reading .ts, writing-for-agents on SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling on CONTEXT.md and ADRs, technical-writing on README, commits and PRs, and a diagnosing-bugs reminder when the prompt carries an error",
   "author": { "name": "João Savi" }
 }

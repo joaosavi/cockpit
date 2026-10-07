@@ -1,14 +1,66 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
-test('the hook runs the rewritten command and tells the agent', async ($, on) => {
-  const ran: string[] = []
+type Scene = { ran: string[]; written: Map<string, string> }
+
+function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-07T13:00:00Z') })
+  mock.env(on, { HOME: '/home' })
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('fs.read', ($, e) => {
+    const text = s.written.get(e.path)
+    return text === undefined ? { deny: 'no file' } : { value: text }
+  })
+  on('fs.write', ($, e) => {
+    s.written.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  on('session.end', () => ({ sessionId: 'abcdef123456' }))
   on('tool.call', ($, e) => {
-    ran.push(String(Reflect.get(e, 'command')))
+    s.ran.push(String(Reflect.get(e, 'command')))
     return { result: 'ok', text: 'ok' }
   })
+  return clock
+}
+
+const start = { surface: 'terminal', isInteractive: true, cwd: '/work' } as const
+const DIARY = '/home/.local/state/mods/pipefail/2026-10-07-abcdef12.jsonl'
+
+function lines(s: Scene): unknown[] {
+  return (s.written.get(DIARY) ?? '').trim().split('\n').filter((l) => l !== '').map((l): unknown => JSON.parse(l))
+}
+
+test('the hook runs the rewritten command and tells the agent', async ($, on) => {
+  const s = { ran: [], written: new Map<string, string>() }
+  prepare(on, s)
+  await $.session.start(start)
   const r = await $.tool.call({ tool: 'Bash', command: 'yarn vitest run 2>&1 | tail -5' })
-  expect(ran).toEqual(['set -o pipefail; yarn vitest run 2>&1 | tail -5'])
+  expect(s.ran).toEqual(['set -o pipefail; yarn vitest run 2>&1 | tail -5'])
   expect(r).toMatchObject({ context: [expect.stringContaining('set -o pipefail')] })
   await $.tool.call({ tool: 'Bash', command: 'ls | head' })
-  expect(ran[1]).toBe('ls | head')
+  expect(s.ran[1]).toBe('ls | head')
+})
+
+test('the diary names the runner of each rewrite, and the session ends with one summary line', async ($, on) => {
+  const s = { ran: [], written: new Map<string, string>() }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn vitest run src/a.test.ts 2>&1 | tail -5' })
+  await $.tool.call({ tool: 'Bash', command: 'ls | head' })
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit -p . | head -30' })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  const all = lines(s)
+  expect(all[0]).toEqual({ at: '2026-10-07T13:00:00.000Z', event: 'rewritten', key: 'yarn vitest' })
+  expect(all[1]).toMatchObject({ event: 'rewritten', key: 'npx tsc' })
+  expect(all.length).toBe(3)
+  expect(all[2]).toEqual({
+    at: '2026-10-07T13:00:00.000Z',
+    event: 'session-summary',
+    session: 'abcdef12',
+    cwd: '/work',
+    toolCalls: 3,
+    actions: { rewritten: 2 },
+    hookMs: 0,
+    maxHookMs: 0,
+  })
 })

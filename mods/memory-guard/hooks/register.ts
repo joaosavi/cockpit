@@ -5,6 +5,9 @@
 // drop. If memory does not drop, it refuses and says what is taking the memory. After running, it
 // stores the command's peak for the next estimate, and reruns with a single process a command that
 // died for lack of memory (exit 137).
+//
+// At the end of each session, one summary line in the diary counts the Bash calls the mod saw, what it
+// did to them, how long it held commands waiting for memory, and the time its hook spent on its own.
 
 import type { Elements, Hook, On, PluginOptions, RenderElement, Timer } from 'claude-code'
 import {
@@ -34,6 +37,7 @@ import {
   withMeasurement,
   workingSet,
 } from './rules.ts'
+import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
@@ -51,6 +55,11 @@ const PANE_REFRESH_MS = 2000
 type Reading = { levels: Level[]; machine: Machine | null; peaks: Record<string, number[]> }
 let shown: Reading = { levels: [], machine: null, peaks: {} }
 let paneTimer: Timer | null = null
+
+let cwd = ''
+let tally = newTally()
+// Time commands were held waiting for memory, in this session.
+let waitedMs = 0
 
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
@@ -184,8 +193,11 @@ function ramPane(ui: Ui, r: Reading, columns: number, refresh: () => Promise<voi
   return ui.Box({ flexDirection: 'column', children: blocks })
 }
 
-// Decides how the command runs: whole, with a single process, or not at all, after waiting.
-async function fit($: Api, command: string, h: Heavy): Promise<{ command: string; isReduced: boolean } | null> {
+type Plan = { command: string; isReduced: boolean }
+
+// Decides how the command runs: whole, with a single process, or not at all (null), after waiting.
+// `held.ms` gets the time spent waiting.
+async function fit($: Api, command: string, h: Heavy, held: { ms: number }): Promise<Plan | null> {
   const peaks = await readPeaks($)
   const smaller = reduced(command, h)
   const deadline = (await $.clock.now()) + o.waitSeconds * 1000
@@ -197,17 +209,44 @@ async function fit($: Api, command: string, h: Heavy): Promise<{ command: string
       return { command, isReduced: false }
     }
     if (smaller !== null && free >= cost(h, true, peaks)) {
+      countAction(tally, 'reduced')
       await log($, { event: 'reduced', key: h.key, headroom: mb(free), waited })
       return { command: smaller, isReduced: true }
     }
     if ((await $.clock.now()) >= deadline) {
+      countAction(tally, 'refused')
       await log($, { event: 'refused', key: h.key, headroom: mb(free), cost: mb(cost(h, smaller !== null, peaks)) })
       return null
     }
+    if (!waited) countAction(tally, 'waited')
     waited = true
     // The wait runs inside a process, because time spent inside an API call does not count toward the
     // hook's 10 s limit, and `$.clock.sleep` does.
+    const before = await $.clock.now()
     await $.process.run(['sleep', String(WAIT_STEP_S)])
+    held.ms += (await $.clock.now()) - before
+  }
+}
+
+// Runs the tool.call hook's body and adds its own wall time, outside `next` and outside the waits for
+// memory, to the session tally. The waits go to `waitedMs`, so the hook's cost stays readable.
+async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: (input: I) => Promise<R>, held: { ms: number }) => Promise<R>): Promise<R> {
+  const started = await $.clock.now()
+  let inside = 0
+  const held = { ms: 0 }
+  const pass = async (input: I): Promise<R> => {
+    const at = await $.clock.now()
+    try {
+      return await next(input)
+    } finally {
+      inside += (await $.clock.now()) - at
+    }
+  }
+  try {
+    return await body(pass, held)
+  } finally {
+    waitedMs += held.ms
+    countCall(tally, (await $.clock.now()) - started - inside - held.ms)
   }
 }
 
@@ -215,6 +254,7 @@ export function register(on: On, values: PluginOptions) {
   o = options(values)
 
   on('session.start', async ($, e, next) => {
+    cwd = e.cwd
     const home = await $.env.get('HOME')
     if (home !== undefined) {
       const dir = `${home}/.local/state/mods/memory-guard`
@@ -260,40 +300,57 @@ export function register(on: On, values: PluginOptions) {
     return next(e)
   })
 
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const h = heavy(e.command)
-    if (h === null) return next(e)
-    const plan = await fit($, e.command, h)
-    if (plan === null) {
-      return {
-        deny:
-          `The memory-guard mod held this command (${h.key}) for ${o.waitSeconds} s and the group's memory did not drop enough. ` +
-          `Another session or process is taking the memory:\n${report(await readLevels($), await readMachine($), o.margin)}\n` +
-          'Do not try again now. Tell the user, or continue with work that does not need this command.',
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) =>
+    timed($, next, async (pass, held) => {
+      const h = heavy(e.command)
+      if (h === null) return pass(e)
+      const plan = await fit($, e.command, h, held)
+      if (plan === null) {
+        return {
+          deny:
+            `The memory-guard mod held this command (${h.key}) for ${o.waitSeconds} s and the group's memory did not drop enough. ` +
+            `Another session or process is taking the memory:\n${report(await readLevels($), await readMachine($), o.margin)}\n` +
+            'Do not try again now. Tell the user, or continue with work that does not need this command.',
+        }
       }
-    }
-    const notice: string[] = []
-    if (plan.isReduced) notice.push(`The memory-guard mod ran the command with a single process, because the whole command did not fit in the group's memory: ${plan.command}`)
+      const notice: string[] = []
+      if (plan.isReduced) notice.push(`The memory-guard mod ran the command with a single process, because the whole command did not fit in the group's memory: ${plan.command}`)
 
-    // Measures the peak while the command runs. A background command returns right away and gives no measurement.
-    const base = await groupUsage($)
-    let highest = base ?? 0
-    const ticker = e.run_in_background === true ? null : $.clock.every(1000, async () => {
-      const now = await groupUsage($)
-      if (now !== null && now > highest) highest = now
-    })
-    let r = await next({ ...e, command: plan.command })
-    ticker?.cancel()
-    if (base !== null && ticker !== null) await storePeak($, peakKey(h, plan.isReduced), highest - base)
+      // Measures the peak while the command runs. A background command returns right away and gives no measurement.
+      const base = await groupUsage($)
+      let highest = base ?? 0
+      const ticker = e.run_in_background === true ? null : $.clock.every(1000, async () => {
+        const now = await groupUsage($)
+        if (now !== null && now > highest) highest = now
+      })
+      let r = await pass({ ...e, command: plan.command })
+      ticker?.cancel()
+      if (base !== null && ticker !== null) await storePeak($, peakKey(h, plan.isReduced), highest - base)
 
-    const smaller = reduced(e.command, h)
-    if (!plan.isReduced && smaller !== null && diedOfMemory(r.text ?? '')) {
-      await log($, { event: 'retried-after-137', key: h.key })
-      r = await next({ ...e, command: smaller })
-      notice.push(`The first attempt died for lack of memory, and the memory-guard mod reran it with a single process: ${smaller}`)
+      const smaller = reduced(e.command, h)
+      if (!plan.isReduced && smaller !== null && diedOfMemory(r.text ?? '')) {
+        countAction(tally, 'retried-after-137')
+        await log($, { event: 'retried-after-137', key: h.key })
+        r = await pass({ ...e, command: smaller })
+        notice.push(`The first attempt died for lack of memory, and the memory-guard mod reran it with a single process: ${smaller}`)
+      }
+      await updateStatus($)
+      if (notice.length === 0 || 'deny' in r) return r
+      return { ...r, context: [...(r.context ?? []), ...notice] }
+    }),
+  )
+
+  // One summary line per session. `/clear`, `/resume` and `/branch` end a session without reloading the mod.
+  on('session.end', async ($, e, next) => {
+    const t = tally
+    const waited = waitedMs
+    tally = newTally()
+    waitedMs = 0
+    try {
+      await log($, sessionSummary(t, e.sessionId, cwd, { waitedMs: Math.round(waited), refused: t.actions['refused'] ?? 0 }))
+    } catch {
+      // a summary that cannot be written does not hold up the end of the session
     }
-    await updateStatus($)
-    if (notice.length === 0 || 'deny' in r) return r
-    return { ...r, context: [...(r.context ?? []), ...notice] }
+    return next(e)
   })
 }

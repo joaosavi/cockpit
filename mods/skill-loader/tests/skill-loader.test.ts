@@ -27,7 +27,7 @@ test('recognizes a pasted error, "quebrou" and "is broken"', () => {
   expect(looksLikeError('write the October report')).toBe(false)
 })
 
-type Scenario = { read: string[]; calls: string[]; missing?: string[] }
+type Scenario = { read: string[]; calls: string[]; missing?: string[]; written?: string[] }
 
 function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
   mock.clock(on, { now: 0 })
@@ -41,7 +41,10 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
     c.read.push(m[1])
     return { value: `---\nname: ${m[1]}\ndescription: x\n---\n\n# Body of ${m[1]}\n` }
   })
-  on('fs.write', () => ({ value: undefined }))
+  on('fs.write', ($, e) => {
+    c.written?.push(e.text)
+    return { value: undefined }
+  })
   on('session.start', () => ({ cwd: '/work' }))
   on('session.end', () => ({ sessionId: 's1' }))
   on('prompt.submit', ($, e) => ({ text: e.text, context: e.context }))
@@ -137,4 +140,27 @@ test('the agent asking again for a skill the mod delivered gets a short answer',
   await $.session.start(start)
   await $.tool.call({ tool: 'Read', file_path: '/w/a.ts' })
   expect(await $.tool.call({ tool: 'Skill', skill: 'typescript-best-practices' })).toMatchObject({ deny: expect.stringContaining('already came in full') })
+})
+
+test('the session ends with one summary line: loads by skill, refusals and calls seen', async ($, on) => {
+  const written: string[] = []
+  const c = { read: [], calls: [], written }
+  setup(on, c)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Read', file_path: '/w/a.ts' })
+  await $.tool.call({ tool: 'Write', file_path: '/w/CLAUDE.md', content: 'x' })
+  await $.tool.call({ tool: 'Write', file_path: '/w/CLAUDE.md', content: 'x' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  const last: unknown = JSON.parse(written.at(-1) ?? '{}')
+  expect(last).toEqual({
+    at: '1970-01-01T00:00:00.000Z',
+    event: 'session-summary',
+    session: 'abcdef12',
+    cwd: '/work',
+    toolCalls: 4,
+    actions: { 'loaded:typescript-best-practices': 1, 'loaded:writing-for-agents': 1, refused: 1 },
+    hookMs: 0,
+    maxHookMs: 0,
+  })
 })

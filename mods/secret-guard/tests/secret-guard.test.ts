@@ -41,6 +41,13 @@ type World = {
   // What each tool call does while it runs, in order; a missing one does nothing.
   effects: Array<() => void>
   writes: Map<string, string>
+  // Milliseconds each fs.stat takes, moved on the mock clock, to stand for a slow disk.
+  statMs?: number
+  // A folder's mtime, which moves when a file is created in it. Folders not listed are at 0.
+  dirMtimes: Map<string, number>
+  // How many fs.list and fs.stat calls the mod made.
+  lists: number
+  stats: number
 }
 
 function envBi(extra = ''): string {
@@ -71,6 +78,9 @@ function freshWorld(): World {
     answers: [],
     effects: [],
     writes: new Map(),
+    dirMtimes: new Map(),
+    lists: 0,
+    stats: 0,
   }
 }
 
@@ -85,6 +95,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
   mock.env(on, { HOME })
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('session.start', () => ({ cwd: '/work' }))
+  on('session.end', () => ({ sessionId: 'abcdef123456' }))
   on('fs.read', ($, e) => {
     if (e.path === '/proc/self/environ') return { value: Object.entries(w.environ).map(([k, v]) => `${k}=${v}`).join('\0') + '\0' }
     const written = w.writes.get(e.path)
@@ -97,6 +108,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
     return { value: undefined }
   })
   on('fs.list', ($, e) => {
+    w.lists += 1
     if (!isDir(w, e.path)) return { deny: 'ENOTDIR' }
     const prefix = e.path + '/'
     const names = new Map<string, 'file' | 'dir'>()
@@ -108,11 +120,13 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
     }
     return { value: [...names].sort().map(([name, kind]) => ({ name, kind, size: 0, mtimeMs: 0, isLink: false })) }
   })
-  on('fs.stat', ($, e) => {
+  on('fs.stat', async ($, e) => {
+    w.stats += 1
+    if (w.statMs !== undefined) await clock.advance(w.statMs)
     const f = w.files.get(e.path)
     const realPath = e.resolve ? e.path : undefined
     if (f !== undefined) return { value: { kind: 'file', size: f.text.length, mtimeMs: f.mtimeMs, isLink: false, realPath } }
-    if (isDir(w, e.path)) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false, realPath } }
+    if (isDir(w, e.path)) return { value: { kind: 'dir', size: 0, mtimeMs: w.dirMtimes.get(e.path) ?? 0, isLink: false, realPath } }
     return { deny: 'ENOENT' }
   })
   on('tool.call', ($, e) => {
@@ -395,4 +409,96 @@ test('the rules: candidates, accepts, options', () => {
   expect(expandHome('~/getdemo', HOME)).toBe(`${HOME}/getdemo`)
   const t = buildTable({ secrets: null, envFiles: [], environ: [['SEGREDO_CACHE_TOKEN', 'ignored-perl-test-var'], ['API_KEY', 'env-api-key-value-fake']], minLength: 12 })
   expect([...t.nameOf]).toEqual([['env-api-key-value-fake', 'API_KEY']])
+})
+
+test('the session ends with one summary line: redactions, restores, and the time spent on stats', async ($, on) => {
+  const w = freshWorld()
+  w.statMs = 2
+  w.answers.push(bash(`GITHUB_TOKEN=${FAKE_GH}\n`), bash('nothing secret\n'))
+  setup(on, w)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.tool.call({ tool: 'Bash', command: 'env' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.tool.call({ tool: 'Edit', file_path: ENV_BI, old_string: 'BETTER_AUTH_SECRET=<hidden:BETTER_AUTH_SECRET>', new_string: 'BETTER_AUTH_SECRET=<hidden:BETTER_AUTH_SECRET>\nX=1' })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  const text = [...w.writes].find(([p]) => p.includes('/.local/state/mods/secret-guard/'))?.[1] ?? ''
+  expect(leaks(text)).toEqual([])
+  const lines = text.trim().split('\n').map((l): unknown => JSON.parse(l))
+  const last = lines.at(-1)
+  expect(last).toMatchObject({ event: 'session-summary', session: 'abcdef12', cwd: '/work', toolCalls: 3, actions: { redacted: 1, restored: 1 } })
+  // Every fs.stat moved the clock 2 ms, and all of it is the hook's own time, outside the tool call.
+  const hookMs: unknown = typeof last === 'object' && last !== null ? Reflect.get(last, 'hookMs') : 0
+  const maxHookMs: unknown = typeof last === 'object' && last !== null ? Reflect.get(last, 'maxHookMs') : 0
+  expect(typeof hookMs === 'number' && hookMs > 0 && hookMs % 2 === 0).toBe(true)
+  expect(typeof maxHookMs === 'number' && typeof hookMs === 'number' && maxHookMs > 0 && maxHookMs <= hookMs).toBe(true)
+  expect(lines.filter((l) => JSON.stringify(l).includes('session-summary')).length).toBe(1)
+})
+
+// --- the cost of the freshness check ---------------------------------------------------------------
+
+test('a call with no source change lists no folder, and stats only the known source files', async ($, on) => {
+  const w = freshWorld()
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  const [lists, stats] = [w.lists, w.stats]
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(w.lists - lists).toBe(0)
+  // ~/.secrets, bi/apps/bi/.env and bi/.env.example.
+  expect(w.stats - stats).toBe(3)
+})
+
+test('a changed known file rebuilds the list on the next call, without a folder scan', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('first'), bash(`NEW_TOKEN=${FAKE_NEW}\n`))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  w.files.set(ENV_BI, { text: envBi(`NEW_TOKEN=${FAKE_NEW}`), mtimeMs: clock.now() })
+  const lists = w.lists
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'tail -1 notes' }))).toBe('NEW_TOKEN=<hidden:NEW_TOKEN>\n')
+  expect(w.lists - lists).toBe(0)
+})
+
+// A new `.env` in bi/apps, a watched folder, whose mtime moves when the file is created.
+const NEW_ENV = `${ROOT}/bi/apps/.env.local`
+
+function createNewEnv(w: World, at: number) {
+  w.files.set(NEW_ENV, { text: `LOCAL_TOKEN=${FAKE_NEW}\n`, mtimeMs: at })
+  w.dirMtimes.set(`${ROOT}/bi/apps`, at)
+}
+
+test('a new .env is found by the folder check after 60 s, and not before', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('first'), bash(FAKE_NEW), bash(FAKE_NEW))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  createNewEnv(w, clock.now())
+  await clock.advance(29_000)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe(FAKE_NEW)
+  await clock.advance(31_000)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe('<hidden:LOCAL_TOKEN>')
+})
+
+test('a Write to a new .env path is scanned right away, and its value hidden in that same result', async ($, on) => {
+  const w = freshWorld()
+  const clock = setup(on, w)
+  w.answers.push(bash('first'), { result: { type: 'create', filePath: NEW_ENV, content: `LOCAL_TOKEN=${FAKE_NEW}\n` } })
+  w.effects.push(() => undefined, () => createNewEnv(w, clock.now()))
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  const r = await $.tool.call({ tool: 'Write', file_path: NEW_ENV, content: `LOCAL_TOKEN=${FAKE_NEW}\n` })
+  expect(r).toMatchObject({ result: { content: 'LOCAL_TOKEN=<hidden:LOCAL_TOKEN>\n' } })
+})
+
+test('a Bash command that mentions .env checks the folders right away', async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('first'), bash(`LOCAL_TOKEN=${FAKE_NEW}\n`))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  createNewEnv(w, clock.now())
+  await clock.advance(1000)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'cat bi/apps/.env.local' }))).toBe('LOCAL_TOKEN=<hidden:LOCAL_TOKEN>\n')
 })

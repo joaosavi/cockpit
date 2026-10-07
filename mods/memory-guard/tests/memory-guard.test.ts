@@ -60,6 +60,8 @@ type Scenario = {
   // The surfaces /ram sees, and the panes it opened.
   surfaces?: string[]
   opened?: string[]
+  // The lines the mod wrote to its diary.
+  written?: string[]
 }
 
 // The session's group has the usage of the first item of `used`; each `sleep` from the mod moves to the next one.
@@ -70,7 +72,11 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('command.register', () => ({ value: undefined }))
   on('ui.status', () => ({ value: undefined }))
-  on('fs.write', () => ({ value: undefined }))
+  on('fs.write', ($, e) => {
+    c.written?.push(e.text)
+    return { value: undefined }
+  })
+  on('session.end', () => ({ sessionId: 'abcdef123456' }))
   on('fs.read', ($, e) => {
     const p = e.path
     if (p.endsWith('/proc/self/cgroup')) return { value: '0::/agentes.slice/getdemo-rc.service\n' }
@@ -261,4 +267,31 @@ test('/ram without a surface that draws answers with text only', async ($, on) =
   const r = await $.command.run({ command: 'ram', args: '' })
   expect(r.text).toContain('uses 2048 MB')
   expect(opened).toEqual([])
+})
+
+test('the session ends with one summary line: calls, actions, time held waiting and refusals', async ($, on) => {
+  const written: string[] = []
+  // Two waits of 5 s before the first tsc fits, then a full 120 s wait that ends in a refusal.
+  const c: Scenario = { used: [LIMIT - 100 * MB, LIMIT - 100 * MB, LIMIT - 2 * GB], commands: [], responses: [], written }
+  setup(on, c)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'ls -la' })
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  c.used = [LIMIT - 100 * MB]
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  const last: unknown = JSON.parse(written.at(-1) ?? '{}')
+  expect(last).toMatchObject({
+    event: 'session-summary',
+    session: 'abcdef12',
+    cwd: '/work',
+    toolCalls: 3,
+    actions: { waited: 2, refused: 1 },
+    waitedMs: 10_000 + 120_000,
+    refused: 1,
+    // The waits are not the hook's own time.
+    hookMs: 0,
+    maxHookMs: 0,
+  })
+  expect(written.filter((l) => l.includes('session-summary')).length).toBe(1)
 })

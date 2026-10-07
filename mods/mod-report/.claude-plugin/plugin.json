@@ -1,0 +1,6 @@
+{
+  "name": "mod-report",
+  "version": "1.0.0",
+  "description": "/mods [days] reads the other mods' diaries and reports, per mod, how often it acted, what it did, and what it cost per tool call, with a short list of what deserves attention",
+  "author": { "name": "João Savi" }
+}

@@ -44,6 +44,11 @@
       "name": "pipefail",
       "source": "./mods/pipefail",
       "description": "Puts set -o pipefail in front of a command that pipes a test runner into tail, head or grep, so a failing test does not exit 0"
+    },
+    {
+      "name": "mod-report",
+      "source": "./mods/mod-report",
+      "description": "/mods [days] reports, per mod, how often it acted, what it did, and what it cost per tool call, and flags the mods that get in the way"
     }
   ]
 }

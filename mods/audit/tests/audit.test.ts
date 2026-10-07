@@ -80,6 +80,7 @@ function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('session.start', () => ({ cwd: '/work' }))
+  on('session.end', () => ({ sessionId: 'abcdef123456' }))
   on('tool.call', ($, e) => {
     s.calls.push(e.tool)
     if (e.tool.endsWith('trash_thread')) return { deny: 'blocked by a hook' }
@@ -201,4 +202,26 @@ test('/audit without a surface that draws answers with text only', async ($, on)
   const r = await $.command.run({ command: 'audit', args: '' })
   expect(r.text).toContain('Last 20 write call(s):')
   expect(opened).toEqual([])
+})
+
+test('the session ends with one summary line in the day file, which /audit skips', async ($, on) => {
+  const s = { appended: [], calls: [] }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'mcp__claude_ai_Slack__slack_send_message', channel_id: 'C1', message: 'oi' })
+  await $.tool.call({ tool: 'mcp__claude_ai_Slack__slack_read_channel', channel_id: 'C1' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  expect(s.appended.length).toBe(2)
+  expect(JSON.parse(s.appended[1] ?? '{}')).toEqual({
+    at: '2026-10-07T13:00:00.000Z',
+    event: 'session-summary',
+    session: 'abcdef12',
+    cwd: '/work',
+    toolCalls: 2,
+    actions: { recorded: 1 },
+    hookMs: 0,
+    maxHookMs: 0,
+  })
+  expect(parse(s.appended.join('')).length).toBe(1)
 })

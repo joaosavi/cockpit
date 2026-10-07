@@ -33,5 +33,11 @@ O que a validação provou numa sessão de Remote Control:
 - `$.tool.call({ tool: 'Skill' })` responde "Launching skill" mas não põe o texto da skill na conversa; o mod `skill-loader` lê o `SKILL.md` do disco e entrega no `context` do resultado ou no texto da recusa
 - um hook só pode rodar 10 s de código próprio, e o `$.clock.sleep` conta; esperar dentro de `$.process.run(['sleep', '5'])` não conta
 
+Pendências em 07/10/2026 (o João toca várias sessões e pode esquecer; lembre ele):
+- tirar o `segredo.pl` do `settings.json` depois de uns dias de `secret-guard` sem erro (olhar o diário e o `/mods`)
+- o João instalar o pacote no PC de casa (`claude plugin marketplace add joaosavi/claude-devcontainer`, `claude plugin install agent@agent`, ligar autoUpdate) e ver a parte visual
+- julgar se cada mod ajuda ou atrapalha pelo relatório `/mods` (mod `mod-report`) depois de alguns dias de uso real. Medido em 07/10/2026 numa sessão de 20 chamadas: os mods custam 1-2 ms por chamada; o `secret-guard` custava 30 ms e caiu para 4 ms (só stat dos arquivos conhecidos, varredura de pastas a cada 60 s), mais ~230 ms na primeira chamada
+- o que o João chamou de "evals" era aprender com o feedback dele (correção e aprovação viram memória `feedback`); propus um mod que avisa o agente quando a mensagem é feedback, mais um `/lessons`. Esperando ele escolher. Eval de regressão (claude plugin eval, executor próprio) ficou como pesquisa, sem decisão
+
 **Why:** regra em CLAUDE.md depende de o modelo lembrar; o mod é determinístico.
 **How to apply:** mod novo entra no marketplace `agent`, em inglês, com teste. Ver [[vps-claude-devcontainer]].

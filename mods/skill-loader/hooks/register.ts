@@ -5,9 +5,14 @@
 // file, commit, PR): the mod refuses the call once, with the skill in the refusal text, so the agent
 // redoes it following the skill. An error pasted in the prompt: the mod reminds the agent to load
 // diagnosing-bugs.
+//
+// At the end of each session, one summary line in the diary counts the tool calls the mod saw, the
+// skills it loaded by name, the calls it refused so the agent would redo them with the skill, and the
+// time its tool.call hook spent outside `next`.
 
 import type { Hook, On } from 'claude-code'
 import { asSkill, BUG_REMINDER, byCommand, byTool, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
+import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
 
@@ -18,6 +23,8 @@ const delivered = new Set<string>()
 // The ones that do not exist on this machine. The mod does not look for them again.
 const missing = new Set<string>()
 let diary = ''
+let cwd = ''
+let tally = newTally()
 
 const AUTOMATIC_ORIGINS = new Set(['task-notification', 'scheduled-trigger', 'peer', 'peer-send-message', 'projects-relay', 'channel', 'coordinator', 'observer', 'observer-activity', 'plugin'])
 
@@ -51,10 +58,13 @@ async function skillText($: Api, skill: string): Promise<string | null> {
 async function load($: Api, skill: string, reason: string): Promise<string | null> {
   if (loaded.has(skill) || missing.has(skill)) return null
   const text = await skillText($, skill)
-  if (text === null) missing.add(skill)
-  else {
+  if (text === null) {
+    missing.add(skill)
+    countAction(tally, 'not-found')
+  } else {
     loaded.add(skill)
     delivered.add(skill)
+    countAction(tally, `loaded:${skill}`)
   }
   await log($, { event: text === null ? 'not-found' : 'loaded', skill, reason })
   return text === null ? null : `The skill ${skill} comes in full below, already loaded by the skill-loader mod.\n\n${text}`
@@ -65,8 +75,28 @@ function pathOf(e: { tool: string }): string {
   return typeof v === 'string' ? v : ''
 }
 
+// Runs the tool.call hook's body and adds its own wall time, outside `next`, to the session tally.
+async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: (input: I) => Promise<R>) => Promise<R>): Promise<R> {
+  const started = await $.clock.now()
+  let inside = 0
+  const pass = async (input: I): Promise<R> => {
+    const at = await $.clock.now()
+    try {
+      return await next(input)
+    } finally {
+      inside += (await $.clock.now()) - at
+    }
+  }
+  try {
+    return await body(pass)
+  } finally {
+    countCall(tally, (await $.clock.now()) - started - inside)
+  }
+}
+
 export function register(on: On) {
   on('session.start', async ($, e, next) => {
+    cwd = e.cwd
     const home = await $.env.get('HOME')
     if (home !== undefined) {
       const dir = `${home}/.local/state/mods/skill-loader`
@@ -77,52 +107,58 @@ export function register(on: On) {
     return next(e)
   })
 
-  on('tool.call', async ($, e, next) => {
-    // A subagent has its own context, and a skill loaded here would go to the main conversation.
-    if (e.agentId !== undefined) return next(e)
+  on('tool.call', async ($, e, next) =>
+    timed($, next, async (pass) => {
+      // A subagent has its own context, and a skill loaded here would go to the main conversation.
+      if (e.agentId !== undefined) return pass(e)
 
-    // The agent loaded the skill on its own: the mod does not deliver it again. One the mod already
-    // delivered does not come again through the tool, because its full text is already in the conversation.
-    if (e.tool === 'Skill') {
-      const requested: unknown = Reflect.get(e, 'skill')
-      if (typeof requested === 'string' && delivered.has(requested)) {
-        return { deny: `The skill ${requested} already came in full from the skill-loader mod, earlier in this conversation. Follow it directly.` }
+      // The agent loaded the skill on its own: the mod does not deliver it again. One the mod already
+      // delivered does not come again through the tool, because its full text is already in the conversation.
+      if (e.tool === 'Skill') {
+        const requested: unknown = Reflect.get(e, 'skill')
+        if (typeof requested === 'string' && delivered.has(requested)) {
+          countAction(tally, 'already-delivered')
+          return { deny: `The skill ${requested} already came in full from the skill-loader mod, earlier in this conversation. Follow it directly.` }
+        }
+        const r = await pass(e)
+        const name: unknown = Reflect.get(e, 'skill')
+        if (typeof name === 'string' && !('deny' in r) && r.isError !== true) loaded.add(name)
+        return r
       }
-      const r = await next(e)
-      const name: unknown = Reflect.get(e, 'skill')
-      if (typeof name === 'string' && !('deny' in r) && r.isError !== true) loaded.add(name)
-      return r
-    }
 
-    if (e.tool === 'Bash') {
-      const command: unknown = Reflect.get(e, 'command')
-      const t = typeof command === 'string' ? byCommand(command) : null
-      if (t === null || loaded.has(t.skill)) return next(e)
-      const text = await load($, t.skill, 'command')
-      if (text === null) return next(e)
-      return { deny: refusalText(t.skill, 'commit messages and PR descriptions', text) }
-    }
+      if (e.tool === 'Bash') {
+        const command: unknown = Reflect.get(e, 'command')
+        const t = typeof command === 'string' ? byCommand(command) : null
+        if (t === null || loaded.has(t.skill)) return pass(e)
+        const text = await load($, t.skill, 'command')
+        if (text === null) return pass(e)
+        countAction(tally, 'refused')
+        return { deny: refusalText(t.skill, 'commit messages and PR descriptions', text) }
+      }
 
-    const path = pathOf(e)
-    const t = byTool(e.tool, path)
-    if (t === null || loaded.has(t.skill)) return next(e)
+      const path = pathOf(e)
+      const t = byTool(e.tool, path)
+      if (t === null || loaded.has(t.skill)) return pass(e)
 
-    if (READ_TOOLS.has(e.tool)) {
-      const r = await next(e)
-      if ('deny' in r || r.isError === true) return r
-      const text = await load($, t.skill, `read of ${path}`)
-      return text === null ? r : { ...r, context: [...(r.context ?? []), text] }
-    }
-    if (WRITE_TOOLS.has(e.tool)) {
-      const text = await load($, t.skill, `write to ${path}`)
-      if (text === null) return next(e)
-      return { deny: refusalText(t.skill, path, text) }
-    }
-    return next(e)
-  })
+      if (READ_TOOLS.has(e.tool)) {
+        const r = await pass(e)
+        if ('deny' in r || r.isError === true) return r
+        const text = await load($, t.skill, `read of ${path}`)
+        return text === null ? r : { ...r, context: [...(r.context ?? []), text] }
+      }
+      if (WRITE_TOOLS.has(e.tool)) {
+        const text = await load($, t.skill, `write to ${path}`)
+        if (text === null) return pass(e)
+        countAction(tally, 'refused')
+        return { deny: refusalText(t.skill, path, text) }
+      }
+      return pass(e)
+    }),
+  )
 
   on('prompt.submit', async ($, e, next) => {
     if (AUTOMATIC_ORIGINS.has(e.origin.kind) || loaded.has('diagnosing-bugs') || !looksLikeError(e.text)) return next(e)
+    countAction(tally, 'reminded-diagnosing-bugs')
     await log($, { event: 'reminded-diagnosing-bugs' })
     return next({ ...e, context: [...(e.context ?? []), BUG_REMINDER] })
   })
@@ -134,11 +170,18 @@ export function register(on: On) {
     return next(e)
   })
 
-  // `/clear`, `/resume` and `/branch` switch the conversation without reloading the mod.
+  // `/clear`, `/resume` and `/branch` switch the conversation without reloading the mod. One summary line per session.
   on('session.end', async ($, e, next) => {
     loaded.clear()
     delivered.clear()
     missing.clear()
+    const t = tally
+    tally = newTally()
+    try {
+      await log($, sessionSummary(t, e.sessionId, cwd))
+    } catch {
+      // a summary that cannot be written does not hold up the end of the session
+    }
     return next(e)
   })
 }

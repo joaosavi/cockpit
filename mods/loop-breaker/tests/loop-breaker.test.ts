@@ -9,7 +9,7 @@ test('the same error gets the same signature across runs', () => {
   expect(signature(a) === signature(c)).toBe(false)
 })
 
-type Scene = { results: Array<{ text: string; isError?: boolean }> }
+type Scene = { results: Array<{ text: string; isError?: boolean }>; written?: string[] }
 
 function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
   mock.clock(on, { now: 0 })
@@ -17,7 +17,10 @@ function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('fs.read', () => ({ deny: 'no file' }))
-  on('fs.write', () => ({ value: undefined }))
+  on('fs.write', ($, e) => {
+    s.written?.push(e.text)
+    return { value: undefined }
+  })
   on('session.start', () => ({ cwd: '/work' }))
   on('session.end', () => ({ sessionId: 's1' }))
   on('turn.complete', () => ({ text: '' }))
@@ -125,4 +128,28 @@ test('the failing check passing again stops counting edits as fix attempts', asy
   for (let i = 0; i < 6; i += 1) {
     expect(hasNudge(await $.tool.call({ tool: 'Edit', file_path: '/w/a.ts', old_string: `c${i}`, new_string: `d${i}` }))).toBe(false)
   }
+})
+
+test('the session ends with one summary line: calls seen and nudges by kind', async ($, on) => {
+  const written: string[] = []
+  const s = { results: [FAIL, FAIL, FAIL], written }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn test a' })
+  await $.tool.call({ tool: 'Bash', command: 'yarn test b' })
+  await $.tool.call({ tool: 'Bash', command: 'yarn test c' })
+  await $.tool.call({ tool: 'Bash', command: 'gh run view 1' })
+  await $.tool.call({ tool: 'Bash', command: 'gh run view 1' })
+  await $.tool.call({ tool: 'Bash', command: 'gh run view 1' })
+  await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
+  expect(JSON.parse(written.at(-1) ?? '{}')).toEqual({
+    at: '1970-01-01T00:00:00.000Z',
+    event: 'session-summary',
+    session: 'abcdef12',
+    cwd: '/work',
+    toolCalls: 6,
+    actions: { 'nudge:error': 1, 'nudge:repeat': 1 },
+    hookMs: 0,
+    maxHookMs: 0,
+  })
 })

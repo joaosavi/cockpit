@@ -1,6 +1,6 @@
 {
   "name": "agent",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "The bundle with all of the agent's mods. Installing this plugin installs each mod as a dependency",
   "author": {
     "name": "João Savi"
@@ -12,6 +12,7 @@
     "audit",
     "loop-breaker",
     "secret-guard",
-    "pipefail"
+    "pipefail",
+    "mod-report"
   ]
 }
