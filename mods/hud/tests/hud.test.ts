@@ -327,7 +327,7 @@ test('idle panel band: identity, meters colored by threshold, other mods kept, n
   expect(await ui.find({ type: 'Text', text: ' 42%' })).toMatchObject({ props: { color: 'success' } })
   expect(await ui.find({ type: 'Text', text: ' resets 2h30m' })).toBeDefined()
   // 61% of 10 cells is 6 filled.
-  expect(await ui.find({ type: 'Text', text: '▰▰▰▰▰▰' })).toMatchObject({ props: { color: 'success' } })
+  expect(await ui.find({ type: 'Text', text: '●●●●●●' })).toMatchObject({ props: { color: 'success' } })
   // The tightest group is the slice: 5 GiB × 0.98 − 3 GiB used = 1.9 GiB.
   expect(await ui.find({ type: 'Text', text: '1.9G' })).toMatchObject({ props: { color: 'success' } })
   expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined()
