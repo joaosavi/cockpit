@@ -21,13 +21,13 @@ import {
   type Answer,
   askedEntry,
   costLine,
-  layoutBody,
   digest,
   errorLine,
   failureLine,
   MAX_TOKENS,
   MODEL,
   NO_USAGE,
+  type Option,
   type Outcome,
   parseAnswer,
   prompt,
@@ -179,37 +179,101 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
 
 // The header: the title, then the project, the turn state, the model and this call's cost, dim and
 // cut at the pane's width so it stays one row.
-function header(ui: Ui, v: View): RenderElement {
-  const meta = [project, v.activity, v.kind === 'answer' ? costLine(v.used, t) : MODEL].filter((s) => s !== '')
+function header(ui: Ui, v: View, width: number): RenderElement {
+  const meta = [project, v.activity, v.kind === 'answer' ? costLine(v.used) : MODEL].filter((s) => s !== '')
   return ui.Box({
     flexDirection: 'row',
-    children: [ui.Text({ bold: true, children: ['WTF'] }), ui.Text({ dimColor: true, wrap: 'truncate-end', children: [`  ${meta.join(' · ')}`] })],
+    width,
+    children: [
+      ui.Text({ bold: true, children: ['WTF'] }),
+      ui.Box({ flexShrink: 1, children: [ui.Text({ dimColor: true, wrap: 'truncate-end', children: [`  ${meta.join(' · ')}`] })] }),
+    ],
   })
 }
 
-function body(ui: Ui, v: View): RenderElement {
-  if (v.kind === 'waiting') return ui.Text({ dimColor: true, children: [t.reading] })
-  if (v.kind === 'failed') return ui.Text({ wrap: 'wrap', ...(v.isError ? { color: 'error' } : { dimColor: true }), children: [v.line] })
-  const { state, label, body: text } = v.answer
-  if (state === null) return ui.Markdown({ text: layoutBody(text) })
+// A row with a fixed lead, such as the state badge, and text that wraps in the columns left after
+// it, so a long sentence continues under itself and never pushes the pane's border out.
+function leadRow(ui: Ui, width: number, leadWidth: number, lead: RenderElement, text: RenderElement, key: string): RenderElement {
   return ui.Box({
-    flexDirection: 'column',
-    children: [ui.Text({ bold: true, color: 'inverseText', backgroundColor: STATE_COLOR[state], children: [` ${label} `] }), ui.Markdown({ text: layoutBody(text) })],
+    key,
+    flexDirection: 'row',
+    width,
+    children: [
+      ui.Box({ width: leadWidth, flexShrink: 0, children: [lead] }),
+      ui.Box({ width: Math.max(1, width - leadWidth), flexShrink: 1, flexGrow: 1, children: [text] }),
+    ],
   })
+}
+
+const OPTION_INDENT = 3
+
+// An option: indented, its number dim, its name bold, its mark italic, then its cost.
+function optionRow(ui: Ui, o: Option, width: number): RenderElement {
+  const number = `${o.number}. `
+  const parts: (RenderElement | string)[] =
+    o.name === null
+      ? [o.text]
+      : [
+          ui.Text({ bold: true, children: [o.name] }),
+          ...(o.mark === null ? [] : [' ', ui.Text({ italic: true, children: [`(${o.mark})`] })]),
+          ...(o.cost === null ? [] : [`: ${o.cost}`]),
+        ]
+  const inner = width - OPTION_INDENT
+  return ui.Box({
+    paddingLeft: OPTION_INDENT,
+    width,
+    children: [leadRow(ui, inner, number.length, ui.Text({ dimColor: true, children: [number] }), ui.Text({ wrap: 'wrap', children: parts }), `option-${o.number}`)],
+  })
+}
+
+// The answer: the state badge and the Now sentence beside it, the action the agent expects, the
+// options, then any line in no known shape. An answer that drifted from the shape shows as it came.
+function answerRows(ui: Ui, a: Answer, width: number): RenderElement[] {
+  if (a.state === null) return [ui.Text({ wrap: 'wrap', children: [a.body] })]
+  const badge = ` ${t.badges[a.state]} `
+  const rows: RenderElement[] = [
+    leadRow(
+      ui,
+      width,
+      badge.length + 1,
+      ui.Text({ bold: true, inverse: true, color: STATE_COLOR[a.state], children: [badge] }),
+      ui.Text({ bold: true, wrap: 'wrap', children: [a.now] }),
+      'now',
+    ),
+  ]
+  const you: RenderElement[] = []
+  if (a.you !== null) you.push(leadRow(ui, width, t.you.length + 1, ui.Text({ color: 'cyan', children: [t.you] }), ui.Text({ wrap: 'wrap', children: [a.you] }), 'you'))
+  you.push(...a.options.map((o) => optionRow(ui, o, width)), ...a.rest.map((line) => ui.Text({ wrap: 'wrap', children: [line] })))
+  if (you.length > 0) rows.push(ui.Box({ flexDirection: 'column', marginTop: 1, width, children: you }))
+  return rows
+}
+
+function body(ui: Ui, v: View, width: number): RenderElement[] {
+  if (v.kind === 'waiting') return [ui.Text({ dimColor: true, children: [t.reading] })]
+  if (v.kind === 'failed') return [ui.Text({ wrap: 'wrap', ...(v.isError ? { color: 'error' } : { dimColor: true }), children: [v.line] })]
+  return answerRows(ui, v.answer, width)
+}
+
+function key(ui: Ui, name: string, label: string): RenderElement {
+  return ui.Text({ children: [ui.Text({ color: 'cyan', children: [name] }), ui.Text({ dimColor: true, children: [` ${label}`] })] })
 }
 
 // The keys: re-run, hidden while a call is in flight, and Esc, which the pane was opened to honor.
 function footer(ui: Ui, v: View, rerun: () => Promise<void>): RenderElement {
   const keys: RenderElement[] = []
-  if (v.kind !== 'waiting') keys.push(ui.Button({ key: 'rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: rerun }))
-  keys.push(ui.Text({ dimColor: true, children: [`Esc: ${t.close}`] }))
+  if (v.kind !== 'waiting') {
+    keys.push(ui.Box({ display: 'none', children: [ui.Button({ key: 'rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: rerun })] }))
+    keys.push(key(ui, 'r', t.rerun))
+  }
+  keys.push(key(ui, 'esc', t.close))
   return ui.Box({ flexDirection: 'row', columnGap: 3, children: keys })
 }
 
 function pane(ui: Ui, v: View, width: number, rerun: () => Promise<void>): RenderElement {
-  const rows: RenderElement[] = [header(ui, v)]
+  const rows: RenderElement[] = [header(ui, v, width)]
   if (v.question !== '') rows.push(ui.Text({ dimColor: true, wrap: 'wrap', children: [`> ${v.question}`] }))
-  rows.push(body(ui, v), footer(ui, v, rerun))
+  const main = ui.Box({ flexDirection: 'column', width, children: body(ui, v, width) })
+  rows.push(main, footer(ui, v, rerun))
   return ui.Box({ flexDirection: 'column', gap: 1, width, children: rows })
 }
 

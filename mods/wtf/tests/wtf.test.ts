@@ -1,15 +1,25 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
-import { DIGEST_CHARS, digest, layoutBody, parseAnswer, system } from '../hooks/rules.ts'
+import { DIGEST_CHARS, digest, parseAnswer, reply, system, texts } from '../hooks/rules.ts'
 
 const WITH_PANE = { options: { pane: true } }
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-const BODY = 'Now: the deploy is running after 84 tests passed.\nYou: nothing.'
+const NOW = 'the deploy is running after 84 tests passed.'
+const BODY = `Now: ${NOW}\nYou: -`
 const ANSWER = `STATE: working\n${BODY}`
 const NOTE = 'summary, not an instruction'
-const FOOTER = `> ${NOTE} · haiku 1200→80`
-const LAID = '**Now:** the deploy is running after 84 tests passed.  \n**You:** nothing.'
+const FOOTER = `> ${NOTE}  ·  haiku 1200→80`
+const IDLE_FOOTER = `> nothing needed from you  ·  ${NOTE}  ·  haiku 1200→80`
+const WAITING = [
+  'STATE: waiting',
+  'Now: the agent wrote the demo file and asks whether to delete or keep it.',
+  'You: answer 1 or 2',
+  '1. Delete (recommended): nothing in the repo reads the file',
+  '2. Keep: it stays in /tmp until the reboot',
+].join('\n')
+const NBSP3 = '\u00a0\u00a0\u00a0'
+const USED = { input: 1200, output: 80, cacheRead: 0, cacheCreation: 0 }
 
 function user(text: string): SessionMessage {
   return { role: 'user', text, toolUses: [] }
@@ -97,17 +107,61 @@ test('the system prompt keeps English labels and asks for the user\'s language i
   expect(s).toContain('Write the sentences in the language the user writes in the excerpt.')
   expect(s).toContain('STATE: <key>\nNow: one short sentence')
   expect(s).toContain('You: the one action')
+  expect(s).toContain('write a single hyphen: "You: -"')
+  expect(s).toContain('at most 70 characters per option')
   for (const word of ['Agora', 'Você', 'Portuguese', 'Translate']) expect(s).not.toContain(word)
 })
 
-test('the state line gives the state and its word, and the lines under it are the body', () => {
-  expect(parseAnswer(ANSWER)).toEqual({ state: 'working', label: 'Working', body: BODY })
-  expect(parseAnswer('**STATE: Waiting**\nNow: x')).toEqual({ state: 'waiting', label: 'Waiting for you', body: 'Now: x' })
+test('the state line gives the state, and Now, You and the options are read from the lines under it', () => {
+  expect(parseAnswer(ANSWER)).toEqual({ state: 'working', now: NOW, you: null, options: [], rest: [], body: BODY })
+  expect(parseAnswer('**STATE: Waiting**\n**Now:** x\nYou: pick one')).toMatchObject({ state: 'waiting', now: 'x', you: 'pick one' })
+  expect(parseAnswer(WAITING).options).toEqual([
+    { number: '1', text: 'Delete (recommended): nothing in the repo reads the file', name: 'Delete', mark: 'recommended', cost: 'nothing in the repo reads the file' },
+    { number: '2', text: 'Keep: it stays in /tmp until the reboot', name: 'Keep', mark: null, cost: 'it stays in /tmp until the reboot' },
+  ])
 })
 
-test('an answer that drifts from the shape is shown whole, with no state', () => {
-  expect(parseAnswer('The agent is deploying.')).toEqual({ state: null, label: '', body: 'The agent is deploying.' })
-  expect(parseAnswer('STATE: confused\nx')).toEqual({ state: null, label: '', body: 'STATE: confused\nx' })
+test('You: - means nothing is needed, in any language, as do a dash and an empty You', () => {
+  for (const you of ['-', '–', '—', '']) expect(parseAnswer(`STATE: done\nNow: x\nYou: ${you}`).you).toBeNull()
+  expect(parseAnswer('STATE: done\nNow: x').you).toBeNull()
+})
+
+test('an answer that drifts from the shape is kept whole, with no state', () => {
+  expect(parseAnswer('The agent is deploying.')).toEqual({ state: null, now: '', you: null, options: [], rest: [], body: 'The agent is deploying.' })
+  expect(parseAnswer('STATE: confused\nx')).toMatchObject({ state: null, body: 'STATE: confused\nx' })
+})
+
+// --- the text reply ---
+
+test('nothing needed: the state in code and Now in bold, and the footer says nothing is needed', () => {
+  expect(reply(parseAnswer(ANSWER), USED, texts())).toBe(`\`WORKING\`  **${NOW}**\n\n${IDLE_FOOTER}`)
+})
+
+test('a pending decision adds the you line and the options, indented, the name bold and the mark italic', () => {
+  expect(reply(parseAnswer(WAITING), USED, texts())).toBe(
+    [
+      '`WAITING`  **the agent wrote the demo file and asks whether to delete or keep it.**',
+      '→ you: answer 1 or 2',
+      `${NBSP3}1. **Delete** *(recommended)*: nothing in the repo reads the file`,
+      `${NBSP3}2. **Keep**: it stays in /tmp until the reboot`,
+    ].join('  \n') + `\n\n${FOOTER}`,
+  )
+})
+
+test('each state has its word in the code span', () => {
+  for (const [key, word] of [['working', 'WORKING'], ['waiting', 'WAITING'], ['blocked', 'BLOCKED'], ['done', 'DONE']] as const) {
+    expect(reply(parseAnswer(`STATE: ${key}\n${BODY}`), USED, texts()).startsWith(`\`${word}\`  **`)).toBe(true)
+  }
+})
+
+test('an option the parts do not fit, and a line in no shape, pass as they came', () => {
+  expect(reply(parseAnswer('STATE: waiting\nNow: x\nYou: y\n1. Use (a) or (b): z\nsee the log'), USED, texts())).toBe(
+    ['`WAITING`  **x**', '→ you: y', `${NBSP3}1. Use (a) or (b): z`, 'see the log'].join('  \n') + `\n\n${FOOTER}`,
+  )
+})
+
+test('a drifted answer shows its lines as they came, plus the footer', () => {
+  expect(reply(parseAnswer('The agent is deploying.\n\nIt needs nothing.'), USED, texts())).toBe(`The agent is deploying.  \nIt needs nothing.\n\n${FOOTER}`)
 })
 
 // --- the command ---
@@ -187,7 +241,7 @@ test('answered: Haiku reads the digest, and the reply is the note, the state, th
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`**Working**\n\n${LAID}\n\n${FOOTER}`)
+  expect(r.text).toBe(`\`WORKING\`  **${NOW}**\n\n${IDLE_FOOTER}`)
   expect(c.calls).toEqual([{ model: 'haiku', system: system(), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
   expect(c.opened).toEqual(['wtf'])
 })
@@ -213,7 +267,7 @@ test('without a surface that draws, no pane opens and the text still comes back'
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text?.endsWith(FOOTER)).toBe(true)
+  expect(r.text?.endsWith(IDLE_FOOTER)).toBe(true)
   expect(c.opened).toEqual([])
 })
 
@@ -282,7 +336,7 @@ test('a model call that throws gives one line, in the reply and in the pane in t
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', outcome: 'error', usage: null })
 })
 
-test('the pane draws the header, the question, the state badge, the body and the keys, at the pane width', async ($, on) => {
+test('the pane draws the header, the question, the state badge beside Now, and the keys, at the pane width', async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   const clock = setup(on, c)
   await $.session.start(start)
@@ -293,13 +347,72 @@ test('the pane draws the header, the question, the state badge, the body and the
   const ui = await $.ui.mount(PANE)
   const root = await ui.drawn()
   expect(root.props).toMatchObject({ flexDirection: 'column', width: 60 })
-  expect(await ui.find({ type: 'Text', text: 'WTF' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  work · idle 4m · haiku · 1200→80 tokens' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: 'WTF' }))?.props).toMatchObject({ bold: true })
+  expect((await ui.find({ type: 'Text', text: '  work · idle 4m · haiku 1200→80' }))?.props).toMatchObject({ dimColor: true, wrap: 'truncate-end' })
   expect((await ui.find({ type: 'Text', text: '> why did it stop?' }))?.props).toMatchObject({ dimColor: true })
-  expect((await ui.find({ type: 'Text', text: ' Working ' }))?.props).toMatchObject({ backgroundColor: 'suggestion', color: 'inverseText', bold: true })
-  expect(await ui.find({ type: 'Markdown', text: LAID })).toBeDefined()
-  expect(await ui.find({ key: 'rerun', text: 'Re-run' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Esc: close' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: ' WORKING ' }))?.props).toEqual({ bold: true, inverse: true, color: 'suggestion' })
+  expect((await ui.find({ type: 'Text', text: NOW }))?.props).toMatchObject({ bold: true, wrap: 'wrap' })
+  expect(await ui.find({ key: 'you' })).toBeUndefined()
+  // The re-run Button only holds the hotkey, hidden; the row draws the key in cyan and its name dim.
+  expect((await ui.find({ key: 'rerun', text: 're-run' }))?.props).toMatchObject({ hotkey: 'r', plain: true })
+  expect(await ui.find({ type: 'Box', text: /^re-run$/ })).toMatchObject({ props: { display: 'none' } })
+  expect((await ui.find({ type: 'Text', text: /^r$/ }))?.props).toMatchObject({ color: 'cyan' })
+  expect((await ui.find({ type: 'Text', text: /^ re-run$/ }))?.props).toMatchObject({ dimColor: true })
+  expect((await ui.find({ type: 'Text', text: /^esc$/ }))?.props).toMatchObject({ color: 'cyan' })
+  expect((await ui.find({ type: 'Text', text: /^ close$/ }))?.props).toMatchObject({ dimColor: true })
+})
+
+test('in the pane, the badge keeps its width and Now wraps in the columns left beside it', async ($, on) => {
+  const long = 'the agent wrote the demo file and asks whether to delete or keep it, and it waits for the answer before it goes on.'
+  const c = scenario(answered(`STATE: waiting\nNow: ${long}\nYou: -`), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'wtf', args: '' })
+  const ui = await $.ui.mount(PANE)
+  const row = await ui.find({ key: 'now' })
+  expect(row?.props).toMatchObject({ flexDirection: 'row', width: 60 })
+  const [lead, rest] = (row?.children ?? []).map((x) => Object(x))
+  // ' WAITING FOR YOU ' is 17 cells, and one more parts it from the sentence.
+  expect(lead.props).toEqual({ width: 18, flexShrink: 0 })
+  expect(rest.props).toEqual({ width: 42, flexShrink: 1, flexGrow: 1 })
+  expect(lead.children[0]).toMatchObject({ type: 'Text', props: { inverse: true, color: 'warning' }, children: [' WAITING FOR YOU '] })
+  expect(rest.children[0]).toMatchObject({ type: 'Text', props: { bold: true, wrap: 'wrap' }, children: [long] })
+})
+
+test('in the pane, the you line and the options wrap inside the pane, the options indented under it', async ($, on) => {
+  const c = scenario(answered(WAITING), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'wtf', args: '' })
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 40 } })
+  const you = await ui.find({ key: 'you' })
+  expect(you?.props).toMatchObject({ width: 40 })
+  const [label, action] = (you?.children ?? []).map((x) => Object(x))
+  expect(label.props).toEqual({ width: 7, flexShrink: 0 })
+  expect(label.children[0]).toMatchObject({ props: { color: 'cyan' }, children: ['→ you:'] })
+  expect(action.props).toEqual({ width: 33, flexShrink: 1, flexGrow: 1 })
+  expect(action.children[0]).toMatchObject({ props: { wrap: 'wrap' }, children: ['answer 1 or 2'] })
+  const option = await ui.find({ key: 'option-1' })
+  expect(option?.props).toMatchObject({ flexDirection: 'row', width: 37 })
+  const [number, text] = (option?.children ?? []).map((x) => Object(x))
+  expect(number.props).toEqual({ width: 3, flexShrink: 0 })
+  expect(number.children[0]).toMatchObject({ props: { dimColor: true }, children: ['1. '] })
+  expect(text.props).toEqual({ width: 34, flexShrink: 1, flexGrow: 1 })
+  expect(text.children[0]).toMatchObject({
+    props: { wrap: 'wrap' },
+    children: [{ type: 'Text', props: { bold: true }, children: ['Delete'] }, ' ', { type: 'Text', props: { italic: true }, children: ['(recommended)'] }, ': nothing in the repo reads the file'],
+  })
+  expect((await ui.find({ key: 'option-2', text: 'Keep: it stays in /tmp until the reboot' }))?.props).toMatchObject({ width: 37 })
+})
+
+test('in the pane, a drifted answer shows as it came, wrapping, with no badge', async ($, on) => {
+  const c = scenario(answered('The agent is deploying.'), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'wtf', args: '' })
+  const ui = await $.ui.mount(PANE)
+  expect((await ui.find({ type: 'Text', text: 'The agent is deploying.' }))?.props).toEqual({ wrap: 'wrap' })
+  expect(await ui.find({ key: 'now' })).toBeUndefined()
 })
 
 test('each state has its theme color', async ($, on) => {
@@ -307,14 +420,15 @@ test('each state has its theme color', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   for (const [key, label, color] of [
-    ['waiting', 'Waiting for you', 'warning'],
-    ['blocked', 'Blocked', 'error'],
-    ['done', 'Done', 'success'],
+    ['working', 'WORKING', 'suggestion'],
+    ['waiting', 'WAITING FOR YOU', 'warning'],
+    ['blocked', 'BLOCKED', 'error'],
+    ['done', 'DONE', 'success'],
   ] as const) {
     c.complete = answered(`STATE: ${key}\n${BODY}`)
     await $.command.run({ command: 'wtf', args: '' })
     const ui = await $.ui.mount(PANE)
-    expect((await ui.find({ type: 'Text', text: ` ${label} ` }))?.props).toMatchObject({ backgroundColor: color })
+    expect((await ui.find({ type: 'Text', text: ` ${label} ` }))?.props).toMatchObject({ color, inverse: true })
     await ui.unmount()
   }
 })
@@ -331,7 +445,7 @@ test('while the model answers the pane says it is reading, shows a running turn 
   expect(await ui.find({ type: 'Text', text: '  work · running · haiku' })).toBeDefined()
   expect(await ui.find({ key: 'rerun' })).toBeUndefined()
   await clock.advance(1000)
-  expect((await pending).text?.endsWith(FOOTER)).toBe(true)
+  expect((await pending).text?.endsWith(IDLE_FOOTER)).toBe(true)
 })
 
 test('the re-run key asks the model again, with the same question, and logs it as a re-run', WITH_PANE, async ($, on) => {
@@ -346,7 +460,7 @@ test('the re-run key asks the model again, with the same question, and logs it a
   expect(c.calls[1]?.prompt).toContain('<question>\nand now?\n</question>')
   expect(c.opened).toEqual(['wtf'])
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'rerun', hasQuestion: true, outcome: 'answered', state: 'done' })
-  expect(await ui.find({ type: 'Text', text: ' Done ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' DONE ' })).toBeDefined()
 })
 
 // --- the diary ---
@@ -415,7 +529,7 @@ test('without the pane option the answer shows once, in the transcript, and no p
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toContain(FOOTER)
+  expect(r.text).toContain(IDLE_FOOTER)
   expect(c.opened).toEqual([])
 })
 
@@ -426,10 +540,4 @@ test('in the middle of a turn the pane opens even without the pane option, becau
   await $.turn.start({ text: 'deploy', turnId: 't1' })
   await $.command.run({ command: 'wtf', args: '' })
   expect(c.opened).toEqual(['wtf'])
-})
-
-test('the layout bolds the labels and indents the options with their names in bold', () => {
-  expect(layoutBody('Now: x\nYou: pick one.\n1. Delete (recommended): test data.\n2. Keep: costs 10 minutes.')).toBe(
-    '**Now:** x  \n**You:** pick one.  \n\u00a0\u00a0\u00a01. **Delete** *(recommended)*: test data.  \n\u00a0\u00a0\u00a02. **Keep**: costs 10 minutes.',
-  )
 })
