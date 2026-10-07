@@ -1,0 +1,9 @@
+[Unit]
+Description=Envio do dataset de turnos avaliados todo dia às 3h47 de Brasília
+
+[Timer]
+OnCalendar=*-*-* 03:47:00 America/Sao_Paulo
+Persistent=true
+
+[Install]
+WantedBy=timers.target

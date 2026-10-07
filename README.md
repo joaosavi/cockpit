@@ -8,7 +8,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | :--- | :--- | :--- |
 | `claude/` | `CLAUDE.md` global, `settings.json` e `settings.local.json` | `~/.claude/` |
 | `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/` |
-| `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite` e `navegador-cofre` | `~/.local/bin/` |
+| `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite`, `navegador-cofre` e `avaliacoes-backup`, que envia o dataset do mod `rating` para o repo privado `joaosavi/agent-ratings` depois de passar pelo filtro de segredos | `~/.local/bin/` |
 | `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
 | `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agent`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |

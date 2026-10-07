@@ -94,7 +94,8 @@
     "loop-breaker@agent": true,
     "secret-guard@agent": true,
     "pipefail@agent": true,
-    "mod-report@agent": true
+    "mod-report@agent": true,
+    "rating@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

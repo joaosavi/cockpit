@@ -1,0 +1,11 @@
+{
+  "name": "rating",
+  "version": "1.0.0",
+  "description": "Records every agent turn (prompt, tools, answer, skills, usage) as a dataset, with your 1-5 ratings from /rate or the band and automatic weak labels from the next prompt, for analysis and fine-tuning. /ratings reports it",
+  "author": { "name": "João Savi" },
+  "dependencies": ["secret-guard", "loop-breaker", "skill-loader"],
+  "userConfig": {
+    "datasetDir": { "type": "string", "title": "Dataset folder", "description": "Folder of the turns, ratings and signals JSONL files. A leading ~ is the home folder", "default": "~/datasets/agent-ratings" },
+    "band": { "type": "boolean", "title": "Rating band", "description": "Show the 1-5 rating row above the prompt after each answer", "default": true }
+  }
+}
