@@ -1,6 +1,6 @@
 {
   "name": "hud",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
   "author": {
     "name": "João Savi"
@@ -32,7 +32,7 @@
     "activity": {
       "type": "boolean",
       "title": "Activity",
-      "description": "While a turn runs, show its errors and the latest note another mod added to a tool result. Claude Code already shows the tool, the subagents and the time",
+      "description": "While a turn runs, show the latest note another mod added to a tool result. Claude Code already shows the tool, its errors, the subagents and the time",
       "default": true
     },
     "memory": {

@@ -143,10 +143,9 @@ const ACTIVITY: Activity = {
   notable: 'loop-breaker: repeated error',
 }
 
-test('the activity row shows only what Claude Code does not: errors and the latest mod note', () => {
-  expect(activityRows(ACTIVITY, 80).map(rowText)).toEqual(['2 errors · loop-breaker: repeated error'])
-  expect(activityRows({ ...ACTIVITY, errors: 0, notable: null }, 80)).toEqual([])
-  expect(activityRows({ ...ACTIVITY, errors: 1, notable: null }, 80).map(rowText)).toEqual(['1 error'])
+test('the activity row shows only what Claude Code does not: the latest mod note', () => {
+  expect(activityRows(ACTIVITY, 80).map(rowText)).toEqual(['loop-breaker: repeated error'])
+  expect(activityRows({ ...ACTIVITY, errors: 3, notable: null }, 80)).toEqual([])
   for (const columns of [20, 50, 80]) for (const r of activityRows(ACTIVITY, columns)) expect(width(r) <= columns).toBe(true)
 })
 
@@ -361,12 +360,12 @@ test('band off leaves the band to the other mods', OFF_MODE, async ($, on) => {
   expect(await ui.drawn()).toMatchObject(OTHER_MODS)
 })
 
-test('during a turn the band adds errors and mod notes, never the tool, the subagents or the time', async ($, on) => {
+test('during a turn the band adds mod notes, never errors, the tool, the subagents or the time', async ($, on) => {
   const clock = setup(on)
   await $.session.start(START)
   await $.turn.start({ text: 'run the tests', turnId: 't1' })
   const quiet = await $.ui.mount(band(100, true))
-  expect(await quiet.find({ type: 'Text', text: /error/ })).toBeUndefined()
+  expect(await quiet.find({ type: 'Text', text: /loop-breaker/ })).toBeUndefined()
   await quiet.unmount()
   await $.tool.call({ tool: 'Bash', command: 'false' })
   await $.tool.call({ tool: 'Bash', command: 'loop' })
@@ -376,14 +375,14 @@ test('during a turn the band adds errors and mod notes, never the tool, the suba
   expect(await ui.find({ type: 'Text', text: 'yarn turbo run test' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'Explore' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /turn / })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: '1 error' })).toMatchObject({ props: { color: 'error' } })
+  expect(await ui.find({ type: 'Text', text: '1 error' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'loop-breaker: repeated error' })).toMatchObject({ props: { color: 'warning' } })
   await ui.unmount()
   await clock.advance(20_000)
   await running
   await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 62_000, isAborted: false, usage: null })
   const idle = await $.ui.mount(band(100, false))
-  expect(await idle.find({ type: 'Text', text: '1 error' })).toBeUndefined()
+  expect(await idle.find({ type: 'Text', text: 'loop-breaker: repeated error' })).toBeUndefined()
   expect(await idle.find({ type: 'Text', text: '3 calls' })).toBeDefined()
 })
 

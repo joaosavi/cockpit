@@ -605,12 +605,11 @@ export function notableOf(r: { deny?: string; context?: readonly string[] }): st
 }
 
 
-// What the turn shows that Claude Code's own screen does not: the errors so far and the latest note
-// another mod added to a tool result. Claude Code already draws the running tool, the subagents and
-// the turn's time, so the band leaves them out. No row while there is nothing to add.
+// What the turn shows that Claude Code's own screen does not: the latest note another mod added to a
+// tool result, which only the model reads. Claude Code already draws the running tool, its errors,
+// the subagents and the turn's time, so the band leaves them out. No row while there is no note.
 export function activityRows(a: Activity, columns: number): Row[] {
   const parts: Seg[][] = []
-  if (a.errors > 0) parts.push([{ text: `${a.errors} ${a.errors === 1 ? 'error' : 'errors'}`, tone: 'error' }])
   if (a.notable !== null) parts.push([{ text: a.notable, tone: 'warning' }])
   if (parts.length === 0) return []
   const row: Row = parts.flatMap((p, i) => (i === 0 ? p : [{ text: ' · ', dim: true }, ...p]))
