@@ -63,7 +63,7 @@
     {
       "name": "wtf",
       "source": "./mods/wtf",
-      "description": "/wtf explains in a few plain lines where this session is and what it needs from you, without interrupting the agent or entering the conversation"
+      "description": "/wtf has Haiku read a short digest of this session and explain in a few plain lines where it is and what it needs from you, without interrupting the agent"
     }
   ]
 }

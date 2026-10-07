@@ -1,17 +1,19 @@
 // /wtf answers, in a few plain lines, where this session is and what the agent needs from the user,
 // for someone who switched between several sessions and remembers nothing about this one.
 //
-// The answer comes from `$.model.fork`: the session's last request again, with the question after it,
-// with no tools and nothing recorded in the conversation, so the agent is not interrupted and the
-// answer does not enter its context. The command is immediate, so it also runs mid-turn.
+// The answer comes from a cheap model (`$.model.complete` with Haiku) reading a small digest of the
+// session: the message that opened the task and the last messages, with each tool call cut to one
+// line. The agent is not interrupted and the call records nothing in the conversation. The command is
+// immediate, so it also runs mid-turn. The text reply, which reaches the main agent's context, opens
+// with a line saying it is a summary for the user and not an instruction.
 //
 // In the terminal and the desktop app the answer opens in a pane; the text reply always comes too,
 // for Remote Control, which draws no pane. The diary keeps one line per use with the outcome, the time
-// and the tokens the fork spent, never the question or the answer. At the end of each session, one
-// summary line counts the uses by outcome and sums their tokens.
+// and the tokens the model call spent, never the question or the answer. At the end of each session,
+// one summary line counts the uses by outcome and sums their tokens.
 
 import type { Elements, Hook, On, RenderElement } from 'claude-code'
-import { addUsage, askedEntry, errorLine, failureLine, NO_USAGE, type Outcome, prompt, question, resultUsage, type Usage } from './rules.ts'
+import { addUsage, askedEntry, digest, errorLine, failureLine, MAX_TOKENS, MODEL, NO_USAGE, NOTHING, type Outcome, prompt, question, reply, SYSTEM, type Usage, usage } from './rules.ts'
 import { countAction, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -27,7 +29,7 @@ let diary = ''
 let cwd = ''
 let tally = newTally()
 let spent: Usage = NO_USAGE
-let forkMs = 0
+let modelMs = 0
 
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
@@ -94,20 +96,31 @@ export function register(on: On) {
     const started = await $.clock.now()
     let outcome: Outcome = 'error'
     let used: Usage | null = null
+    let digestChars = 0
     let text: string
     try {
       show($, { kind: 'waiting', question: q })
       await openPane($)
-      const r = await $.model.fork({ prompt: prompt(q) })
-      used = resultUsage(r)
-      if (r.isAnswered) {
-        outcome = 'answered'
-        text = r.text.trim()
-        show($, { kind: 'answer', question: q, text })
-      } else {
-        outcome = r.reason
-        text = failureLine(r)
+      const messages = await $.session.messages()
+      const d = messages.length === 0 ? '' : digest(messages)
+      digestChars = d.length
+      if (d === '') {
+        outcome = 'no-messages'
+        text = NOTHING
         show($, { kind: 'failed', question: q, line: text })
+      } else {
+        const r = await $.model.complete({ model: MODEL, system: SYSTEM, prompt: prompt(d, q), maxTokens: MAX_TOKENS })
+        used = usage(r.usage)
+        if (r.isAnswered) {
+          outcome = 'answered'
+          const answer = r.text.trim()
+          show($, { kind: 'answer', question: q, text: answer })
+          text = reply(answer)
+        } else {
+          outcome = r.reason
+          text = failureLine(r)
+          show($, { kind: 'failed', question: q, line: text })
+        }
       }
     } catch (err) {
       text = errorLine(err)
@@ -116,9 +129,9 @@ export function register(on: On) {
     const ms = (await $.clock.now()) - started
     countAction(tally, outcome)
     spent = addUsage(spent, used)
-    forkMs += ms
+    modelMs += ms
     try {
-      await log($, askedEntry({ hasQuestion: q !== '', outcome, ms, usage: used }))
+      await log($, askedEntry({ hasQuestion: q !== '', outcome, ms, usage: used, digestChars }))
     } catch {
       // a diary that cannot be written does not hold up the answer
     }
@@ -134,17 +147,17 @@ export function register(on: On) {
   on('session.end', async ($, e, next) => {
     const t = tally
     const u = spent
-    const ms = forkMs
+    const ms = modelMs
     tally = newTally()
     spent = NO_USAGE
-    forkMs = 0
+    modelMs = 0
     const asked = Object.values(t.actions).reduce((a, b) => a + b, 0)
     try {
       await log(
         $,
         sessionSummary(t, e.sessionId, cwd, {
           asked,
-          forkMs: Math.round(ms),
+          modelMs: Math.round(ms),
           inputTokens: u.input,
           outputTokens: u.output,
           cacheReadTokens: u.cacheRead,

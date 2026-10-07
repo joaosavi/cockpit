@@ -1,7 +1,7 @@
 {
   "name": "wtf",
-  "version": "1.0.0",
-  "description": "/wtf explains in a few plain lines where this session is and what it needs from you, without interrupting the agent or entering the conversation",
+  "version": "1.1.0",
+  "description": "/wtf has Haiku read a short digest of this session and explain in a few plain lines where it is and what it needs from you, without interrupting the agent",
   "author": {
     "name": "João Savi"
   }
