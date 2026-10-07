@@ -24,6 +24,11 @@
       "name": "skill-loader",
       "source": "./mods/skill-loader",
       "description": "Loads the right skill at the right time: typescript-best-practices when reading .ts, writing-for-agents on SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling on CONTEXT.md and ADRs, technical-writing on README, commits and PRs"
+    },
+    {
+      "name": "audit",
+      "source": "./mods/audit",
+      "description": "Records every MCP call that writes in one file per day, without refusing anything. /audit shows the last ones"
     }
   ]
 }

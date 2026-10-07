@@ -67,8 +67,9 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 | `usage-limit` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta |
 | `memory-guard` | Antes de typecheck, teste, build ou Playwright, confere se o comando cabe no alto de memória do grupo, menos 2%. Se não cabe, roda com um processo só, espera até 2 minutos ou recusa. Repete com um processo só o comando que morreu com exit 137, e guarda o pico de cada comando para a próxima conta |
 | `skill-loader` | Entrega a skill certa junto com a ação: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, `technical-writing` em README, commit e PR. Lê o `SKILL.md` do disco, porque a ferramenta Skill chamada por um mod não põe o texto na conversa |
+| `audit` | Grava toda chamada MCP de escrita (Slack, Gmail, HubSpot, Notion, Calendar, Drive) num arquivo por dia em `~/.local/state/mods/audit/`, sem recusar nada, e guarda 30 dias. Na dúvida entre leitura e escrita, grava |
 
-Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit` e `/ram`.
+Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit`, `/ram` e `/audit [quantidade] [filtro]`.
 
 O `retomar-limite.timer` continua rodando para a sessão que ainda bater 100%. A opção `resumeOnError` do mod `usage-limit` assume esse caso quando o timer sair.
 

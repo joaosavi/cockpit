@@ -1,0 +1,11 @@
+{
+  "name": "audit",
+  "version": "1.0.0",
+  "description": "Records every MCP call that writes (Slack, Gmail, HubSpot, Notion, Calendar, Drive...) in one file per day, without refusing anything. /audit shows the last ones",
+  "author": { "name": "João Savi" },
+  "userConfig": {
+    "retentionDays": { "type": "number", "title": "Retention", "description": "Days of audit files to keep", "default": 30, "min": 1, "max": 365 },
+    "showCount": { "type": "number", "title": "Entries shown", "description": "How many entries /audit shows when no number is given", "default": 20, "min": 1, "max": 500 },
+    "timeZone": { "type": "string", "title": "Time zone", "description": "Time zone of the times /audit shows", "default": "America/Sao_Paulo" }
+  }
+}

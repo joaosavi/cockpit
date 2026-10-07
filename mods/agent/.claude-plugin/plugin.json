@@ -1,6 +1,6 @@
 {
   "name": "agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The bundle with all of the agent's mods. Installing this plugin installs each mod as a dependency",
   "author": {
     "name": "João Savi"
@@ -8,6 +8,7 @@
   "dependencies": [
     "usage-limit",
     "memory-guard",
-    "skill-loader"
+    "skill-loader",
+    "audit"
   ]
 }
