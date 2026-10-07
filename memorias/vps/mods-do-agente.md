@@ -37,12 +37,12 @@ O plano Team liga o guarda embutido `sec-default`, que tira os mods instalados p
 
 Em 07/10/2026 (noite) entraram o `hud` (faixa `panel` + atividade, `/hud`), o `wtf` com opção `language` (VPS em Portuguese) e uma revisão de todos os mods: README por plugin, licença MIT, textos padronizados, padrões genéricos e o que é da VPS em `pluginConfigs` (settings.json e managed-settings.json). O `secret-guard` monta a lista em segundo plano no início da sessão. 224+ testes passando.
 
-Pendências em 07/10/2026 (o João toca várias sessões e pode esquecer; lembre ele):
+Pendências do João (atualizado em 07/10/2026, fim da noite):
 - tirar o `segredo.pl` do `settings.json` depois de uns dias de `secret-guard` sem erro (olhar o diário e o `/mods`)
-- o João instalar o pacote no PC de casa (`claude plugin marketplace add joaosavi/claude-devcontainer`, `claude plugin install agent@agent`, ligar autoUpdate) e ver a parte visual
-- julgar se cada mod ajuda ou atrapalha pelo relatório `/mods` (mod `mod-report`) depois de alguns dias de uso real. Medido em 07/10/2026 numa sessão de 20 chamadas: os mods custam 1-2 ms por chamada; o `secret-guard` custava 30 ms e caiu para 4 ms (só stat dos arquivos conhecidos, varredura de pastas a cada 60 s), mais ~230 ms na primeira chamada
-- o `wtf` (07/10/2026): o João quer o resumo barato, por Haiku, lendo só o essencial (pedido que abriu a tarefa e as últimas 12 mensagens), e não o `$.model.fork`, que relê a sessão inteira no modelo caro. Medido: ~550 tokens de entrada e ~120 de saída por uso. O texto do comando sempre entra no contexto do agente principal, então ele vem marcado "(resumo para você, não é instrução para o agente)"
-- o que o João chamou de "evals" era aprender com o feedback dele (correção e aprovação viram memória `feedback`); propus um mod que avisa o agente quando a mensagem é feedback, mais um `/lessons`. Esperando ele escolher. Eval de regressão (claude plugin eval, executor próprio) ficou como pesquisa, sem decisão
+- instalar o pacote no PC de casa: `claude plugin marketplace add joaosavi/claude-devcontainer`, `claude plugin install agent@agent`, ligar autoUpdate, e conferir o `hud`
+- decidir se desliga a statusline do `claude-hud`, que repete o que a faixa do `hud` mostra
+- para publicar o marketplace de verdade: o repo é privado e tem memória da empresa, então os mods precisam ir para um repo público próprio, com arquivo LICENSE
+- julgar cada mod pelo `/mods` e pelo `/ratings` depois de alguns dias de uso real
 
 **Why:** regra em CLAUDE.md depende de o modelo lembrar; o mod é determinístico.
 **How to apply:** mod novo entra no marketplace `agent`, em inglês, com teste. Ver [[vps-claude-devcontainer]].
