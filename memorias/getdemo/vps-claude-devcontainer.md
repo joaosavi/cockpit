@@ -7,7 +7,7 @@ metadata:
 
 Desde 06/10/2026, `joaosavi/claude-devcontainer` (clonado em `~/claude-devcontainer`) guarda tudo que monta a VPS: `CLAUDE.md` global, `settings.json`, hook `segredo.pl`, scripts de `~/.local/bin`, units do systemd, a tarefa `sessoes-limite`, a config do terminal em `shell/` (`.zshrc`, `.profile`, `.npmrc`, starship, fastfetch), o `CLAUDE.md` do resgate, as skills `tcc-esag` e `chain-check` e o guia Always-On em HTML. Os arquivos instalados são links para o repo; `settings.json` e as units entram por cópia, trazidas pelo `capturar.sh`.
 
-O `joaosavi/dotfiles` (chezmoi) é só do terminal das máquinas locais do João e não tem nada a ver com a VPS. Em 07/10/2026 o chezmoi saiu da VPS a pedido do João: todo versionamento da VPS passa pelo `claude-devcontainer` no GitHub. A chave age do dotfiles ficou em `~/.config/age/chezmoi-dotfiles.txt`, fora do repo. Skills de terceiros vêm do pack do skills.sh (60 requisições por hora) e não entram no repo; só as que o João construiu entram.
+O `joaosavi/dotfiles` (chezmoi) é só do terminal das máquinas locais do João e não tem nada a ver com a VPS. Em 07/10/2026 o chezmoi saiu da VPS a pedido do João: todo versionamento da VPS passa pelo `claude-devcontainer` no GitHub. A chave age do dotfiles foi apagada da VPS. Ela fica só nas máquinas locais. Skills de terceiros vêm do pack do skills.sh (60 requisições por hora) e não entram no repo; só as que o João construiu entram.
 
 **Why:** o João quer backup caso a VPS quebre, e corrigiu a mistura com o chezmoi.
 **How to apply:** mudança em arquivo da VPS se faz no repo e se commita; rode `capturar.sh` antes de commitar. Ver [[cofre-credenciais-agentes]]. A memória do Claude Code de `~/getdemo` e `~/esag` também mora no repo, em `memorias/`, por link.
