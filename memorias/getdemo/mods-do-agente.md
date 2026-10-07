@@ -16,7 +16,9 @@ Em 07/10/2026 o João decidiu não ter mod de bloqueio: nada é recusado por per
 
 Em 07/10/2026 entrou o `audit` (`/audit`), que grava as chamadas MCP de escrita em `~/.local/state/mods/audit/`.
 
-A ordem que falta: freio de laço, e o `segredo.pl` portado para mod (rodam juntos até o mod passar nos casos do `--teste`).
+Também entrou o `loop-breaker`.
+
+A ordem que falta: o `segredo.pl` portado para mod (rodam juntos até o mod passar nos casos do `--teste`).
 
 No mod `usage-limit`, o João escolheu: em 98% a sessão pausa e retoma sozinha quando a janela volta; um prompt dele (terminal, Remote Control ou `claude -p`) ganha um turno sem subagente; prompt automático fica guardado para a retomada.
 

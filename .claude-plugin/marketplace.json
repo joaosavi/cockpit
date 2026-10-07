@@ -29,6 +29,11 @@
       "name": "audit",
       "source": "./mods/audit",
       "description": "Records every MCP call that writes in one file per day, without refusing anything. /audit shows the last ones"
+    },
+    {
+      "name": "loop-breaker",
+      "source": "./mods/loop-breaker",
+      "description": "Notices when the agent goes in circles and tells it to stop and change approach. Refuses nothing"
     }
   ]
 }
