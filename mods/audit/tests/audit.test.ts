@@ -50,7 +50,14 @@ test('/audit lists the last entries and filters by server or action', () => {
   expect(report(entries, '1', DEFAULTS)).not.toContain('slack_send_message')
 })
 
-type Scene = { appended: string[]; calls: string[] }
+type Scene = {
+  appended: string[]
+  calls: string[]
+  // The audit files in the folder, by name, and the surfaces and panes /audit sees and opens.
+  files?: Record<string, string>
+  surfaces?: string[]
+  opened?: string[]
+}
 
 function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
   mock.clock(on, { now: Date.parse('2026-10-07T13:00:00Z') })
@@ -58,7 +65,16 @@ function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('session.cwd', () => ({ value: '/work' }))
   on('command.register', () => ({ value: undefined }))
-  on('fs.list', () => ({ value: [] }))
+  on('fs.list', () => ({ value: Object.keys(s.files ?? {}).map((name) => ({ name, kind: 'file' })) }))
+  on('fs.read', ($, e) => {
+    const name = Object.keys(s.files ?? {}).find((n) => e.path.endsWith(n))
+    return name === undefined ? { deny: 'no file' } : { value: s.files?.[name] ?? '' }
+  })
+  on('session.surfaces', () => ({ value: s.surfaces ?? [] }))
+  on('ui.open', ($, e) => {
+    s.opened?.push(e.id)
+    return { value: { isPlaced: true } }
+  })
   on('process.run', ($, e) => {
     if (e.argv[0] === 'sh' && e.init?.stdin !== undefined) s.appended.push(e.init.stdin)
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -107,4 +123,82 @@ test('marks a subagent call with its id', async ($, on) => {
   await $.session.start(start)
   await $.tool.call({ tool: 'mcp__claude_ai_Notion__notion-create-pages', agentId: 'sub1', pages: '[]' })
   expect(JSON.parse(s.appended[0] ?? '{}')).toMatchObject({ agentId: 'sub1' })
+})
+
+const PANE = {
+  plugin: 'audit',
+  surface: 'terminal',
+  component: 'Pane',
+  requestId: 'audit',
+  props: { title: 'Audit', isFocused: true, bodyColumns: 60, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+} as const
+
+// 30 entries, one a minute from 12:00 UTC: Slack sends, every tenth a Gmail draft that failed, the last one denied.
+function dayFile(): string {
+  return Array.from({ length: 30 }, (_, i) => {
+    const at = new Date(Date.parse('2026-10-07T12:00:00Z') + i * 60_000).toISOString()
+    const gmail = i % 10 === 0
+    const outcome = i === 29 ? 'denied' : gmail ? 'error' : 'ok'
+    return JSON.stringify({
+      at,
+      session: 's',
+      cwd: '/w',
+      server: gmail ? 'claude_ai_Gmail' : 'claude_ai_Slack',
+      action: gmail ? 'create_draft' : 'slack_send_message',
+      input: { channel_id: `C${i}`, message: 'x'.repeat(200) },
+      outcome,
+      ...(outcome === 'ok' ? {} : { error: outcome === 'denied' ? 'blocked by a hook' : 'quota' }),
+      ms: 5,
+    })
+  }).join('\n')
+}
+
+test('/audit opens the Audit pane with one row per entry, colored by outcome', async ($, on) => {
+  const opened: string[] = []
+  const s = { appended: [], calls: [], files: { '2026-10-07.jsonl': dayFile() }, surfaces: ['terminal'], opened }
+  prepare(on, s)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'audit', args: '' })
+  // The text reply stays the same, for Remote Control.
+  expect(r.text).toContain('Last 20 write call(s):')
+  expect(opened).toEqual(['audit'])
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: 'Last 20 write calls' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Oct 7, 09:29 · claude_ai_Slack · slack_send_message · ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'denied: blocked by a hook' })).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ type: 'Text', text: 'error: quota' })).toMatchObject({ props: { color: 'error' } })
+  expect(await ui.find({ type: 'Text', text: /^ok$/ })).toMatchObject({ props: { color: 'success' } })
+  // The arguments row is cut to the 60 columns of the pane.
+  const args = await ui.find({ type: 'Text', text: /^ {4}channel_id=C29, / })
+  expect(args).toMatchObject({ props: { dimColor: true } })
+  expect(args?.text.length).toBe(60)
+})
+
+test('More in the Audit pane shows 20 entries more, and Refresh keeps the filter', async ($, on) => {
+  const s = { appended: [], calls: [], files: { '2026-10-07.jsonl': dayFile() }, surfaces: ['terminal'] }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.command.run({ command: 'audit', args: '5' })
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: 'Last 5 write calls' })).toBeDefined()
+  await ui.press({ key: 'more' })
+  expect(await ui.find({ type: 'Text', text: 'Last 25 write calls' })).toBeDefined()
+  await ui.press({ key: 'more' })
+  // Only 30 entries exist.
+  expect(await ui.find({ type: 'Text', text: 'Last 30 write calls' })).toBeDefined()
+
+  await $.command.run({ command: 'audit', args: 'gmail' })
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ type: 'Text', text: 'Last 3 write calls matching "gmail"' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /slack_send_message/ })).toBeUndefined()
+})
+
+test('/audit without a surface that draws answers with text only', async ($, on) => {
+  const opened: string[] = []
+  const s = { appended: [], calls: [], files: { '2026-10-07.jsonl': dayFile() }, opened }
+  prepare(on, s)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'audit', args: '' })
+  expect(r.text).toContain('Last 20 write call(s):')
+  expect(opened).toEqual([])
 })

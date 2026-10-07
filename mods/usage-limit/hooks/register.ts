@@ -6,8 +6,10 @@
 // the reserve. An automatic prompt (routine, another session, task notification) is held and goes into
 // the resume.
 
-import type { Hook, On, PluginOptions } from 'claude-code'
+import type { Elements, Hook, On, PluginOptions, RenderElement } from 'claude-code'
 import {
+  bandRow,
+  type BandRow,
   classify,
   DEFAULTS,
   fullest,
@@ -15,10 +17,12 @@ import {
   msUntilReset,
   type Options,
   options,
+  pausedText,
   pauseText,
   reading,
   reserveTurnText,
   resumeText,
+  showsBand,
   summary,
   type Window,
   withoutExpired,
@@ -45,6 +49,7 @@ let readAt = 0
 const KEY = 'windows'
 
 type Api = Parameters<Hook<'session.start'>>[0]
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text'>
 
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
@@ -63,6 +68,18 @@ function update($: Api, fresh: readonly Window[]) {
   zone = classify(windows, o)
   if (zone.kind === 'free') $.ui.status(undefined)
   else $.ui.status(summary(windows, zone, o).split('\n')[0] ?? '')
+  $.ui.invalidate('ui.render')
+}
+
+// One window in the band: name, bar with the pause mark, percent, reset time.
+function windowRow(ui: Ui, r: BandRow): RenderElement {
+  const cells = r.runs.map((run) =>
+    run.kind === 'empty' ? ui.Text({ dimColor: true, children: [run.text] }) : ui.Text({ color: run.kind === 'mark' ? 'error' : r.tone, children: [run.text] }),
+  )
+  return ui.Box({
+    flexDirection: 'row',
+    children: [ui.Text({ children: [r.label] }), ...cells, ui.Text({ bold: true, children: [r.percent] }), ui.Text({ dimColor: true, wrap: 'truncate', children: [r.reset] })],
+  })
 }
 
 async function store($: Api) {
@@ -99,6 +116,7 @@ async function scheduleResume($: Api, window: Window, reason: string) {
     // The window reset. The right reading arrives with the first response of the resumed turn.
     zone = { kind: 'free' }
     $.ui.status(undefined)
+    $.ui.invalidate('ui.render')
     const text = resumeText(window, queue.splice(0))
     await log($, { event: 'resuming' })
     await $.prompt.submit({ text })
@@ -143,6 +161,16 @@ export function register(on: On, values: PluginOptions) {
     await store($)
     if (zone.kind !== before) await log($, { event: 'zone', from: before, to: zone.kind, windows })
     return next(e)
+  })
+
+  // The band above the prompt, shared with other mods: their content stays under these rows.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || !showsBand(windows, zone, o)) return next(e)
+    const ui = $.ui.resolve(e)
+    const rows = windows.map((w) => windowRow(ui, bandRow(w, e.props.bodyColumns, o)))
+    const paused = pausedText(zone, o)
+    if (paused !== null) rows.push(ui.Text({ color: 'error', bold: true, wrap: 'truncate', children: [paused] }))
+    return ui.Box({ flexDirection: 'column', children: [...rows, await next(e)] })
   })
 
   on('command.run', { command: 'limit' }, async () => {

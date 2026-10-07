@@ -6,8 +6,9 @@
 // stores the command's peak for the next estimate, and reruns with a single process a command that
 // died for lack of memory (exit 137).
 
-import type { Hook, On, PluginOptions } from 'claude-code'
+import type { Elements, Hook, On, PluginOptions, RenderElement, Timer } from 'claude-code'
 import {
+  bar,
   cost,
   DEFAULTS,
   diedOfMemory,
@@ -15,21 +16,27 @@ import {
   type Heavy,
   heavy,
   headroom,
+  headroomLine,
   inactiveFile,
   type Level,
+  levelLine,
+  type Machine,
   mb,
   meminfo,
   numberOrMax,
   type Options,
   options,
   peakKey,
+  peakLines,
   reduced,
   report,
+  tone,
   withMeasurement,
   workingSet,
 } from './rules.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
 let o: Options = DEFAULTS
 let diary = ''
@@ -37,6 +44,13 @@ const KEY = 'peaks'
 // Below this, the variation is noise from other processes in the group.
 const MIN_PEAK = 50 * 1024 * 1024
 const WAIT_STEP_S = 5
+const PANE = 'ram'
+const PANE_REFRESH_MS = 2000
+
+// What the /ram pane draws. The command, the timer and the Refresh button read the files; the render hook only reads this.
+type Reading = { levels: Level[]; machine: Machine | null; peaks: Record<string, number[]> }
+let shown: Reading = { levels: [], machine: null, peaks: {} }
+let paneTimer: Timer | null = null
 
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
@@ -127,6 +141,49 @@ async function updateStatus($: Api) {
   else $.ui.status(`${mb(Math.max(0, h))} fits before the memory max`)
 }
 
+async function refreshRam($: Api) {
+  shown = { levels: await readLevels($), machine: await readMachine($), peaks: await readPeaks($) }
+  $.ui.invalidate('ui.render')
+}
+
+// One group: its name, the stacked bar sized to the pane, and the figures under it.
+function levelBlock(ui: Ui, l: Level, columns: number): RenderElement {
+  const runs = bar(l, columns)
+  const color = tone(l, o.margin)
+  const cells =
+    runs === null
+      ? [ui.Text({ dimColor: true, children: ['no memory limit'] })]
+      : runs.map((r) =>
+          r.kind === 'used'
+            ? ui.Text({ color, children: [r.text] })
+            : r.kind === 'mark'
+              ? ui.Text({ bold: true, children: [r.text] })
+              : ui.Text({ dimColor: true, children: [r.text] }),
+        )
+  return ui.Box({
+    flexDirection: 'column',
+    marginBottom: 1,
+    children: [
+      ui.Text({ bold: true, wrap: 'truncate-start', children: [l.group] }),
+      ui.Box({ flexDirection: 'row', children: cells }),
+      ui.Text({ dimColor: true, wrap: 'truncate', children: [levelLine(l)] }),
+    ],
+  })
+}
+
+function ramPane(ui: Ui, r: Reading, columns: number, refresh: () => Promise<void>): RenderElement {
+  const blocks = r.levels.map((l) => levelBlock(ui, l, columns))
+  if (r.levels.length === 0) {
+    const machine = r.machine === null ? 'no memory reading on this machine' : `machine: ${mb(r.machine.available)} available of ${mb(r.machine.total)}`
+    blocks.push(ui.Text({ dimColor: true, children: [machine] }))
+  }
+  const h = headroomLine(r.levels, r.machine, o.margin)
+  if (h !== null) blocks.push(ui.Text({ bold: true, children: [h] }))
+  for (const line of peakLines(r.peaks)) blocks.push(ui.Text({ dimColor: true, wrap: 'truncate', children: [line] }))
+  blocks.push(ui.Box({ marginTop: 1, children: [ui.Button({ key: 'refresh', label: 'Refresh', hotkey: 'r', plain: true, onPress: refresh })] }))
+  return ui.Box({ flexDirection: 'column', children: blocks })
+}
+
 // Decides how the command runs: whole, with a single process, or not at all, after waiting.
 async function fit($: Api, command: string, h: Heavy): Promise<{ command: string; isReduced: boolean } | null> {
   const peaks = await readPeaks($)
@@ -176,9 +233,31 @@ export function register(on: On, values: PluginOptions) {
     return next(e)
   })
 
+  // The text reply stays for Remote Control, which draws no pane.
   on('command.run', { command: 'ram' }, async ($) => {
-    const peaks = Object.entries(await readPeaks($)).map(([k, v]) => `measured peaks of ${k}: ${v.map(mb).join(', ')}`)
-    return { text: [report(await readLevels($), await readMachine($), o.margin), ...peaks].join('\n') }
+    await refreshRam($)
+    if ((await $.session.surfaces()).length > 0) {
+      await $.ui.open({ id: PANE, title: 'Memory', focus: true, closeOnEscape: true })
+      paneTimer ??= $.clock.every(PANE_REFRESH_MS, async () => {
+        await refreshRam($)
+      })
+    }
+    return { text: [report(shown.levels, shown.machine, o.margin), ...peakLines(shown.peaks)].join('\n') }
+  })
+
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId !== PANE) return next(e)
+    return ramPane($.ui.resolve(e), shown, e.props.bodyColumns, async () => {
+      await refreshRam($)
+    })
+  })
+
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE) {
+      paneTimer?.cancel()
+      paneTimer = null
+    }
+    return next(e)
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {

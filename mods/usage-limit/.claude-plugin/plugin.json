@@ -1,6 +1,6 @@
 {
   "name": "usage-limit",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Guards the account usage limit: one subagent at a time above 90%, a pause with a reserve at 98%, and an automatic resume when the window resets",
   "author": {
     "name": "João Savi"
@@ -33,6 +33,14 @@
       "title": "Resume on limit error",
       "description": "Also resumes a session that hit 100% with the limit error, at the time the window resets",
       "default": true
+    },
+    "bandFrom": {
+      "type": "number",
+      "title": "Band from",
+      "description": "Show the usage band above the prompt from this percentage",
+      "default": 75,
+      "min": 0,
+      "max": 100
     }
   }
 }

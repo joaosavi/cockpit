@@ -57,6 +57,9 @@ type Scenario = {
   inactive?: number
   high?: number | 'max'
   max?: number | 'max'
+  // The surfaces /ram sees, and the panes it opened.
+  surfaces?: string[]
+  opened?: string[]
 }
 
 // The session's group has the usage of the first item of `used`; each `sleep` from the mod moves to the next one.
@@ -86,6 +89,11 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
       await clock.advance(5000)
     }
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
+  on('session.surfaces', () => ({ value: c.surfaces ?? [] }))
+  on('ui.open', ($, e) => {
+    c.opened?.push(e.id)
+    return { value: { isPlaced: true } }
   })
   on('session.start', () => ({ cwd: '/work' }))
   on('tool.call', ($, e) => {
@@ -189,4 +197,68 @@ test('/ram shows the inactive_file behind the headroom', async ($, on) => {
   const r = await $.command.run({ command: 'ram', args: '' })
   expect(r.text).toContain('minus 1024 MB inactive_file')
   expect(r.text).toContain('uses 2929 MB')
+})
+
+const PANE = {
+  plugin: 'memory-guard',
+  surface: 'terminal',
+  component: 'Pane',
+  requestId: 'ram',
+  props: { title: 'Memory', isFocused: true, bodyColumns: 60, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+} as const
+
+test('/ram opens the Memory pane with a block per group, the inactive_file and the headroom', async ($, on) => {
+  const opened: string[] = []
+  // memory.current is 3 GB, 1 GB of it inactive file cache.
+  const c = { used: [3 * GB], commands: [], responses: [], inactive: GB, peaks: { 'npx tsc': [300 * MB] }, surfaces: ['terminal'], opened }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'ram', args: '' })
+  // The text reply stays the same, for Remote Control.
+  expect(r.text).toContain('minus 1024 MB inactive_file')
+  expect(opened).toEqual(['ram'])
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: '/agentes.slice/getdemo-rc.service' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'uses 2048 MB · inactive_file 1024 MB · limit 3584 MB (max)' })).toBeDefined()
+  // 2 GB of 3.43 GB usable is 58%: green. The high mark at 3 GB of 3.5 GB is drawn.
+  expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'success' } })
+  expect(await ui.find({ type: 'Text', text: /^▒+$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '│' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /still fits, after the 2% margin/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'measured peaks of npx tsc: 300 MB' })).toBeDefined()
+})
+
+test('pressing refresh in the Memory pane reads the groups again', async ($, on) => {
+  const c = { used: [2 * GB], commands: [], responses: [], surfaces: ['terminal'] }
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'ram', args: '' })
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: /^uses 2048 MB/ })).toBeDefined()
+  c.used[0] = 3.3 * GB
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ type: 'Text', text: /^uses 3379 MB/ })).toBeDefined()
+  // 3.3 GB of 3.43 GB usable: red.
+  expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'error' } })
+})
+
+test('the Memory pane refreshes every 2 seconds while open', async ($, on) => {
+  const c = { used: [2 * GB], commands: [], responses: [], surfaces: ['terminal'] }
+  const clock = setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'ram', args: '' })
+  const ui = await $.ui.mount(PANE)
+  c.used[0] = 2.5 * GB
+  await clock.advance(2000)
+  expect(await ui.find({ type: 'Text', text: /^uses 2560 MB/ })).toBeDefined()
+})
+
+test('/ram without a surface that draws answers with text only', async ($, on) => {
+  const opened: string[] = []
+  const c = { used: [2 * GB], commands: [], responses: [], opened }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'ram', args: '' })
+  expect(r.text).toContain('uses 2048 MB')
+  expect(opened).toEqual([])
 })

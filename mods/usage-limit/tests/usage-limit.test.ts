@@ -187,3 +187,62 @@ test('a session that hit 100% with the limit error resumes when the window reset
   expect(s.submitted.length).toBe(1)
   expect(s.submitted[0]).toContain('The limit has reset')
 })
+
+const BAND = {
+  plugin: 'usage-limit',
+  surface: 'terminal',
+  component: 'AbovePrompt',
+  requestId: 'band',
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+} as const
+
+const OTHER_MODS = { type: 'Text', props: {}, children: ['drawn by another mod'] }
+
+test('the band shows each window with its bar and percent at 91%, and keeps the other mods', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 91 }
+  setup(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start(start)
+  const ui = await $.ui.mount(BAND)
+  const percent = await ui.find({ type: 'Text', text: '91%' })
+  expect(percent).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '5-hour' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /resets Oct 6, 19:30/ })).toBeDefined()
+  // The used part of the 5-hour bar is yellow, past the 90% alert, and the pause mark sits at 98%.
+  expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ type: 'Text', text: '│' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Paused/ })).toBeUndefined()
+})
+
+test('the band stays hidden at 50%', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 50 }
+  setup(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start(start)
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.drawn()).toMatchObject(OTHER_MODS)
+  expect(await ui.find({ type: 'Text', text: '50%' })).toBeUndefined()
+})
+
+test('the band adds a red paused row at 98%, and redraws when the window changes', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 50 }
+  setup(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start(start)
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /Paused/ })).toBeUndefined()
+  await $.session.measure({ rateLimits: windows(98), context: { tokens: 0, window: 200000, percent: 0 }, changed: ['rateLimits'] })
+  expect(await ui.find({ type: 'Text', text: 'Paused: resumes Oct 6, 19:30' })).toMatchObject({ props: { color: 'error' } })
+  expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'error' } })
+})
+
+test('from bandFrom (75% by default), the band shows, green below the alert', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 80 }
+  setup(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start(start)
+  const ui = await $.ui.mount(BAND)
+  // 80% is past the default of 75, below the 90% alert: green.
+  expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'success' } })
+})

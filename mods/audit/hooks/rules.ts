@@ -118,7 +118,7 @@ export function parse(text: string): Entry[] {
   return entries
 }
 
-function formatTime(iso: string, timeZone: string): string {
+export function formatTime(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
@@ -134,13 +134,32 @@ export function request(args: string, o: Options): { count: number; filter: stri
   return { count, filter: words.join(' ') }
 }
 
+// The entries whose server or action mentions the filter, all of them when the filter is empty.
+export function matching(entries: readonly Entry[], filter: string): Entry[] {
+  return filter === '' ? [...entries] : entries.filter((e) => `${e.server} ${e.action}`.toLowerCase().includes(filter))
+}
+
+export function emptyText(filter: string): string {
+  return filter === '' ? 'No write calls recorded in the audit window.' : `No write calls match "${filter}".`
+}
+
+// The arguments as `key=value`, each value cut at 80 characters.
+export function argsText(input: Readonly<Record<string, string>>): string {
+  return Object.entries(input).map(([k, v]) => `${k}=${v.length > 80 ? v.slice(0, 80) + '…' : v}`).join(', ')
+}
+
+// Cuts a text to fit `width` columns, marking the cut with `…`.
+export function cut(text: string, width: number): string {
+  if (text.length <= width) return text
+  return width <= 1 ? '…' : `${text.slice(0, width - 1)}…`
+}
+
 export function report(entries: readonly Entry[], args: string, o: Options): string {
   const { count, filter } = request(args, o)
-  const matching = filter === '' ? entries : entries.filter((e) => `${e.server} ${e.action}`.toLowerCase().includes(filter))
-  const last = matching.slice(-count)
-  if (last.length === 0) return filter === '' ? 'No write calls recorded in the audit window.' : `No write calls match "${filter}".`
+  const last = matching(entries, filter).slice(-count)
+  if (last.length === 0) return emptyText(filter)
   const lines = last.map((e) => {
-    const args = Object.entries(e.input).map(([k, v]) => `${k}=${v.length > 80 ? v.slice(0, 80) + '…' : v}`).join(', ')
+    const args = argsText(e.input)
     const status = e.outcome === 'ok' ? 'ok' : `${e.outcome}${e.error === undefined ? '' : ': ' + e.error.slice(0, 120)}`
     const who = e.agentId === undefined ? '' : ' (subagent)'
     return `${formatTime(e.at, o.timeZone)} · ${e.server} · ${e.action}${who} · ${status}\n    ${args}`

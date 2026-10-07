@@ -21,9 +21,11 @@ export type Options = {
   // Also resumes a session that hit 100% with the limit error, when the pause at the reserve came
   // too late (a burst of parallel requests can jump past it).
   resumeOnError: boolean
+  // From this percentage of the fullest window, the band above the prompt shows the windows.
+  bandFrom: number
 }
 
-export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: 'America/Sao_Paulo', resumeOnError: true }
+export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: 'America/Sao_Paulo', resumeOnError: true, bandFrom: 75 }
 
 // Margin after the reset time, because the server can release the limit a few seconds late.
 export const MARGIN_MS = 2 * 60_000
@@ -41,6 +43,7 @@ export function options(values: unknown): Options {
     alert: number('alert', DEFAULTS.alert),
     timeZone: typeof timeZone === 'string' && timeZone !== '' ? timeZone : DEFAULTS.timeZone,
     resumeOnError: typeof resume === 'boolean' ? resume : DEFAULTS.resumeOnError,
+    bandFrom: number('bandFrom', DEFAULTS.bandFrom),
   }
 }
 
@@ -157,4 +160,62 @@ export function reading(v: unknown, now: number): Reading | null {
 // Drops the windows whose reset time has passed, because their percentage is back to zero.
 export function withoutExpired(windows: readonly Window[], now: number): Window[] {
   return windows.filter((w) => w.resetsAt === undefined || Date.parse(w.resetsAt) > now)
+}
+
+// The band above the prompt shows when the fullest window reaches `bandFrom`, or the mod is holding something back.
+export function showsBand(windows: readonly Window[], zone: Zone, o: Pick<Options, 'bandFrom'>): boolean {
+  const full = fullest(windows)
+  if (full === null) return false
+  return zone.kind !== 'free' || full.percentUsed >= o.bandFrom
+}
+
+// Theme colors: green below the alert, yellow from the alert, red from the pause.
+export type Tone = 'success' | 'warning' | 'error'
+
+export function tone(percent: number, o: Pick<Options, 'alert' | 'reserve'>): Tone {
+  if (percent >= 100 - o.reserve) return 'error'
+  if (percent >= o.alert) return 'warning'
+  return 'success'
+}
+
+// A run of equal cells of a bar: used (`█`), free (`░`), or the pause mark (`│`).
+export type Run = { kind: 'fill' | 'empty' | 'mark'; text: string }
+
+const CHAR: Record<Run['kind'], string> = { fill: '█', empty: '░', mark: '│' }
+
+export function bar(width: number, percent: number, markAt: number | null): Run[] {
+  const filled = Math.min(width, Math.max(0, Math.round((percent / 100) * width)))
+  const mark = markAt === null ? -1 : Math.min(width - 1, Math.max(0, Math.round((markAt / 100) * width)))
+  const runs: Run[] = []
+  for (let i = 0; i < width; i++) {
+    const kind: Run['kind'] = i === mark ? 'mark' : i < filled ? 'fill' : 'empty'
+    const last = runs.at(-1)
+    if (last !== undefined && last.kind === kind) last.text += CHAR[kind]
+    else runs.push({ kind, text: CHAR[kind] })
+  }
+  return runs
+}
+
+const SHORT_NAMES: Record<string, string> = { five_hour: '5-hour', seven_day: '7-day' }
+
+// One row of the band: the window's name, its bar sized to what the columns leave, the percent and the reset time.
+export type BandRow = { label: string; runs: Run[]; tone: Tone; percent: string; reset: string }
+
+export function bandRow(w: Window, columns: number, o: Options): BandRow {
+  const name = SHORT_NAMES[w.kind] ?? w.kind
+  const label = name.padEnd(Math.max(7, name.length + 1))
+  const percent = `${Math.round(w.percentUsed)}%`.padStart(5)
+  let reset = w.resetsAt === undefined ? '' : `  resets ${formatTime(w.resetsAt, o.timeZone)}`
+  let width = columns - label.length - percent.length - reset.length
+  if (width < 10) {
+    reset = ''
+    width = columns - label.length - percent.length
+  }
+  return { label, runs: bar(Math.max(5, width), w.percentUsed, 100 - o.reserve), tone: tone(w.percentUsed, o), percent, reset }
+}
+
+export function pausedText(zone: Zone, o: Pick<Options, 'timeZone'>): string | null {
+  if (zone.kind !== 'paused') return null
+  const at = zone.window.resetsAt
+  return at === undefined ? 'Paused: no reset time known' : `Paused: resumes ${formatTime(at, o.timeZone)}`
 }

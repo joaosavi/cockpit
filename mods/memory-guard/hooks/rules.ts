@@ -192,7 +192,65 @@ export function report(levels: readonly Level[], machine: { available: number; t
     return `${l.group}: uses ${mb(l.used)} (memory.current ${mb(l.used + l.inactiveFile)} minus ${mb(l.inactiveFile)} inactive_file), ${high}, ${max}`
   })
   if (machine !== null) lines.push(`machine: ${mb(machine.available)} available of ${mb(machine.total)}`)
-  const h = headroom(levels, machine, margin)
-  if (h !== null) lines.push(`${mb(Math.max(0, h))} still fits, after the ${margin}% margin`)
+  const h = headroomLine(levels, machine, margin)
+  if (h !== null) lines.push(h)
   return lines.join('\n')
+}
+
+export type Machine = { available: number; total: number }
+
+// The limit a group's bar is drawn against: the max, where the kernel kills, or the high mark when there is no max.
+export function limitOf(l: Level): { bytes: number; kind: 'max' | 'high' } | null {
+  if (l.max !== null) return { bytes: l.max, kind: 'max' }
+  if (l.high !== null) return { bytes: l.high, kind: 'high' }
+  return null
+}
+
+// Theme colors of the working set, by how much of the limit minus the margin it takes: green below 75%, yellow below 90%, red from 90%.
+export type Tone = 'success' | 'warning' | 'error'
+
+export function tone(l: Level, margin: number): Tone {
+  const limit = limitOf(l)
+  if (limit === null) return 'success'
+  const ratio = l.used / (limit.bytes * (1 - margin / 100))
+  if (ratio >= 0.9) return 'error'
+  if (ratio >= 0.75) return 'warning'
+  return 'success'
+}
+
+// A run of equal cells of a group's bar: working set (`█`), inactive_file cache (`▒`), free up to the limit (`░`), the high mark (`│`).
+export type Run = { kind: 'used' | 'cache' | 'free' | 'mark'; text: string }
+
+const CHAR: Record<Run['kind'], string> = { used: '█', cache: '▒', free: '░', mark: '│' }
+
+export function bar(l: Level, width: number): Run[] | null {
+  const limit = limitOf(l)
+  if (limit === null || limit.bytes <= 0) return null
+  const cell = (bytes: number) => Math.min(width, Math.max(0, Math.round((bytes / limit.bytes) * width)))
+  const used = cell(l.used)
+  const cache = cell(l.used + l.inactiveFile)
+  const mark = l.high !== null && l.max !== null ? Math.min(width - 1, cell(l.high)) : -1
+  const runs: Run[] = []
+  for (let i = 0; i < width; i++) {
+    const kind: Run['kind'] = i === mark ? 'mark' : i < used ? 'used' : i < cache ? 'cache' : 'free'
+    const last = runs.at(-1)
+    if (last !== undefined && last.kind === kind) last.text += CHAR[kind]
+    else runs.push({ kind, text: CHAR[kind] })
+  }
+  return runs
+}
+
+export function levelLine(l: Level): string {
+  const limit = limitOf(l)
+  const tail = limit === null ? 'no limit' : `limit ${mb(limit.bytes)} (${limit.kind})`
+  return `uses ${mb(l.used)} · inactive_file ${mb(l.inactiveFile)} · ${tail}`
+}
+
+export function headroomLine(levels: readonly Level[], machine: Machine | null, margin: number): string | null {
+  const h = headroom(levels, machine, margin)
+  return h === null ? null : `${mb(Math.max(0, h))} still fits, after the ${margin}% margin`
+}
+
+export function peakLines(peaks: Readonly<Record<string, readonly number[]>>): string[] {
+  return Object.entries(peaks).map(([k, v]) => `measured peaks of ${k}: ${v.map(mb).join(', ')}`)
 }

@@ -73,7 +73,7 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 | `secret-guard` | O porte do `segredo.pl`: troca todo valor de segredo por `<hidden:NOME>` no resultado de qualquer ferramenta, MCP e subagente inclusive, e devolve o valor real quando o agente escreve o placeholder num `.env`. Lê as mesmas fontes do Perl. Roda junto com o `segredo.pl` até o Perl sair do `settings.json` |
 | `pipefail` | Põe `set -o pipefail;` na frente de um comando que corta a saída de teste, typecheck ou lint com `tail`, `head` ou `grep`. Sem isso, o teste reprovado sai com 0. O `guard-bash.sh` do zippi aceita o comando reescrito, então o agente não perde a rodada |
 
-Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit`, `/ram` e `/audit [quantidade] [filtro]`.
+Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit`, `/ram` e `/audit [quantidade] [filtro]`, e respondem em texto em qualquer lugar, Remote Control inclusive. No terminal e no app Desktop há também a parte visual: o `usage-limit` desenha uma faixa acima do prompt com as barras de 5 h e de 7 dias a partir de 75% (opção `bandFrom`), o `/ram` abre um painel com a barra de cada grupo que se atualiza a cada 2 s, e o `/audit` abre um painel com as últimas chamadas e os botões `m` (mais) e `r` (atualizar).
 
 O `retomar-limite.timer` foi desligado em 07/10/2026. A sessão que ainda bater 100% é retomada pelo próprio `usage-limit`, pela opção `resumeOnError`, ligada por padrão.
 
