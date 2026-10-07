@@ -20,7 +20,7 @@ import {
   parseGit,
   parseLive,
   parseRatings,
-  resetLabel,
+  resetIn,
   statusSession,
   statusSnapshot,
   rowText,
@@ -76,12 +76,12 @@ test('model ids map to display names, and unknown ones pass through', () => {
   expect(modelName('my-gateway-model')).toBe('my-gateway-model')
 })
 
-test('reset times read HH:MM on the same local day and Mon DD otherwise', () => {
-  expect(resetLabel(FIVE_RESET, NOW, TZ)).toBe('19:30')
-  expect(resetLabel(SEVEN_RESET, NOW, TZ)).toBe('Oct 11')
-  // 02:30 UTC on the 8th is still the 7th in São Paulo.
-  expect(resetLabel('2026-10-08T02:30:00Z', NOW, TZ)).toBe('23:30')
-  expect(resetLabel('not a date', NOW, TZ)).toBeNull()
+test('reset times read as the time left: minutes, hours and minutes, days and hours', () => {
+  expect(resetIn(FIVE_RESET, NOW)).toBe('2h30m')
+  expect(resetIn(SEVEN_RESET, NOW)).toBe('3d20h')
+  expect(resetIn('2026-10-07T20:45:00Z', NOW)).toBe('45m')
+  expect(resetIn('2026-10-07T19:00:00Z', NOW)).toBe('0m')
+  expect(resetIn('not a date', NOW)).toBeNull()
 })
 
 test('color thresholds: ctx 60/85, limits 75/90, memory 1 GB/500 MB', () => {
@@ -103,14 +103,14 @@ test('the panel at 120 columns: both rows as designed, right side flush with the
   const [first = [], second = []] = rows
   expect(rowText(first)).toMatch(/^Opus 5\.5 · my-app {2}main● +38m · 214 calls$/)
   expect(width(first)).toBe(120)
-  expect(rowText(second)).toBe('ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61% ↻19:30   7d ▰▰▰▰▱▱▱▱▱▱  44%   mem 1.9G free')
+  expect(rowText(second)).toBe('ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61% resets 2h30m   7d ▰▰▰▰▱▱▱▱▱▱  44%   mem 1.9G free')
 })
 
 test('the panel degrades at 80 and 50 columns without passing the width or cutting an element', () => {
   for (const columns of [50, 80, 120]) for (const r of panelRows(snap(), columns)) expect(width(r) <= columns).toBe(true)
   const at80 = rowText(panelRows(snap(), 80)[1] ?? [])
   expect(at80).toContain('mem 1.9G')
-  expect(at80).toContain('↻19:30')
+  expect(at80).toContain('resets 2h30m')
   expect(at80).toMatch(/7d ▰+▱+ +44%/)
   const at50 = rowText(panelRows(snap(), 50)[1] ?? [])
   expect(at50).not.toContain('mem')
@@ -209,7 +209,7 @@ test('the pane text lists every section with the labels aligned', () => {
   )
   expect(text.split('\n')).toEqual([
     'SESSION   Opus 5.5 · my-app  main● · 38m · 214 calls · ctx 42%',
-    'LIMITS    5h 61% ↻19:30 · 7d 44% ↻Oct 11',
+    'LIMITS    5h 61% resets 2h30m · 7d 44% resets 3d20h',
     'MEMORY    session 1.5G · slice 3.0/5.0G · 1.9G fits',
     'NOW       Bash yarn turbo run test 0:42 · 2 subagents',
     'TODAY     2 skills · 1 loop nudge · 14 MCP writes · 0 refusals',
@@ -326,7 +326,7 @@ test('idle panel band: identity, meters colored by threshold, other mods kept, n
   expect(await ui.find({ type: 'Text', text: '●' })).toMatchObject({ props: { color: 'warning' } })
   expect(await ui.find({ type: 'Text', text: '0m' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: ' 42%' })).toMatchObject({ props: { color: 'success' } })
-  expect(await ui.find({ type: 'Text', text: ' ↻19:30' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' resets 2h30m' })).toBeDefined()
   // 61% of 10 cells is 6 filled.
   expect(await ui.find({ type: 'Text', text: '▰▰▰▰▰▰' })).toMatchObject({ props: { color: 'success' } })
   // The tightest group is the slice: 5 GiB × 0.98 − 3 GiB used = 1.9 GiB.
@@ -454,7 +454,7 @@ test('/hud in Remote Control answers with the same content as text', SAO_PAULO, 
   const text = 'text' in answer && typeof answer.text === 'string' ? answer.text : ''
   expect(text.split('\n')).toEqual([
     'SESSION   Opus 5.5 · my-app  main● · 0m · 0 calls · ctx 42%',
-    'LIMITS    5h 61% ↻19:30 · 7d 44% ↻Oct 11',
+    'LIMITS    5h 61% resets 2h30m · 7d 44% resets 3d20h',
     'MEMORY    session 1.5G · slice 3.0/5.0G · 1.9G fits',
     'NOW       idle',
     'TODAY     1 skill · 0 loop nudges · 0 MCP writes · 0 refusals',
@@ -476,8 +476,8 @@ test('an empty or unknown time zone falls back to the system time zone', () => {
   expect(options({}).timeZone).toBe('')
   expect(options({ timeZone: 'Nowhere/Invented' }).timeZone).toBe('')
   const at = Date.parse('2026-10-11T16:00:00Z')
-  const local = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(at))
-  expect(resetLabel('2026-10-11T16:00:00Z', NOW, '')).toBe(local)
+  const local = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(at))
+  expect(localDay(at, '')).toBe(local)
   expect(localDay(at, 'America/New_York')).toBe('2026-10-11')
 })
 

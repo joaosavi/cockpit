@@ -171,14 +171,16 @@ export function localDay(ms: number, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', { ...zone(timeZone), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms))
 }
 
-// `19:30` when the reset falls on today in the time zone, `Oct 11` otherwise.
-export function resetLabel(iso: string, now: number, timeZone: string): string | null {
+// The time left until a reset, as the countdown Claude Code shows: `2h30m`, `45m`, `3d20h`. Null for
+// a date that does not parse. A reset already passed reads `0m`.
+export function resetIn(iso: string, now: number): string | null {
   const at = Date.parse(iso)
   if (!Number.isFinite(at)) return null
-  if (localDay(at, timeZone) === localDay(now, timeZone)) {
-    return new Intl.DateTimeFormat('en-US', { ...zone(timeZone), hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(at))
-  }
-  return new Intl.DateTimeFormat('en-US', { ...zone(timeZone), month: 'short', day: 'numeric' }).format(new Date(at))
+  const m = Math.max(0, Math.ceil((at - now) / 60_000))
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h${String(m % 60).padStart(2, '0')}m`
+  return `${Math.floor(h / 24)}d${h % 24}h`
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -333,7 +335,7 @@ function meter(label: string, percent: number, tone: Tone, cells: number, reset:
   const segs: Seg[] = [{ text: label, dim: true }, { text: ' ' }]
   if (cells > 0) segs.push(...barSegs(percent, cells, tone), { text: ' ' })
   segs.push({ text: cells > 0 ? pct(percent).padStart(4) : pct(percent), tone })
-  if (reset !== null) segs.push({ text: ` ↻${reset}`, dim: true })
+  if (reset !== null) segs.push({ text: ` resets ${reset}`, dim: true })
   return segs
 }
 
@@ -415,7 +417,7 @@ function metersRow(s: Snapshot, plan: MeterPlan): Row {
   const groupsOf: Seg[][] = []
   if (s.context !== null) groupsOf.push(meter('ctx', s.context, contextTone(s.context), plan.ctx, null))
   if (five !== null) {
-    const reset = plan.reset && five.resetsAt !== undefined ? resetLabel(five.resetsAt, s.now, s.timeZone) : null
+    const reset = plan.reset && five.resetsAt !== undefined ? resetIn(five.resetsAt, s.now) : null
     groupsOf.push(meter('5h', five.percentUsed, limitTone(five.percentUsed), plan.five, reset))
   }
   if (seven !== null && plan.seven_) groupsOf.push(meter('7d', seven.percentUsed, limitTone(seven.percentUsed), plan.seven, null))
@@ -671,8 +673,8 @@ export function paneSections(d: PaneData): Section[] {
   ] as const) {
     const w = windowOf(s, kind)
     if (w === null) continue
-    const reset = w.resetsAt === undefined ? null : resetLabel(w.resetsAt, s.now, s.timeZone)
-    limits.push([{ text: `${label} `, dim: true }, { text: pct(w.percentUsed), tone: limitTone(w.percentUsed) }, ...(reset === null ? [] : [{ text: ` ↻${reset}`, dim: true }])])
+    const reset = w.resetsAt === undefined ? null : resetIn(w.resetsAt, s.now)
+    limits.push([{ text: `${label} `, dim: true }, { text: pct(w.percentUsed), tone: limitTone(w.percentUsed) }, ...(reset === null ? [] : [{ text: ` resets ${reset}`, dim: true }])])
   }
   if (limits.length > 0) out.push({ label: 'LIMITS', segs: joined(limits) })
 

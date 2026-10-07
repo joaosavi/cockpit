@@ -46,7 +46,7 @@ The `panel` band, two rows. The right side of the first row sits flush with the 
 
 ```text
 Opus 5.5 · my-app  main●                              38m · 214 calls
-ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61% ↻19:30   7d ▰▰▰▰▱▱▱▱▱▱  44%   mem 1.9G free
+ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61% resets 2h30m   7d ▰▰▰▰▱▱▱▱▱▱  44%   mem 1.9G free
 ```
 
 While a turn runs, the activity block follows. It hides when the turn ends:
@@ -64,21 +64,21 @@ While a turn runs, the activity block follows. It hides when the turn ends:
 | Project and branch | The basename of the working directory, and `git status` in it. `●` marks uncommitted changes. Hidden outside a repo. | |
 | `38m · 214 calls` | Time since the session started, and the tool calls it made | |
 | `ctx` | Context window fill | green below 60%, yellow below 85%, red from 85% |
-| `5h`, `7d` | The plan's 5-hour and 7-day windows. `↻19:30` is the reset time today, `↻Oct 11` a later day. | green below 75%, yellow below 90%, red from 90% |
+| `5h`, `7d` | The plan's 5-hour and 7-day windows. `resets 2h30m` is the time left until the window resets, `resets 3d20h` past a day. | green below 75%, yellow below 90%, red from 90% |
 | `mem` | Memory that still fits before the tightest cgroup limit, minus a 2% margin. Without a cgroup limit, the machine's available memory. Hidden when neither can be read. | yellow below 1 GB, red below 500 MB |
 | Tool row | The main loop's running tool, its short input (command, file, pattern or description) and its elapsed time | |
 | Subagent rows | Each running subagent from `$.agent.list()`, its description and the time since the band first saw it | |
 | Turn row | Turn time, tool calls, errors, and the latest note another mod added to a tool result, such as a loop-breaker loop check or a memory-guard single-process rerun | errors red, the note yellow |
 
 In a narrow terminal the band drops fields instead of wrapping. The panel first shortens its bars,
-then drops `mem`, then shows `7d`, `5h` and `ctx` as percents only, then drops the reset time.
+then drops `mem`, then shows `7d`, `5h` and `ctx` as percents only, then drops the reset countdown.
 Free text, such as a long command, is cut with `…`. Figures are never cut.
 
 ## The /hud pane
 
 ```text
 SESSION   Opus 5.5 · my-app  main● · 38m · 214 calls · ctx 42%
-LIMITS    5h 61% ↻19:30 · 7d 44% ↻Oct 11
+LIMITS    5h 61% resets 2h30m · 7d 44% resets 3d20h
 MEMORY    session 1.5G · slice 3.0/5.0G · 1.9G fits
 NOW       Bash yarn turbo run test 0:42 · 2 subagents
 TODAY     2 skills · 1 loop nudge · 14 MCP writes · 0 refusals
@@ -104,7 +104,7 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 | `activity` | `true` | Shows the activity block while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |
 | `datasetDir` | `~/datasets/agent-ratings` | The rating mod's dataset folder, for the `RATINGS` row |
-| `timeZone` | empty | The IANA time zone for reset times and for what counts as today, such as `America/New_York`. Empty uses the system time zone |
+| `timeZone` | empty | The IANA time zone for what counts as today, such as `America/New_York`. Empty uses the system time zone |
 
 With `band` set to `line`:
 
