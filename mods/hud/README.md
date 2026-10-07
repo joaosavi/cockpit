@@ -104,7 +104,19 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 | `activity` | `true` | Shows the activity block while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |
 | `datasetDir` | `~/datasets/agent-ratings` | The rating mod's dataset folder, for the `RATINGS` row |
+| `bar` | `blocks` | The bar glyphs: `blocks` (`▰▱`), `solid` (`█░`), `line` (`━─`), `dots` (`●○`) or `squares` (`■□`) |
+| `barWidth` | `10` | Cells of a full-width bar, 4 to 30. A narrow terminal still shrinks the bars |
+| `colors` | empty | The colors for ok, warning and critical, separated by spaces. Each one is a name (`green`, `bright-cyan`), `#rrggbb` or a 256-color number. Empty uses green, yellow and red |
+| `hide` | empty | Fields to leave out, separated by commas: `model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem` |
+| `contextBase` | `compact` | What `ctx` measures against. With `compact`, 100% is the auto-compact window that `/autocompact` or `CLAUDE_CODE_AUTO_COMPACT_WINDOW` sets, when it is smaller than the model's window. With `window`, the model's full window. The status line only. The band and `/hud` read the model's window |
 | `timeZone` | empty | The IANA time zone for what counts as today, such as `America/New_York`. Empty uses the system time zone |
+
+With `bar` set to `solid`, `colors` set to `cyan #ff8800 bright-red` and `hide` set to `branch, mem`:
+
+```text
+Opus 5.5 · my-app                                                    38m · 214 calls
+ctx ████░░░░░░  42%   5h ██████░░░░  61% resets 2h30m   7d ████░░░░░░  44%
+```
 
 With `band` set to `line`:
 

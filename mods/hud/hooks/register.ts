@@ -46,6 +46,8 @@ import {
   type RunningTool,
   type Section,
   type Snapshot,
+  type Style,
+  styleOf,
   summarizeRatings,
   type Today,
   TODAY_MODS,
@@ -67,6 +69,7 @@ const GIT_TIMEOUT_MS = 3000
 const KEEP_STARTS_MS = 3 * 86_400_000
 
 let o: Options = DEFAULTS
+let style: Style = styleOf(DEFAULTS)
 let cwd = ''
 let home: string | undefined
 let diary = ''
@@ -149,7 +152,7 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
 }
 
 function snapshot(): Snapshot {
-  return { now, timeZone: o.timeZone, model, project: cwd === '' ? null : basename(cwd), git, startedAt, calls, context, windows, memory: o.memory ? mem : null }
+  return { now, timeZone: o.timeZone, model, project: cwd === '' ? null : basename(cwd), git, startedAt, calls, context, windows, memory: o.memory ? mem : null, style }
 }
 
 function activity(): Activity | null {
@@ -401,7 +404,7 @@ function rowElement(ui: Ui, row: Row): RenderElement {
     children: row.map((s) =>
       ui.Text({
         wrap: 'truncate',
-        ...(s.tone === undefined ? {} : { color: s.tone }),
+        ...(s.tone === undefined ? {} : { color: o.colors === '' ? s.tone : style.colors[s.tone] }),
         ...(s.dim === true ? { dimColor: true } : {}),
         ...(s.bold === true ? { bold: true } : {}),
         children: [s.text],
@@ -454,6 +457,7 @@ function endTurn() {
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  style = styleOf(o)
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd

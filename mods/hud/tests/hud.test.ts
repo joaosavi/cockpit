@@ -2,6 +2,9 @@ import { expect, mock, test } from 'claude-code/testing'
 import {
   activityRows,
   ansiRow,
+  compactWindowOf,
+  sgrColor,
+  styleOf,
   type Activity,
   bytes,
   contextTone,
@@ -523,4 +526,41 @@ test('the live file and the session id are checked before use', () => {
 
 test('ansi rows color tones, dim and bold, and leave plain text bare', () => {
   expect(ansiRow([{ text: 'a' }, { text: 'b', tone: 'error' }, { text: 'c', dim: true, bold: true }])).toBe('a\x1b[31mb\x1b[0m\x1b[1;2mc\x1b[0m')
+})
+
+// ---------------------------------------------------------------------------------------------
+// Style
+// ---------------------------------------------------------------------------------------------
+
+test('the bar option swaps the glyphs and barWidth scales the bars', () => {
+  const style = styleOf(options({ bar: 'solid', barWidth: 20 }))
+  const second = rowText(panelRows(snap({ style }), 200)[1] ?? [])
+  expect(second).toContain('ctx ████████░░░░░░░░░░░░  42%')
+  expect(rowText(panelRows(snap({ style: styleOf(options({ bar: 'nonsense', barWidth: 99 })) }), 120)[1] ?? [])).toContain('ctx ▰▰▰▰▱▱▱▱▱▱  42%')
+})
+
+test('hide leaves the named fields out of the panel and the line', () => {
+  const style = styleOf(options({ hide: 'branch, calls mem reset 7d bogus' }))
+  const [first = [], second = []] = panelRows(snap({ style }), 120)
+  expect(rowText(first)).toMatch(/^Opus 5\.5 · my-app +38m$/)
+  expect(rowText(second)).toBe('ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61%')
+  expect(rowText(lineRow(snap({ style }), 120))).toBe('Opus 5.5 │ my-app │ ctx 42% │ 5h 61%')
+})
+
+test('colors take names, bright names, hex and 256-color numbers, and fall back on the rest', () => {
+  expect(styleOf(options({ colors: 'cyan #ff8800 nope' })).colors).toEqual({ success: 'cyan', warning: '#ff8800', error: 'red' })
+  expect(['green', 'bright-green', 'bright-gray', '#ff8800', '208', 'nope'].map(sgrColor)).toEqual(['32', '92', '97', '38;2;255;136;0', '38;5;208', '39'])
+  expect(ansiRow([{ text: 'x', tone: 'success' }], { success: '#000000', warning: 'yellow', error: 'red' })).toBe('\x1b[38;2;0;0;0mx\x1b[0m')
+})
+
+test('the context is measured against the auto-compact window when it is smaller than the model window', () => {
+  // 15% of 1M is 150k tokens: 37.5% of a 400k compaction window.
+  const input = { ...STATUS, context_window: { used_percentage: 15, context_window_size: 1_000_000 } }
+  expect(statusSnapshot(input, null, { ...READ, compactWindow: 400_000 }).context).toBe(37.5)
+  expect(statusSnapshot(input, null, { ...READ, compactWindow: null }).context).toBe(15)
+  expect(statusSnapshot(input, null, { ...READ, compactWindow: 2_000_000 }).context).toBe(15)
+  expect(compactWindowOf('500000', 300_000)).toBe(500_000)
+  expect(compactWindowOf(undefined, 300_000)).toBe(300_000)
+  expect(compactWindowOf('500k', 50_000)).toBe(100_000)
+  expect(compactWindowOf(undefined, undefined)).toBeNull()
 })

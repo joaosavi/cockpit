@@ -1,16 +1,32 @@
 {
   "name": "hud",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
-  "author": { "name": "João Savi" },
+  "author": {
+    "name": "João Savi"
+  },
   "license": "MIT",
-  "keywords": ["hud", "status", "band", "context", "usage", "rate-limit", "memory", "subagents", "activity"],
+  "keywords": [
+    "hud",
+    "status",
+    "band",
+    "context",
+    "usage",
+    "rate-limit",
+    "memory",
+    "subagents",
+    "activity"
+  ],
   "userConfig": {
     "band": {
       "type": "string",
       "title": "Band",
       "description": "What the band above the prompt shows: panel (two rows with bars), line (one compact row) or off. Use off with the status line script, which draws the panel under the prompt",
-      "options": ["panel", "line", "off"],
+      "options": [
+        "panel",
+        "line",
+        "off"
+      ],
       "default": "panel"
     },
     "activity": {
@@ -36,6 +52,47 @@
       "title": "Time zone",
       "description": "IANA time zone for the times shown and for what counts as today, such as America/New_York. Empty uses the system time zone.",
       "default": ""
+    },
+    "bar": {
+      "type": "string",
+      "title": "Bar style",
+      "description": "Glyphs of the bars: blocks (▰▱), solid (█░), line (━─), dots (●○) or squares (■□)",
+      "options": [
+        "blocks",
+        "solid",
+        "line",
+        "dots",
+        "squares"
+      ],
+      "default": "blocks"
+    },
+    "barWidth": {
+      "type": "number",
+      "title": "Bar width",
+      "description": "Cells of a full-width bar, 4 to 30. Narrow terminals still shrink the bars",
+      "default": 10
+    },
+    "colors": {
+      "type": "string",
+      "title": "Colors",
+      "description": "Colors for ok, warning and critical, separated by spaces: names (green, bright-cyan), #rrggbb or 0-255. Empty uses green, yellow and red",
+      "default": ""
+    },
+    "hide": {
+      "type": "string",
+      "title": "Hidden fields",
+      "description": "Fields to leave out, separated by commas: model, project, branch, age, calls, ctx, 5h, 7d, reset, mem",
+      "default": ""
+    },
+    "contextBase": {
+      "type": "string",
+      "title": "Context measured against",
+      "description": "compact: 100% is the auto-compact window (/autocompact), when it is smaller than the model's window. window: the model's full window",
+      "options": [
+        "compact",
+        "window"
+      ],
+      "default": "compact"
     }
   }
 }

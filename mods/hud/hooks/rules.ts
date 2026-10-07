@@ -10,15 +10,38 @@
 
 export type BandMode = 'panel' | 'line' | 'off'
 
+export type BarStyle = 'blocks' | 'solid' | 'line' | 'dots' | 'squares'
+export type ContextBase = 'compact' | 'window'
+
+// Fields the `hide` option takes, by the names the README gives them.
+export const FIELDS = ['model', 'project', 'branch', 'age', 'calls', 'ctx', '5h', '7d', 'reset', 'mem'] as const
+export type Field = (typeof FIELDS)[number]
+
 export type Options = {
   band: BandMode
   activity: boolean
   memory: boolean
   datasetDir: string
   timeZone: string
+  bar: BarStyle
+  barWidth: number
+  colors: string
+  hide: string
+  contextBase: ContextBase
 }
 
-export const DEFAULTS: Options = { band: 'panel', activity: true, memory: true, datasetDir: '~/datasets/agent-ratings', timeZone: '' }
+export const DEFAULTS: Options = {
+  band: 'panel',
+  activity: true,
+  memory: true,
+  datasetDir: '~/datasets/agent-ratings',
+  timeZone: '',
+  bar: 'blocks',
+  barWidth: 10,
+  colors: '',
+  hide: '',
+  contextBase: 'compact',
+}
 
 // Percentage of each cgroup's limit kept free, as memory-guard counts it.
 export const MEMORY_MARGIN = 2
@@ -34,14 +57,52 @@ export function options(values: unknown): Options {
     return typeof v === 'boolean' ? v : fallback
   }
   const band = text('band', DEFAULTS.band)
+  const bar = text('bar', DEFAULTS.bar)
+  const widthOf: unknown = Reflect.get(values, 'barWidth')
+  const barWidth = typeof widthOf === 'number' ? widthOf : Number(widthOf)
   return {
     band: band === 'line' || band === 'off' ? band : 'panel',
     activity: flag('activity', DEFAULTS.activity),
     memory: flag('memory', DEFAULTS.memory),
     datasetDir: text('datasetDir', DEFAULTS.datasetDir),
     timeZone: validTimeZone(text('timeZone', DEFAULTS.timeZone)),
+    bar: bar === 'solid' || bar === 'line' || bar === 'dots' || bar === 'squares' ? bar : 'blocks',
+    barWidth: Number.isFinite(barWidth) && barWidth >= 4 && barWidth <= 30 ? Math.round(barWidth) : DEFAULTS.barWidth,
+    colors: text('colors', DEFAULTS.colors),
+    hide: text('hide', DEFAULTS.hide),
+    contextBase: text('contextBase', DEFAULTS.contextBase) === 'window' ? 'window' : 'compact',
   }
 }
+
+// How the rows look: the bar glyphs and width, the color of each tone, and the fields left out.
+export type Style = { on: string; off: string; barWidth: number; colors: Record<Tone, string>; hide: ReadonlySet<Field> }
+
+const BARS: Record<BarStyle, [string, string]> = { blocks: ['▰', '▱'], solid: ['█', '░'], line: ['━', '─'], dots: ['●', '○'], squares: ['■', '□'] }
+const TONE_DEFAULTS: Record<Tone, string> = { success: 'green', warning: 'yellow', error: 'red' }
+
+// A color the terminal and the band both take: a basic name, `bright-` and a name, `#rrggbb`, or
+// 0 to 255 for the 256-color palette. Anything else falls back to the tone's default.
+const COLOR_NAMES = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'gray', 'grey']
+export function validColor(c: string): boolean {
+  const name = c.toLowerCase()
+  return COLOR_NAMES.includes(name.replace(/^bright-/, '')) || /^#[0-9a-f]{6}$/i.test(c) || (/^\d{1,3}$/.test(c) && Number(c) <= 255)
+}
+
+export function styleOf(o: Options): Style {
+  const [on, off] = BARS[o.bar]
+  const given = o.colors.split(/[\s,]+/).filter((c) => c !== '')
+  const tones: Tone[] = ['success', 'warning', 'error']
+  const colors = { ...TONE_DEFAULTS }
+  tones.forEach((t, i) => {
+    const c = given[i]
+    if (c !== undefined && validColor(c)) colors[t] = c
+  })
+  const hide = new Set<Field>()
+  for (const f of o.hide.toLowerCase().split(/[\s,]+/)) if ((FIELDS as readonly string[]).includes(f)) hide.add(f as Field)
+  return { on, off, barWidth: o.barWidth, colors, hide }
+}
+
+export const DEFAULT_STYLE: Style = styleOf(DEFAULTS)
 
 // A time zone the runtime knows, or empty for the system's own. An unknown name falls back to empty.
 function validTimeZone(tz: string): string {
@@ -309,20 +370,37 @@ export type Snapshot = {
   context: number | null
   windows: readonly Window[]
   memory: Memory | null
+  // Absent, the default style.
+  style?: Style
+}
+
+// The snapshot with the hidden fields taken out, so every layout leaves them out the same way.
+function visible(s: Snapshot): Snapshot {
+  const hide = s.style?.hide
+  if (hide === undefined || hide.size === 0) return s
+  return {
+    ...s,
+    model: hide.has('model') ? null : s.model,
+    project: hide.has('project') ? null : s.project,
+    git: hide.has('branch') ? null : s.git,
+    startedAt: hide.has('age') ? null : s.startedAt,
+    context: hide.has('ctx') ? null : s.context,
+    windows: s.windows
+      .filter((w) => !(hide.has('5h') && w.kind === 'five_hour') && !(hide.has('7d') && w.kind === 'seven_day'))
+      .map((w) => (hide.has('reset') ? { kind: w.kind, percentUsed: w.percentUsed } : w)),
+    memory: hide.has('mem') ? null : s.memory,
+  }
 }
 
 function windowOf(s: Snapshot, kind: string): Window | null {
   return s.windows.find((w) => w.kind === kind) ?? null
 }
 
-const BAR_ON = '▰'
-const BAR_OFF = '▱'
-
-function barSegs(percent: number, cells: number, tone: Tone): Seg[] {
+function barSegs(percent: number, cells: number, tone: Tone, style: Style): Seg[] {
   const on = Math.min(cells, Math.max(0, Math.round((percent / 100) * cells)))
   const segs: Seg[] = []
-  if (on > 0) segs.push({ text: BAR_ON.repeat(on), tone })
-  if (cells - on > 0) segs.push({ text: BAR_OFF.repeat(cells - on), dim: true })
+  if (on > 0) segs.push({ text: style.on.repeat(on), tone })
+  if (cells - on > 0) segs.push({ text: style.off.repeat(cells - on), dim: true })
   return segs
 }
 
@@ -331,9 +409,11 @@ function pct(p: number): string {
 }
 
 // One meter: `ctx ▰▰▰▱▱ 42%`, or `ctx 42%` without a bar, with the reset time after it when asked.
-function meter(label: string, percent: number, tone: Tone, cells: number, reset: string | null): Seg[] {
+function meter(label: string, percent: number, tone: Tone, cells: number, reset: string | null, style: Style = DEFAULT_STYLE): Seg[] {
   const segs: Seg[] = [{ text: label, dim: true }, { text: ' ' }]
-  if (cells > 0) segs.push(...barSegs(percent, cells, tone), { text: ' ' })
+  // The plans size bars for a width of 10; the barWidth option scales them.
+  const scaled = cells > 0 ? Math.max(2, Math.round((cells * style.barWidth) / 10)) : 0
+  if (scaled > 0) segs.push(...barSegs(percent, scaled, tone, style), { text: ' ' })
   segs.push({ text: cells > 0 ? pct(percent).padStart(4) : pct(percent), tone })
   if (reset !== null) segs.push({ text: ` resets ${reset}`, dim: true })
   return segs
@@ -359,7 +439,8 @@ function memoryFree(m: Memory, suffix: boolean): Seg[] {
 
 // The `line` band: `Opus 5.5 │ my-app  main● │ ctx 42% │ 5h 61% │ 7d 44% │ mem 1.9G`. Fields drop
 // from the right of the priority list (mem, 7d, the branch, the project, 5h, ctx) until the row fits.
-export function lineRow(s: Snapshot, columns: number): Row {
+export function lineRow(shown: Snapshot, columns: number): Row {
+  const s = visible(shown)
   const five = windowOf(s, 'five_hour')
   const seven = windowOf(s, 'seven_day')
   const SEP: Seg = { text: ' │ ', dim: true }
@@ -414,23 +495,27 @@ const PLANS: readonly MeterPlan[] = [
 function metersRow(s: Snapshot, plan: MeterPlan): Row {
   const five = windowOf(s, 'five_hour')
   const seven = windowOf(s, 'seven_day')
+  const st = s.style ?? DEFAULT_STYLE
   const groupsOf: Seg[][] = []
-  if (s.context !== null) groupsOf.push(meter('ctx', s.context, contextTone(s.context), plan.ctx, null))
+  if (s.context !== null) groupsOf.push(meter('ctx', s.context, contextTone(s.context), plan.ctx, null, st))
   if (five !== null) {
     const reset = plan.reset && five.resetsAt !== undefined ? resetIn(five.resetsAt, s.now) : null
-    groupsOf.push(meter('5h', five.percentUsed, limitTone(five.percentUsed), plan.five, reset))
+    groupsOf.push(meter('5h', five.percentUsed, limitTone(five.percentUsed), plan.five, reset, st))
   }
-  if (seven !== null && plan.seven_) groupsOf.push(meter('7d', seven.percentUsed, limitTone(seven.percentUsed), plan.seven, null))
+  if (seven !== null && plan.seven_) groupsOf.push(meter('7d', seven.percentUsed, limitTone(seven.percentUsed), plan.seven, null, st))
   if (s.memory !== null && plan.mem) groupsOf.push(memoryFree(s.memory, plan.memSuffix))
   return groupsOf.flatMap((g, i) => (i === 0 ? g : [gap(3), ...g]))
 }
 
 // The `panel` band: identity and session figures on the first row, the meters on the second.
-export function panelRows(s: Snapshot, columns: number): Row[] {
+export function panelRows(shown: Snapshot, columns: number): Row[] {
+  const s = visible(shown)
   const right: Seg[] = []
   if (s.startedAt !== null) right.push({ text: age(s.now - s.startedAt) })
-  if (right.length > 0) right.push({ text: ' · ', dim: true })
-  right.push({ text: `${s.calls} ${s.calls === 1 ? 'call' : 'calls'}` })
+  if (!(s.style?.hide.has('calls') ?? false)) {
+    if (right.length > 0) right.push({ text: ' · ', dim: true })
+    right.push({ text: `${s.calls} ${s.calls === 1 ? 'call' : 'calls'}` })
+  }
   const rightShort: Seg[] = s.startedAt === null ? [] : [{ text: age(s.now - s.startedAt) }]
 
   let first: Row | null = null
@@ -760,14 +845,31 @@ export function parseLive(text: string): Live | null {
 
 // The context fill: the status line's own percentage, or the last response's input tokens over the
 // window while the percentage is still missing.
-function contextOf(input: unknown): number | null {
-  const pct = num(field(input, 'context_window', 'used_percentage'))
-  if (pct !== null) return pct
+// With a compaction window under the model's window, the fill is measured against the compaction
+// window, so 100% reads as where auto-compaction runs.
+function contextOf(input: unknown, compactWindow: number | null): number | null {
   const size = num(field(input, 'context_window', 'context_window_size'))
-  const usage = field(input, 'context_window', 'current_usage')
-  if (size === null || size <= 0 || typeof usage !== 'object' || usage === null) return null
-  const tokens = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'].reduce((n, k) => n + (num(field(usage, k)) ?? 0), 0)
-  return tokens > 0 ? Math.min(100, (tokens / size) * 100) : null
+  const pct = num(field(input, 'context_window', 'used_percentage'))
+  let tokens: number | null = null
+  if (pct !== null && size !== null && size > 0) tokens = (pct / 100) * size
+  else {
+    const usage = field(input, 'context_window', 'current_usage')
+    if (typeof usage === 'object' && usage !== null) {
+      const sum = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'].reduce((n, k) => n + (num(field(usage, k)) ?? 0), 0)
+      if (sum > 0) tokens = sum
+    }
+  }
+  if (tokens === null) return pct
+  const base = compactWindow !== null && compactWindow > 0 && (size === null || compactWindow < size) ? compactWindow : size
+  return base === null || base <= 0 ? pct : Math.min(100, (tokens / base) * 100)
+}
+
+// The auto-compact window in tokens, as Claude Code settles it: the CLAUDE_CODE_AUTO_COMPACT_WINDOW
+// variable over the autoCompactWindow setting. Null when neither holds a number of 100000 or more.
+export function compactWindowOf(env: string | undefined, setting: unknown): number | null {
+  const fromEnv = env === undefined || !/^\d+$/.test(env.trim()) ? null : Number(env.trim())
+  const value = fromEnv ?? num(setting)
+  return value === null ? null : Math.min(1_000_000, Math.max(100_000, value))
 }
 
 function windowsOf(input: unknown): Window[] {
@@ -783,7 +885,11 @@ function windowsOf(input: unknown): Window[] {
 
 // The snapshot the status line draws: the status line's JSON, the mod's live file, and what the
 // script read itself (git, memory).
-export function statusSnapshot(input: unknown, live: Live | null, read: { now: number; timeZone: string; git: Git | null; memory: Memory | null }): Snapshot {
+export function statusSnapshot(
+  input: unknown,
+  live: Live | null,
+  read: { now: number; timeZone: string; git: Git | null; memory: Memory | null; compactWindow?: number | null; style?: Style },
+): Snapshot {
   const id = field(input, 'model', 'id')
   const name = field(input, 'model', 'display_name')
   const dir = field(input, 'workspace', 'current_dir') ?? field(input, 'cwd')
@@ -796,19 +902,35 @@ export function statusSnapshot(input: unknown, live: Live | null, read: { now: n
     git: read.git,
     startedAt: live?.startedAt ?? (duration === null ? null : read.now - duration),
     calls: live?.calls ?? 0,
-    context: contextOf(input),
+    context: contextOf(input, read.compactWindow ?? null),
     windows: windowsOf(input),
     memory: read.memory,
+    ...(read.style === undefined ? {} : { style: read.style }),
   }
 }
 
-const SGR: Record<Tone, string> = { success: '32', warning: '33', error: '31' }
+const BASIC: Record<string, number> = { black: 30, red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36, white: 37, gray: 90, grey: 90 }
+
+// A color of the `colors` option as an SGR code: `green` → 32, `bright-green` → 92, `#ff8800` →
+// 38;2;255;136;0, `208` → 38;5;208.
+export function sgrColor(c: string): string {
+  const name = c.toLowerCase()
+  if (name.startsWith('bright-')) {
+    const base = BASIC[name.slice(7)]
+    if (base !== undefined) return String(base === 90 ? 97 : base + 60)
+  }
+  const basic = BASIC[name]
+  if (basic !== undefined) return String(basic)
+  if (/^#[0-9a-f]{6}$/i.test(c)) return `38;2;${parseInt(c.slice(1, 3), 16)};${parseInt(c.slice(3, 5), 16)};${parseInt(c.slice(5, 7), 16)}`
+  if (/^\d{1,3}$/.test(c) && Number(c) <= 255) return `38;5;${c}`
+  return '39'
+}
 
 // A row as terminal text with SGR colors, each segment reset after itself.
-export function ansiRow(row: readonly Seg[]): string {
+export function ansiRow(row: readonly Seg[], colors: Record<Tone, string> = DEFAULT_STYLE.colors): string {
   return row
     .map((s) => {
-      const codes = [...(s.bold === true ? ['1'] : []), ...(s.dim === true ? ['2'] : []), ...(s.tone === undefined ? [] : [SGR[s.tone]])]
+      const codes = [...(s.bold === true ? ['1'] : []), ...(s.dim === true ? ['2'] : []), ...(s.tone === undefined ? [] : [sgrColor(colors[s.tone])])]
       return codes.length === 0 ? s.text : `\x1b[${codes.join(';')}m${s.text}\x1b[0m`
     })
     .join('')

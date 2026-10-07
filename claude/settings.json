@@ -170,5 +170,6 @@
   "theme": "dark-ansi",
   "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "autoCompactWindow": 400000
 }
