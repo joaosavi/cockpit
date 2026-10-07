@@ -15,6 +15,7 @@ import {
   type Heavy,
   heavy,
   headroom,
+  inactiveFile,
   type Level,
   mb,
   meminfo,
@@ -25,6 +26,7 @@ import {
   reduced,
   report,
   withMeasurement,
+  workingSet,
 } from './rules.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -59,11 +61,18 @@ async function readLevels($: Api): Promise<Level[]> {
   for (const group of groups(proc)) {
     try {
       const dir = '/sys/fs/cgroup' + group
-      const used = numberOrMax(await $.fs.read(dir + '/memory.current'))
-      if (used === null) continue
+      const current = numberOrMax(await $.fs.read(dir + '/memory.current'))
+      if (current === null) continue
+      let inactive = 0
+      try {
+        inactive = inactiveFile(await $.fs.read(dir + '/memory.stat'))
+      } catch {
+        // no memory.stat: count all of memory.current
+      }
       levels.push({
         group,
-        used,
+        used: workingSet(current, inactive),
+        inactiveFile: Math.min(inactive, current),
         high: numberOrMax(await $.fs.read(dir + '/memory.high')),
         max: numberOrMax(await $.fs.read(dir + '/memory.max')),
       })

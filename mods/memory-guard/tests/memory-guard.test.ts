@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { groups, headroom, heavy, reduced, withMeasurement } from '../hooks/rules.ts'
+import { groups, headroom, heavy, inactiveFile, reduced, withMeasurement, workingSet } from '../hooks/rules.ts'
 
 const MB = 1024 * 1024
 const GB = 1024 * MB
@@ -38,17 +38,26 @@ test('reduces the parallelism of runners that accept it, and not of tsc', () => 
 
 test('the headroom is that of the tightest group, and without a group the machine applies', () => {
   const levels = [
-    { group: '/a/b', used: 1 * GB, high: 3 * GB, max: null },
-    { group: '/a', used: 4 * GB, high: 4.5 * GB, max: null },
+    { group: '/a/b', used: 1 * GB, inactiveFile: 0, high: 3 * GB, max: null },
+    { group: '/a', used: 4 * GB, inactiveFile: 0, high: 4.5 * GB, max: null },
   ]
   expect(headroom(levels, null, 0)).toBe(0.5 * GB)
   expect(headroom([], { available: 8 * GB, total: 16 * GB }, 2)).toBe(8 * GB - 16 * GB * 0.02)
   // The max, where the kernel kills, wins over the high mark, where the group only slows down.
-  expect(headroom([{ group: '/a', used: 3 * GB, high: 3 * GB, max: 3.5 * GB }], null, 0)).toBe(0.5 * GB)
+  expect(headroom([{ group: '/a', used: 3 * GB, inactiveFile: 0, high: 3 * GB, max: 3.5 * GB }], null, 0)).toBe(0.5 * GB)
   expect(groups('0::/agentes.slice/getdemo-rc.service\n')).toEqual(['/agentes.slice/getdemo-rc.service', '/agentes.slice'])
 })
 
-type Scenario = { used: number[]; commands: string[]; responses: string[]; peaks?: Record<string, number[]> }
+type Scenario = {
+  used: number[]
+  commands: string[]
+  responses: string[]
+  peaks?: Record<string, number[]>
+  // The `inactive_file` of the session's group, and its own high and max, when a test needs them.
+  inactive?: number
+  high?: number | 'max'
+  max?: number | 'max'
+}
 
 // The session's group has the usage of the first item of `used`; each `sleep` from the mod moves to the next one.
 function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
@@ -63,8 +72,9 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
     const p = e.path
     if (p.endsWith('/proc/self/cgroup')) return { value: '0::/agentes.slice/getdemo-rc.service\n' }
     if (p.endsWith('getdemo-rc.service/memory.current')) return { value: String(c.used[0]) }
-    if (p.endsWith('getdemo-rc.service/memory.high')) return { value: String(HIGH) }
-    if (p.endsWith('getdemo-rc.service/memory.max')) return { value: String(MAX) }
+    if (p.endsWith('getdemo-rc.service/memory.high')) return { value: String(c.high ?? HIGH) }
+    if (p.endsWith('getdemo-rc.service/memory.max')) return { value: String(c.max ?? MAX) }
+    if (p.endsWith('getdemo-rc.service/memory.stat')) return { value: `anon 1000\ninactive_file ${c.inactive ?? 0}\nactive_file 2000\n` }
     if (p.endsWith('memory.max')) return { value: 'max' }
     if (p.endsWith('agentes.slice/memory.current')) return { value: String(c.used[0]) }
     if (p.endsWith('agentes.slice/memory.high')) return { value: 'max' }
@@ -151,4 +161,32 @@ test('a previously measured peak beats the estimate', async ($, on) => {
 test('keeps only the last 3 measurements, so an inflated one ages out on its own', () => {
   expect(withMeasurement([5 * GB, 300 * MB, 310 * MB], 290 * MB)).toEqual([300 * MB, 310 * MB, 290 * MB])
   expect(withMeasurement(undefined, 1 * GB)).toEqual([1 * GB])
+})
+
+test('the usage is memory.current minus inactive_file, the working set', () => {
+  expect(inactiveFile('anon 5\ninactive_file 1073741824\nactive_file 7\n')).toBe(GB)
+  expect(inactiveFile('anon 5\n')).toBe(0)
+  expect(workingSet(3.86 * GB, GB)).toBe(2.86 * GB)
+  expect(workingSet(GB, 2 * GB)).toBe(0)
+  // memory.current 3.86 GiB, 1 GiB of it inactive file cache, high 4.5 GiB, no max, 2% margin.
+  const h = headroom([{ group: '/a', used: workingSet(3.86 * GB, GB), inactiveFile: GB, high: 4.5 * GB, max: null }], null, 2) ?? 0
+  expect(h > 1.5 * GB && h < 1.6 * GB).toBe(true)
+})
+
+test('a 1 GB command fits when the group holds 1 GB of inactive file cache', async ($, on) => {
+  const c = { used: [3.86 * GB], commands: [], responses: [], inactive: GB, high: 4.5 * GB, max: 'max' as const }
+  setup(on, c)
+  await $.session.start(start)
+  // Without the cache deduction the headroom would be 0.55 GiB, and this tsc (1 GiB) would wait and be refused.
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(c.commands).toEqual(['npx tsc --noEmit'])
+})
+
+test('/ram shows the inactive_file behind the headroom', async ($, on) => {
+  const c = { used: [3.86 * GB], commands: [], responses: [], inactive: GB, high: 4.5 * GB, max: 'max' as const }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'ram', args: '' })
+  expect(r.text).toContain('minus 1024 MB inactive_file')
+  expect(r.text).toContain('uses 2929 MB')
 })

@@ -10,7 +10,11 @@ export type Heavy = {
 
 export type Level = {
   group: string
+  // The working set: `memory.current` minus `inactive_file`, as the kubelet counts it. The kernel
+  // drops inactive file cache before it swaps process memory, so that cache is not taken.
   used: number
+  // The `inactive_file` of the group's `memory.stat`, shown by /ram to explain the headroom.
+  inactiveFile: number
   // The group's `memory.high`, or null when it is `max`.
   high: number | null
   // The group's `memory.max`, or null when it is `max`.
@@ -18,7 +22,7 @@ export type Level = {
 }
 
 export type Options = {
-  // Percentage of each group's high mark that stays free.
+  // Percentage of each group's max that stays free.
   margin: number
   // How long the command can wait for memory to drop before it is refused.
   waitSeconds: number
@@ -170,12 +174,22 @@ export function diedOfMemory(text: string): boolean {
   return /exit code 137|\bkilled\b.*signal 9|out of memory/i.test(text)
 }
 
+// The `inactive_file` line of a cgroup's `memory.stat`, in bytes, or 0 when the line is missing.
+export function inactiveFile(stat: string): number {
+  const m = /^inactive_file (\d+)$/m.exec(stat)
+  return m?.[1] === undefined ? 0 : Number(m[1])
+}
+
+export function workingSet(current: number, inactive: number): number {
+  return Math.max(0, current - inactive)
+}
+
 export function report(levels: readonly Level[], machine: { available: number; total: number } | null, margin: number): string {
   if (levels.length === 0 && machine === null) return 'no memory reading on this machine'
   const lines = levels.map((l) => {
     const high = l.high === null ? 'no high' : `high ${mb(l.high)}`
     const max = l.max === null ? 'no max' : `max ${mb(l.max)}`
-    return `${l.group}: uses ${mb(l.used)}, ${high}, ${max}`
+    return `${l.group}: uses ${mb(l.used)} (memory.current ${mb(l.used + l.inactiveFile)} minus ${mb(l.inactiveFile)} inactive_file), ${high}, ${max}`
   })
   if (machine !== null) lines.push(`machine: ${mb(machine.available)} available of ${mb(machine.total)}`)
   const h = headroom(levels, machine, margin)
