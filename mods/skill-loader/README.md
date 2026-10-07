@@ -27,7 +27,18 @@ None.
 
 ## Options
 
-None. The skills are read from `<project>/.claude/skills/<name>/SKILL.md`, then `~/.claude/skills/<name>/SKILL.md`. A skill that exists in neither is skipped.
+None.
+
+## The skills
+
+The mod ships the five skills it delivers, in its `skills/` folder, so it works with nothing else
+installed. Claude Code also lists them as `skill-loader:<name>`. `skills/NOTICE.md` names the source
+and license of each.
+
+The mod reads a skill from its own folder first, then from `<project>/.claude/skills/<name>/SKILL.md`,
+then from `~/.claude/skills/<name>/SKILL.md`. It finds its own folder through the `installPath` in
+`plugins/installed_plugins.json`. Under `--plugin-dir` there is no such record, so only the project's
+and the user's folders count.
 
 ## What it records
 

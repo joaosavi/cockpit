@@ -11,7 +11,7 @@
 // time its tool.call hook spent outside `next`.
 
 import type { Hook, On } from 'claude-code'
-import { alreadyDeliveredText, asSkill, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
+import { alreadyDeliveredText, asSkill, installPathOf, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -43,10 +43,30 @@ async function log($: Api, entry: Record<string, unknown>) {
   await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
+// The `skills` folder this plugin ships, found through the install record Claude Code keeps. Read
+// once per load of the mod; '' when the record names no install, as under --plugin-dir.
+let ownSkills: string | null = null
+
+async function ownSkillsDir($: Api): Promise<string> {
+  if (ownSkills !== null) return ownSkills
+  ownSkills = ''
+  try {
+    const home = (await $.env.get('HOME')) ?? ''
+    const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+    const path = installPathOf(await $.fs.read(`${config}/plugins/installed_plugins.json`), 'skill-loader')
+    if (path !== null) ownSkills = `${path}/skills`
+  } catch {
+    // no install record: only the user's and the project's skills
+  }
+  return ownSkills
+}
+
 // Reads SKILL.md straight from disk. The Skill tool called by a mod answers "Launching skill" but
-// does not put the skill's text in the conversation, so the mod delivers the text itself.
+// does not put the skill's text in the conversation, so the mod delivers the text itself. The
+// plugin's own copy comes first; the project's and the user's folders cover a skill it lacks.
 async function skillText($: Api, skill: string): Promise<string | null> {
-  const dirs = [`${await $.session.cwd()}/.claude/skills`, `${(await $.env.get('HOME')) ?? ''}/.claude/skills`]
+  const own = await ownSkillsDir($)
+  const dirs = [...(own === '' ? [] : [own]), `${await $.session.cwd()}/.claude/skills`, `${(await $.env.get('HOME')) ?? ''}/.claude/skills`]
   for (const base of dirs) {
     const dir = `${base}/${skill}`
     try {

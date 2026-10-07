@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { byCommand, byTool, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
+import { byCommand, byTool, installPathOf, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
 
 test('each file calls for the right skill', () => {
   expect(byTool('Read', '/w/src/a.ts')?.skill).toBe('typescript-best-practices')
@@ -171,4 +171,33 @@ test('the agent texts say what the mod did and what to do next', () => {
   expect(refusalText('technical-writing', '/w/README.md', 'BODY')).toBe(
     'skill-loader: the technical-writing skill applies to /w/README.md and follows in full. Read it, then repeat the call following it.\n\nBODY',
   )
+})
+
+test('the install record gives the plugin folder, and a broken record gives none', () => {
+  const record = JSON.stringify({ version: 2, plugins: { 'other@x': [{ installPath: '/o' }], 'skill-loader@agent': [{ installPath: '/cache/agent/skill-loader/1.2.0' }] } })
+  expect(installPathOf(record, 'skill-loader')).toBe('/cache/agent/skill-loader/1.2.0')
+  expect(installPathOf('{}', 'skill-loader')).toBeNull()
+  expect(installPathOf('not json', 'skill-loader')).toBeNull()
+})
+
+test('the plugin\'s own copy of a skill comes before the user\'s', async ($, on) => {
+  const read: string[] = []
+  mock.clock(on, { now: 0 })
+  mock.env(on, { HOME: '/home' })
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('session.cwd', () => ({ value: '/work' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('fs.read', ($, e) => {
+    if (e.path === '/home/.claude/plugins/installed_plugins.json') return { value: JSON.stringify({ plugins: { 'skill-loader@agent': [{ installPath: '/plug' }] } }) }
+    if (!e.path.endsWith('/SKILL.md')) return { deny: 'no file' }
+    read.push(e.path)
+    return { value: '---\nname: x\n---\n\n# Body\n' }
+  })
+  on('fs.write', () => ({ value: undefined }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Read', file_path: '/work/a.ts' })
+  expect(read).toEqual(['/plug/skills/typescript-best-practices/SKILL.md'])
+  expect(JSON.stringify(r)).toContain('Base directory for this skill: /plug/skills/typescript-best-practices')
 })

@@ -77,6 +77,25 @@ export function alreadyDeliveredText(skill: string): string {
 }
 
 // The SKILL.md as the Skill tool delivers it: the skill's directory, for relative paths, and the body without the frontmatter.
+// The folder Claude Code installed this plugin in, from `plugins/installed_plugins.json`: the
+// `installPath` of the first `skill-loader@<marketplace>` entry. Null when the file names none.
+export function installPathOf(json: string, plugin: string): string | null {
+  try {
+    const plugins: unknown = Reflect.get(JSON.parse(json) as object, 'plugins')
+    if (typeof plugins !== 'object' || plugins === null) return null
+    for (const [key, entries] of Object.entries(plugins)) {
+      if (!key.startsWith(`${plugin}@`) || !Array.isArray(entries)) continue
+      for (const entry of entries as unknown[]) {
+        const path: unknown = typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'installPath') : undefined
+        if (typeof path === 'string' && path !== '') return path
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function asSkill(dir: string, content: string): string {
   const body = content.replace(/^---\n[\s\S]*?\n---\n/, '').trim()
   return `Base directory for this skill: ${dir}\n\n${body}`
