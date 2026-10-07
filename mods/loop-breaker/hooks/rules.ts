@@ -87,10 +87,10 @@ export function nudgeText(n: Nudge): string {
   let what: string
   switch (n.kind) {
     case 'edits':
-      what = `you have edited ${n.file} ${n.count} times after failed commands in this turn`
+      what = `you edited ${n.file} ${n.count} times after failed commands this turn`
       break
     case 'error':
-      what = `the same error came back ${n.count} times in this turn`
+      what = `the same error came back ${n.count} times this turn`
       break
     case 'repeat':
       what = `you called ${n.tool} with the same arguments ${n.count} times in a row`
@@ -101,8 +101,7 @@ export function nudgeText(n: Nudge): string {
     }
   }
   return (
-    `Loop check from the loop-breaker mod: ${what}. Stop before the next attempt. ` +
-    'Write in up to 3 lines what you tried and why it did not work. Then change the approach: ' +
-    're-read the code around the failure, form a new hypothesis and test it, or ask the user if you are blocked.'
+    `Loop check: ${what}. Stop and write in up to 3 lines what you tried and why it failed. ` +
+    'Then change approach: re-read the code around the failure, test a new hypothesis, or ask the user if blocked.'
   )
 }

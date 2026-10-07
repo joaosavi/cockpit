@@ -516,8 +516,8 @@ export function register(on: On, values: PluginOptions) {
       model = (await readModel($)) ?? model
       tick = $.clock.every(TICK_MS, async () => {
         now = await $.clock.now()
-        await readAgents($)
-        $.ui.invalidate('ui.render')
+        // The band no longer shows times or subagents; only the open /hud pane needs the redraw.
+        if ((await readAgents($)) && paneTimer !== null) $.ui.invalidate('ui.render')
       })
       redraw($)
     }

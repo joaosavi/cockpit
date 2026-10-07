@@ -97,5 +97,5 @@ export function withPipefail(command: string): string {
 }
 
 export const NOTE =
-  'The pipefail mod ran this command with `set -o pipefail;` in front, so its exit code is the runner\'s and not the one of `tail`, `head` or `grep`. ' +
-  'With `| head`, a runner that keeps writing after head closes can exit 141 (SIGPIPE): read the output before calling it a failure.'
+  'pipefail: ran with `set -o pipefail;`, so the exit code is the runner\'s, not that of `tail`, `head` or `grep`. ' +
+  'With `| head`, exit 141 (SIGPIPE) can mean head closed early: read the output before calling it a failure.'

@@ -361,8 +361,8 @@ export function register(on: On, values: PluginOptions) {
     }
     return {
       deny: next.called
-        ? `The secret-guard mod failed (${next.error.kind}) while hiding secrets in this tool's output, so the output was withheld. The call did run. Check its effect before running it again.`
-        : `The secret-guard mod failed (${next.error.kind}) before this call ran, so it did not run. Try again.`,
+        ? `secret-guard failed (${next.error.kind}) while hiding secrets, so the output was withheld. The call ran; check its effect before running it again.`
+        : `secret-guard failed (${next.error.kind}) before the call, so it did not run. Try again.`,
     }
   })
 

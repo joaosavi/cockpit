@@ -6,11 +6,13 @@ have installed that fits the moment.
 
 ```text
 ✻ Propagating… (6s · ↓ 90 tokens)
-  ⎿  Running a 24-second Python sleep command in foreground Bash, then replying with ok
+  ⎿  Now: Running the tests after the fix to the date filter
 ```
 
-The spinner itself stays as Claude Code draws it. The line goes under it, dim, cut to the width of
-the screen and to 100 characters.
+The spinner itself stays as Claude Code draws it. The line goes under it, cut to the width of the
+screen and to 100 characters. A bold label says what the line is, so it reads apart from Claude
+Code's own `Tip:` line: `Now:` for where the session stands (`Agora:` in Portuguese) and `Mods:` for a
+tip about the mods.
 
 ## Turn off the native tip
 

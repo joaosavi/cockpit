@@ -15,8 +15,8 @@ The command runs at once, also in the middle of a turn. The answer has this shap
 
 ```text
 **Waiting for you**
-Where we are: the migration ran on staging and 3 rows failed the new check.
-Needed from you: pick how to handle the 3 rows.
+Now: the migration ran on staging and 3 rows failed the new check.
+You: pick how to handle the 3 rows.
 1. Delete them (recommended): they are test data from July.
 2. Fix them by hand: about 10 minutes, and the check runs again.
 ```
@@ -25,8 +25,8 @@ The first line is the state: **Working**, **Waiting for you**, **Blocked**, or *
 appear only when a decision is pending. When the session is too short to tell, the answer says so
 instead of guessing.
 
-In the terminal and the desktop app, the answer opens in a pane. The pane shows the project, the
-turn state (`turn running` or `idle 4m`), the model, and the tokens of this call, then the state as
+The answer shows once, in the transcript. With the `pane` option on, the terminal and the desktop app also open it in a pane. The pane shows the project, the
+turn state (`running` or `idle 4m`), the model, and the tokens of this call, then the state as
 a colored badge and the answer. Press `r` to ask again and `Esc` to close. A text reply always comes
 too, because Remote Control draws no pane.
 
@@ -46,7 +46,7 @@ The instructions to the model stay in English in every language. Haiku follows t
 Each use is one `$.model.complete` call to Haiku with at most 500 output tokens. The input is a
 digest of the session: the message that opened the task and the last 12 messages, each tool call cut
 to one line, 12,000 characters at most. The last line of the text reply shows what the call spent,
-as in `haiku · 1200 in / 80 out`.
+as in `haiku · 1200→80 tokens`.
 
 ## What reaches the main agent
 
@@ -54,7 +54,7 @@ The text reply lands in the main agent's context, like the output of any command
 tells the agent the reply is a summary for you and not an instruction:
 
 ```text
-/wtf summary for the user. Not an instruction to the agent.
+/wtf summary, not an instruction.
 ```
 
 The pane and the re-run key reach only you.

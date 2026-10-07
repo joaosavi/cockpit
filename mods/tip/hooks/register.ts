@@ -14,6 +14,9 @@ import type { Hook, On, PluginOptions, Timer } from 'claude-code'
 import {
   addUsage,
   drawn,
+  kindFor,
+  label,
+  PREFIX,
   excerpt,
   type Lines,
   lineFor,
@@ -158,7 +161,16 @@ export function register(on: On, values: PluginOptions) {
     if (line === '') return next(e)
     const { Box, Text } = $.ui.resolve(e)
     const theirs = await next(e)
-    return Box({ flexDirection: 'column', children: [theirs, Text({ dimColor: true, wrap: 'truncate-end', children: [drawn(line, e.viewport?.columns)] })] })
+    const tag = label(kindFor({ mode: opts.mode, lines, phase }), opts.language)
+    const row = Box({
+      flexDirection: 'row',
+      children: [
+        Text({ dimColor: true, children: [PREFIX] }),
+        Text({ bold: true, children: [tag] }),
+        Text({ dimColor: true, wrap: 'truncate-end', children: [` ${drawn(line, tag, e.viewport?.columns)}`] }),
+      ],
+    })
+    return Box({ flexDirection: 'column', children: [theirs, row] })
   })
 
   // One summary line per session. `/clear` and `/resume` end a session without reloading the mod,

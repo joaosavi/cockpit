@@ -183,7 +183,7 @@ export function register(on: On, values: PluginOptions) {
       await expire($)
     })
     try {
-      await $.command.register({ name: 'limit', description: 'Show the account usage limit and what the usage-limit mod is holding back', immediate: true })
+      await $.command.register({ name: 'limit', description: 'Show the usage windows and what is held for the resume', immediate: true })
     } catch (err) {
       await log($, { event: 'command-refused', error: String(err) })
     }

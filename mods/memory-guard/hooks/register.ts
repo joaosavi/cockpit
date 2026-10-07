@@ -284,7 +284,7 @@ export function register(on: On, values: PluginOptions) {
       await updateStatus($)
     })
     try {
-      await $.command.register({ name: 'ram', description: 'Show the memory of each group and the headroom for heavy commands', immediate: true })
+      await $.command.register({ name: 'ram', description: 'Show memory per group and the headroom for heavy commands', immediate: true })
     } catch (err) {
       await log($, { event: 'command-refused', error: String(err) })
     }

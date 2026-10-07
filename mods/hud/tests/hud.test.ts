@@ -143,17 +143,11 @@ const ACTIVITY: Activity = {
   notable: 'loop-breaker: repeated error',
 }
 
-test('the activity block: tool, subagent tree with right-aligned times, and the turn summary', () => {
-  const rows = activityRows(ACTIVITY, 80).map(rowText)
-  expect(rows[0]).toMatch(/^● Bash {2}yarn turbo run test +0:42$/)
-  expect(rows[1]).toMatch(/^ {2}├ Explore {2}map the routes +1:10$/)
-  expect(rows[2]).toMatch(/^ {2}└ general {2}research evals +3:02$/)
-  expect(rows[3]).toBe('  turn 4:12 · 37 calls · 2 errors · loop-breaker: repeated error')
-  for (const columns of [50, 80, 120]) for (const r of activityRows(ACTIVITY, columns)) expect(width(r) <= columns).toBe(true)
-  // A long command is cut with an ellipsis; the time stays whole.
-  const long = activityRows({ ...ACTIVITY, tool: { name: 'Bash', detail: 'x'.repeat(200), startedAt: NOW - 42_000 } }, 50).map(rowText)
-  expect(long[0]).toMatch(/x…  *0:42$/)
-  expect(long[0]?.length).toBe(50)
+test('the activity row shows only what Claude Code does not: errors and the latest mod note', () => {
+  expect(activityRows(ACTIVITY, 80).map(rowText)).toEqual(['2 errors · loop-breaker: repeated error'])
+  expect(activityRows({ ...ACTIVITY, errors: 0, notable: null }, 80)).toEqual([])
+  expect(activityRows({ ...ACTIVITY, errors: 1, notable: null }, 80).map(rowText)).toEqual(['1 error'])
+  for (const columns of [20, 50, 80]) for (const r of activityRows(ACTIVITY, columns)) expect(width(r) <= columns).toBe(true)
 })
 
 test('tool names and inputs shorten for the activity row', () => {
@@ -367,37 +361,29 @@ test('band off leaves the band to the other mods', OFF_MODE, async ($, on) => {
   expect(await ui.drawn()).toMatchObject(OTHER_MODS)
 })
 
-test('during a turn: the running tool with its input and time, two subagents, and the turn summary; gone when the turn ends', async ($, on) => {
+test('during a turn the band adds errors and mod notes, never the tool, the subagents or the time', async ($, on) => {
   const clock = setup(on)
   await $.session.start(START)
   await $.turn.start({ text: 'run the tests', turnId: 't1' })
+  const quiet = await $.ui.mount(band(100, true))
+  expect(await quiet.find({ type: 'Text', text: /error/ })).toBeUndefined()
+  await quiet.unmount()
   await $.tool.call({ tool: 'Bash', command: 'false' })
   await $.tool.call({ tool: 'Bash', command: 'loop' })
   const running = $.tool.call({ tool: 'Bash', command: 'yarn turbo run test' })
   await clock.advance(42_000)
   const ui = await $.ui.mount(band(100, true))
-  expect(await ui.find({ type: 'Text', text: 'Bash' })).toMatchObject({ props: { bold: true } })
-  expect(await ui.find({ type: 'Text', text: 'yarn turbo run test' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '0:42' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  ├ ' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Explore' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  └ ' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'general' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'research evals' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'done long ago' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'turn 0:42' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '3 calls' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'yarn turbo run test' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Explore' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /turn / })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: '1 error' })).toMatchObject({ props: { color: 'error' } })
   expect(await ui.find({ type: 'Text', text: 'loop-breaker: repeated error' })).toMatchObject({ props: { color: 'warning' } })
-
   await ui.unmount()
   await clock.advance(20_000)
   await running
   await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 62_000, isAborted: false, usage: null })
   const idle = await $.ui.mount(band(100, false))
-  expect(await idle.find({ type: 'Text', text: 'yarn turbo run test' })).toBeUndefined()
-  expect(await idle.find({ type: 'Text', text: /turn / })).toBeUndefined()
-  expect(await idle.find({ type: 'Text', text: '1m · ' })).toBeUndefined()
+  expect(await idle.find({ type: 'Text', text: '1 error' })).toBeUndefined()
   expect(await idle.find({ type: 'Text', text: '3 calls' })).toBeDefined()
 })
 

@@ -71,7 +71,7 @@ function reportPane(ui: Ui, lines: readonly ReportLine[]): RenderElement {
 export function register(on: On) {
   on('session.start', async ($, e, next) => {
     try {
-      await $.command.register({ name: 'mods', description: 'Show what each mod did and what it cost: /mods [days], 7 by default', argumentHint: '[days]', immediate: true })
+      await $.command.register({ name: 'mods', description: 'Show what each mod did and cost, last 7 days by default', argumentHint: '[days]', immediate: true })
     } catch {
       // a taken name leaves the mod without the command
     }
@@ -80,7 +80,7 @@ export function register(on: On) {
 
   on('command.run', { command: 'mods' }, async ($, e) => {
     const home = await $.env.get('HOME')
-    if (home === undefined) return { text: 'The mod-report mod has no diaries to read, because HOME is not set.' }
+    if (home === undefined) return { text: '/mods: HOME is not set, so there are no diaries to read.' }
     const days = parseDays(e.args)
     const today = new Date(await $.clock.now()).toISOString().slice(0, 10)
     shown = render(aggregate(await readDiaries($, `${home}/.local/state/mods`, today, days)), today, days)

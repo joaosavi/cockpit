@@ -604,40 +604,17 @@ export function notableOf(r: { deny?: string; context?: readonly string[] }): st
   return null
 }
 
-// A row with free text in the middle and the elapsed time flush right. The free text is the only
-// part that gets cut.
-function timedRow(head: readonly Seg[], detail: string, elapsed: string, columns: number): Row {
-  const tail: Seg[] = [{ text: elapsed, dim: true }]
-  const fixed = width(head) + width(tail) + 2
-  const room = columns - fixed
-  const text = room >= 4 ? cut(detail, room) : ''
-  const left: Seg[] = text === '' ? [...head] : [...head, { text }]
-  return spread(left, tail, columns) ?? (width(head) <= columns ? [...head] : [{ text: cut(rowText(head), columns) }])
-}
 
+// What the turn shows that Claude Code's own screen does not: the errors so far and the latest note
+// another mod added to a tool result. Claude Code already draws the running tool, the subagents and
+// the turn's time, so the band leaves them out. No row while there is nothing to add.
 export function activityRows(a: Activity, columns: number): Row[] {
-  const rows: Row[] = []
-  if (a.tool !== null) {
-    rows.push(timedRow([{ text: '● ', tone: 'success' }, { text: a.tool.name, bold: true }, { text: '  ' }], a.tool.detail, clock(a.now - a.tool.startedAt), columns))
-  } else {
-    rows.push(timedRow([{ text: '● ', dim: true }, { text: 'Thinking', dim: true }], '', clock(a.now - a.turnStartedAt), columns))
-  }
-  a.agents.forEach((g, i) => {
-    const branch = i === a.agents.length - 1 ? '  └ ' : '  ├ '
-    rows.push(timedRow([{ text: branch, dim: true }, { text: agentType(g.type), bold: true }, { text: '  ' }], g.description, clock(a.now - g.startedAt), columns))
-  })
-  const parts: Seg[][] = [[{ text: `turn ${clock(a.now - a.turnStartedAt)}`, dim: true }], [{ text: `${a.calls} ${a.calls === 1 ? 'call' : 'calls'}`, dim: true }]]
+  const parts: Seg[][] = []
   if (a.errors > 0) parts.push([{ text: `${a.errors} ${a.errors === 1 ? 'error' : 'errors'}`, tone: 'error' }])
   if (a.notable !== null) parts.push([{ text: a.notable, tone: 'warning' }])
-  // Drops from the end until the summary fits.
-  for (let n = parts.length; n > 0; n--) {
-    const row: Row = [{ text: '  ' }, ...parts.slice(0, n).flatMap((p, i) => (i === 0 ? p : [{ text: ' · ', dim: true }, ...p]))]
-    if (width(row) <= columns) {
-      rows.push(row)
-      break
-    }
-  }
-  return rows
+  if (parts.length === 0) return []
+  const row: Row = parts.flatMap((p, i) => (i === 0 ? p : [{ text: ' · ', dim: true }, ...p]))
+  return width(row) <= columns ? [row] : [[{ ...(row[0] ?? { text: '' }), text: cut(rowText(row), columns) }]]
 }
 
 // ---------------------------------------------------------------------------------------------

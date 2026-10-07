@@ -1,6 +1,6 @@
 {
   "name": "mod-report",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "/mods [days] reports what each mod did and what it cost per tool call, read from the mods' diaries, and flags the ones that get in the way.",
   "author": {
     "name": "João Savi",

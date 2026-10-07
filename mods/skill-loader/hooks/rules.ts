@@ -60,23 +60,20 @@ export function looksLikeError(text: string): boolean {
   return ERROR_SIGNS.some((re) => re.test(text))
 }
 
-export const BUG_REMINDER = 'The user pasted an error or said something broke. Load the diagnosing-bugs skill before you investigate.'
+export const BUG_REMINDER = 'skill-loader: the user pasted an error or said something broke. Load the diagnosing-bugs skill before investigating.'
 
 // The context note that delivers a skill with a read. It starts with `The skill <name>`, which the
 // rating mod reads to record the skills a turn used.
 export function loadedText(skill: string, body: string): string {
-  return `The skill ${skill} comes in full below, loaded by the skill-loader mod. Follow it from here on.\n\n${body}`
+  return `The skill ${skill} follows in full, loaded by skill-loader. Follow it from here on.\n\n${body}`
 }
 
 export function refusalText(skill: string, target: string, body: string): string {
-  return (
-    `The skill-loader mod held this call so you follow the ${skill} skill, which applies to ${target}. ` +
-    `The skill comes in full below. Read it, then make the same call again, following it.\n\n${body}`
-  )
+  return `skill-loader: the ${skill} skill applies to ${target} and follows in full. Read it, then repeat the call following it.\n\n${body}`
 }
 
 export function alreadyDeliveredText(skill: string): string {
-  return `The ${skill} skill already came in full from the skill-loader mod earlier in this conversation. Follow that text; there is no need to load it again.`
+  return `skill-loader: ${skill} already came in full earlier in this conversation. Follow that text.`
 }
 
 // The SKILL.md as the Skill tool delivers it: the skill's directory, for relative paths, and the body without the frontmatter.

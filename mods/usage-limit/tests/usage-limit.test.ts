@@ -81,7 +81,7 @@ test('in the reserve, refuses tools and resumes when the window resets', SAO_PAU
   expect(s.submitted.length).toBe(0)
   await clock.set(Date.parse(RESET) + 2 * 60_000)
   expect(s.submitted.length).toBe(1)
-  expect(s.submitted[0]).toContain('The limit has reset')
+  expect(s.submitted[0]).toContain('the limit reset')
 
   // After the resume, tools pass again.
   expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ result: 'ran' })
@@ -98,7 +98,7 @@ test("in the reserve, the user's prompt gets one turn without subagents", async 
 
   // End of the user's turn: the pause applies again.
   await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 10, isAborted: false, usage: null })
-  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('Paused') })
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('paused at') })
 })
 
 test('in the reserve, an automatic prompt is held and goes into the resume', SAO_PAULO, async ($, on) => {
@@ -106,7 +106,7 @@ test('in the reserve, an automatic prompt is held and goes into the resume', SAO
   const clock = setup(on, s)
   await $.session.start(start)
   const held = await $.prompt.submit({ text: 'routine: daily report', wait: false, origin: { kind: 'scheduled-trigger' } })
-  expect(held).toMatchObject({ drop: 'Held by the usage-limit mod: the account is in its reserve. This message is delivered when the session resumes, at Oct 6, 19:30.' })
+  expect(held).toMatchObject({ drop: 'usage-limit: held during the reserve, delivered when the session resumes at Oct 6, 19:30.' })
 
   await clock.set(Date.parse(RESET) + 2 * 60_000)
   expect(s.submitted.length).toBe(1)
@@ -119,26 +119,26 @@ test('/limit shows the windows and the state', SAO_PAULO, async ($, on) => {
   await $.session.start(start)
   const r = await $.command.run({ command: 'limit', args: '' })
   expect(r.text).toBe(
-    'Usage limit: throttled at 91%, one subagent at a time above 90%\n5-hour window: 91%, resets Oct 6, 19:30\n7-day window: 40%, resets Oct 11, 13:00',
+    'Usage limit: throttled at 91%, one subagent at a time from 90%\n5-hour window: 91%, resets Oct 6, 19:30\n7-day window: 40%, resets Oct 11, 13:00',
   )
 })
 
 test('/limit reads in plain words in every state', () => {
   const none = { isResumeScheduled: false, held: 0 }
-  expect(limitReport([], { kind: 'free' }, O, none)).toBe('Usage limit: no reading yet. The first model response in this session reports it.')
-  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Usage limit: normal (one subagent at a time from 90%, pause at 98%)')
+  expect(limitReport([], { kind: 'free' }, O, none)).toBe('Usage limit: no reading yet. It arrives with the first model response.')
+  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Usage limit: normal, one subagent at a time from 90%, pause at 98%')
   const paused = { kind: 'paused', window: windows(98)[0] ?? { kind: 'five_hour', percentUsed: 98 } } as const
   expect(limitReport(windows(98), paused, O, { isResumeScheduled: true, held: 2 })).toBe(
     [
-      'Usage limit: paused at 98% to keep the 2% reserve, resumes Oct 6, 19:30',
+      'Usage limit: paused at 98% (2% reserve), resumes Oct 6, 19:30',
       '5-hour window: 98%, resets Oct 6, 19:30',
       '7-day window: 40%, resets Oct 11, 13:00',
-      'Resume scheduled for when the window resets.',
+      'Resume scheduled for the window reset.',
       '2 messages held for the resume.',
     ].join('\n'),
   )
   expect(statusText({ kind: 'free' }, O)).toBeUndefined()
-  expect(statusText(paused, O)).toBe('Usage limit: paused at 98% to keep the 2% reserve, resumes Oct 6, 19:30')
+  expect(statusText(paused, O)).toBe('Usage limit: paused at 98% (2% reserve), resumes Oct 6, 19:30')
   expect(windowName('seven_day_opus')).toBe('seven day opus window')
 })
 
@@ -147,7 +147,7 @@ test('a new session without its own reading uses the one another session stored'
   const s = { submitted: [], running: 0, initialUsage: null, stored }
   setup(on, s)
   await $.session.start(start)
-  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('Paused') })
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('paused at') })
 })
 
 test('a stored reading of a window that already reset does not pause', async ($, on) => {
@@ -162,7 +162,7 @@ test("/clear cancels the previous conversation's resume", async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 98 }
   const clock = setup(on, s)
   await $.session.start(start)
-  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('Paused') })
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('paused at') })
   await $.session.end({ reason: 'clear' })
   await clock.set(Date.parse(RESET) + 5 * 60_000)
   expect(s.submitted.length).toBe(0)
@@ -213,7 +213,7 @@ test('a session that hit 100% with the limit error resumes when the window reset
   await $.classic.StopFailure({ session_id: 's1', transcript_path: '/t', cwd: '/work', hook_event_name: 'StopFailure', error: 'rate_limit' })
   await clock.set(Date.parse(RESET) + 2 * 60_000)
   expect(s.submitted.length).toBe(1)
-  expect(s.submitted[0]).toContain('The limit has reset')
+  expect(s.submitted[0]).toContain('the limit reset')
 })
 
 const BAND = {

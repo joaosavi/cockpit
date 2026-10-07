@@ -161,6 +161,7 @@ export function system(mode: Exclude<Mode, 'tips'>, lang: string): string {
     'You write the short status line shown under the spinner while an AI coding agent works on a task for its user.',
     'The excerpt runs oldest first. The last user line is the request the agent is working on right now; agent lines before it are from earlier turns.',
     'NOW says, in plain words, what the agent is doing for the user right now and why, like "Running the tests after the fix to the date filter".',
+    'Describe the work in your own words, as an outcome the user cares about; never copy the user\'s request word for word.',
     'Use only what the excerpt shows. Never invent files, numbers or results. No preamble, no quotes, no markdown.',
     `Write in ${target(lang)}.`,
     '',
@@ -216,6 +217,23 @@ export function parseLines(reply: string): Lines {
 // How long each of the two lines stays before the other one shows, in mixed mode.
 export const SWAP_MS = 15_000
 
+export type Kind = 'now' | 'tip'
+
+// Which of the two lines shows at this moment, by the same rules as lineFor; null when none.
+export function kindFor(a: { mode: Mode; lines: Lines | null; phase: number }): Kind {
+  if (a.mode === 'tips' || a.lines === null) return 'tip'
+  if (a.mode === 'summary') return 'now'
+  if (a.lines.now === '') return 'tip'
+  return a.phase % 2 === 0 ? 'now' : 'tip'
+}
+
+// The label in front of the line, so it reads apart from Claude Code's own `Tip:` line.
+export function label(kind: Kind, lang: string): string {
+  const pt = catalog(lang) === PORTUGUESE_TIPS
+  if (kind === 'now') return pt ? 'Agora:' : 'Now:'
+  return 'Mods:'
+}
+
 // The line for this moment. `lines` is the latest model reply, null before the first one arrives;
 // `phase` counts the swaps since the turn started. Empty means the spinner keeps its own drawing.
 export function lineFor(a: { mode: Mode; lang: string; lines: Lines | null; turn: number; phase: number }): string {
@@ -238,11 +256,13 @@ export function lineFor(a: { mode: Mode; lang: string; lines: Lines | null; turn
   }
 }
 
-// The line as drawn: prefixed like the native tip line, and cut to the screen's width.
-export function drawn(line: string, columns: number | undefined): string {
-  const prefix = '  ⎿  '
-  const room = columns === undefined ? MAX_CHARS : Math.max(10, Math.min(MAX_CHARS, columns - prefix.length - 1))
-  return `${prefix}${cut(line, room)}`
+export const PREFIX = '  ⎿  '
+
+// The line's text cut to what is left of the screen's width after the prefix and the label.
+export function drawn(line: string, labelText: string, columns: number | undefined): string {
+  const used = PREFIX.length + labelText.length + 1
+  const room = columns === undefined ? MAX_CHARS : Math.max(10, Math.min(MAX_CHARS, columns - used - 1))
+  return cut(line, room)
 }
 
 // --- the cost ---

@@ -178,7 +178,7 @@ export function register(on: On, values: PluginOptions) {
       }
     }
     try {
-      await $.command.register({ name: 'audit', description: 'Show the last MCP calls that wrote: /audit [count] [filter]', argumentHint: '[count] [filter]', immediate: true })
+      await $.command.register({ name: 'audit', description: 'Show the last MCP write calls', argumentHint: '[count] [filter]', immediate: true })
     } catch {
       // a taken name leaves the mod recording without the command
     }
@@ -187,7 +187,7 @@ export function register(on: On, values: PluginOptions) {
 
   // The text reply stays for Remote Control, which draws no pane.
   on('command.run', { command: 'audit' }, async ($, e) => {
-    if (folder === '') return { text: 'The audit mod has no folder to read, because HOME is not set.' }
+    if (folder === '') return { text: '/audit: HOME is not set, so there is no audit folder.' }
     const { count, filter } = request(e.args, o)
     const text = report(await loadView($, count, filter), e.args, o)
     if ((await $.session.surfaces()).length > 0) await $.ui.open({ id: PANE, title: 'Audit', focus: true, closeOnEscape: true })

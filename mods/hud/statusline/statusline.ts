@@ -51,7 +51,9 @@ function userSettings(): object {
 
 function hudOptions(settings: object) {
   const configs: unknown = Reflect.get(settings, 'pluginConfigs')
-  const hud: unknown = typeof configs === 'object' && configs !== null ? Reflect.get(configs, 'hud@agent') : undefined
+  // `hud@agent` when installed from the marketplace, `hud@inline` under --plugin-dir.
+  const key = typeof configs === 'object' && configs !== null ? (Object.keys(configs).find((k) => k === 'hud@agent') ?? Object.keys(configs).find((k) => k.startsWith('hud@'))) : undefined
+  const hud: unknown = key === undefined ? undefined : Reflect.get(configs as object, key)
   return options(typeof hud === 'object' && hud !== null ? Reflect.get(hud, 'options') : undefined)
 }
 

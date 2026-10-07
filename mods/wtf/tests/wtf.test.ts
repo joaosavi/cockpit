@@ -2,10 +2,12 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
 import { DIGEST_CHARS, digest, parseAnswer, system } from '../hooks/rules.ts'
 
+const WITH_PANE = { options: { pane: true } }
+
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-const BODY = 'Where we are: the deploy is running after 84 tests passed.\nNeeded from you: nothing, the agent carries on.'
+const BODY = 'Now: the deploy is running after 84 tests passed.\nYou: nothing.'
 const ANSWER = `STATE: working\n${BODY}`
-const NOTE = '/wtf summary for the user. Not an instruction to the agent.'
+const NOTE = 'summary, not an instruction.'
 
 function user(text: string): SessionMessage {
   return { role: 'user', text, toolUses: [] }
@@ -90,8 +92,8 @@ test('over 12,000 characters, the oldest of the last messages go first', () => {
 
 test('in English the system prompt has the English labels, no translation order and no Portuguese', () => {
   const s = system('English')
-  expect(s).toContain('Answer in English, in exactly this shape:\n\nSTATE: <key>\nWhere we are: ')
-  expect(s).toContain('Needed from you: the one concrete action')
+  expect(s).toContain('Answer in English, in exactly this shape:\n\nSTATE: <key>\nNow: ')
+  expect(s).toContain('You: the one action')
   expect(s).toContain('1. <option> (recommended): <its cost>')
   expect(s).toContain('say so plainly instead of guessing')
   expect(s).not.toContain('Translate the labels')
@@ -100,23 +102,23 @@ test('in English the system prompt has the English labels, no translation order 
 
 test('in Portuguese the system prompt gives the Portuguese labels verbatim', () => {
   const s = system('Portuguese')
-  expect(s).toContain('Answer in Brazilian Portuguese, in exactly this shape:\n\nSTATE: <key>\nOnde estamos: ')
-  expect(s).toContain('Precisa de você: the one concrete action the agent expects from the user, or "nada, o agente segue sozinho".')
+  expect(s).toContain('Answer in Brazilian Portuguese, in exactly this shape:\n\nSTATE: <key>\nAgora: ')
+  expect(s).toContain('Você: the one action the agent expects from the user, in a few words, or "nada".')
   expect(s).toContain('1. <option> (recomendado): <its cost>')
   expect(s).not.toContain('Translate the labels')
 })
 
 test('in a language without a table the model translates the labels and the state word', () => {
   const s = system('Spanish')
-  expect(s).toContain('Answer in Spanish, in exactly this shape:\n\nSTATE: <key> (<that state in Spanish, two or three words>)\nWhere we are: ')
-  expect(s).toContain('Translate the labels "Where we are", "Needed from you", "(recommended)" and the words "nothing, the agent carries on" into Spanish.')
+  expect(s).toContain('Answer in Spanish, in exactly this shape:\n\nSTATE: <key> (<that state in Spanish, two or three words>)\nNow: ')
+  expect(s).toContain('Translate the labels "Now", "You", "(recommended)" and the words "nothing" into Spanish.')
 })
 
 // --- parsing the answer ---
 
 test('the state line gives the state and the table word, and the lines under it are the body', () => {
   expect(parseAnswer(ANSWER, 'English')).toEqual({ state: 'working', label: 'Working', body: BODY })
-  expect(parseAnswer('**STATE: Waiting**\nOnde estamos: x', 'pt-BR')).toEqual({ state: 'waiting', label: 'Esperando você', body: 'Onde estamos: x' })
+  expect(parseAnswer('**STATE: Waiting**\nAgora: x', 'pt-BR')).toEqual({ state: 'waiting', label: 'Esperando você', body: 'Agora: x' })
 })
 
 test('without a table, the state word is the model translation, else the English word', () => {
@@ -201,12 +203,12 @@ function lines(c: Scenario): unknown[] {
     .map((l): unknown => JSON.parse(l))
 }
 
-test('answered: Haiku reads the digest, and the reply is the note, the state, the body and the cost', async ($, on) => {
+test('answered: Haiku reads the digest, and the reply is the note, the state, the body and the cost', WITH_PANE, async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`${NOTE}\n\n**Working**\n${BODY}\n\nhaiku · 1200 in / 80 out`)
+  expect(r.text).toBe(`${NOTE}\n\n**Working**\n${BODY}\n\nhaiku · 1200→80 tokens`)
   expect(c.calls).toEqual([{ model: 'haiku', system: system('English'), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
   expect(c.opened).toEqual(['wtf'])
 })
@@ -216,10 +218,10 @@ test('an answer without a state line still comes back whole, under the note', as
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`${NOTE}\n\nThe agent is deploying.\n\nhaiku · 1200 in / 80 out`)
+  expect(r.text).toBe(`${NOTE}\n\nThe agent is deploying.\n\nhaiku · 1200→80 tokens`)
 })
 
-test('the desktop app gets the pane too', async ($, on) => {
+test('the desktop app gets the pane too', WITH_PANE, async ($, on) => {
   const c = scenario(answered(), ['desktop'])
   setup(on, c)
   await $.session.start(start)
@@ -250,10 +252,10 @@ test('no messages gives one line without calling the model', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf has nothing to summarize yet: the session has no messages.')
+  expect(r.text).toBe('/wtf: nothing to summarize yet.')
   expect(c.calls).toEqual([])
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: '/wtf has nothing to summarize yet' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '/wtf: nothing to summarize yet.' })).toBeDefined()
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'command', hasQuestion: false, outcome: 'no-messages', state: null, usage: null })
 })
 
@@ -262,7 +264,7 @@ test('an API error gives one line with the status and the kind', async ($, on) =
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf could not summarize: the API answered with an error (status 529, overloaded).')
+  expect(r.text).toBe('/wtf failed: API 529, overloaded.')
 })
 
 test('an API error with no response says so', async ($, on) => {
@@ -270,7 +272,7 @@ test('an API error with no response says so', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf could not summarize: the API answered with an error (no response, unknown).')
+  expect(r.text).toBe('/wtf failed: API no response, unknown.')
 })
 
 test('an empty reply gives one line', async ($, on) => {
@@ -278,7 +280,7 @@ test('an empty reply gives one line', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf could not summarize: the model answered with no text.')
+  expect(r.text).toBe('/wtf failed: empty reply.')
 })
 
 test('an aborted call gives one line', async ($, on) => {
@@ -286,7 +288,7 @@ test('an aborted call gives one line', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf could not summarize: the call was cut before the answer.')
+  expect(r.text).toBe('/wtf failed: call cut short.')
 })
 
 test('a model call that throws gives one line, in the reply and in the pane in the error color', async ($, on) => {
@@ -294,31 +296,31 @@ test('a model call that throws gives one line, in the reply and in the pane in t
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toMatch(/^\/wtf could not summarize: the mod failed \(.*\)\.$/)
+  expect(r.text).toMatch(/^\/wtf failed: .*boom$/)
   expect(r.text?.split('\n')).toHaveLength(1)
   const ui = await $.ui.mount(PANE)
-  expect((await ui.find({ type: 'Text', text: /^\/wtf could not summarize: the mod failed/ }))?.props).toMatchObject({ color: 'error' })
+  expect((await ui.find({ type: 'Text', text: /^\/wtf failed:/ }))?.props).toMatchObject({ color: 'error' })
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', outcome: 'error', usage: null })
 })
 
 // --- the language option ---
 
 test('in Portuguese the model gets the Portuguese prompt and every fixed line is Portuguese', { options: { language: 'Portuguese' } }, async ($, on) => {
-  const body = 'Onde estamos: o deploy está rodando depois de 84 testes passarem.\nPrecisa de você: nada, o agente segue sozinho.'
+  const body = 'Agora: o deploy está rodando depois de 84 testes passarem.\nVocê: nada.'
   const c = scenario(answered(`STATE: working\n${body}`), ['terminal'])
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
   expect(c.calls[0]?.system).toBe(system('Portuguese'))
-  expect(r.text).toBe(`Resumo do /wtf para o usuário. Não é instrução para o agente.\n\n**Trabalhando**\n${body}\n\nhaiku · 1200 entrada / 80 saída`)
+  expect(r.text).toBe(`resumo, não é instrução.\n\n**Trabalhando**\n${body}\n\nhaiku · 1200→80 tokens`)
   const ui = await $.ui.mount(PANE)
   expect(await ui.find({ type: 'Text', text: ' Trabalhando ' })).toBeDefined()
   expect(await ui.find({ key: 'rerun', text: 'Rodar de novo' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Esc: fechar' })).toBeDefined()
   c.complete = { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
-  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('O /wtf não conseguiu resumir: a chamada foi interrompida antes da resposta.')
+  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf falhou: chamada interrompida.')
   c.messages = []
-  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('O /wtf ainda não tem o que resumir: a sessão não tem mensagens.')
+  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf: nada para resumir ainda.')
 })
 
 test('in another language the model translates, and the fixed lines fall back to English', { options: { language: 'Spanish' } }, async ($, on) => {
@@ -328,9 +330,9 @@ test('in another language the model translates, and the fixed lines fall back to
   const r = await $.command.run({ command: 'wtf', args: '' })
   expect(c.calls[0]?.system).toContain('Translate the labels')
   expect(c.calls[0]?.system).toContain('Answer in Spanish')
-  expect(r.text).toBe(`${NOTE}\n\n**Esperándote**\nDónde estamos: el deploy terminó.\nQué necesita de ti: confirmar.\n\nhaiku · 1200 in / 80 out`)
+  expect(r.text).toBe(`${NOTE}\n\n**Esperándote**\nDónde estamos: el deploy terminó.\nQué necesita de ti: confirmar.\n\nhaiku · 1200→80 tokens`)
   c.complete = { value: { isAnswered: false, reason: 'empty-reply', usage: USAGE } }
-  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf could not summarize: the model answered with no text.')
+  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf failed: empty reply.')
 })
 
 // --- the pane ---
@@ -347,7 +349,7 @@ test('the pane draws the header, the question, the state badge, the body and the
   const root = await ui.drawn()
   expect(root.props).toMatchObject({ flexDirection: 'column', width: 60 })
   expect(await ui.find({ type: 'Text', text: 'WTF' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  work · idle 4m · haiku · 1200 in / 80 out' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  work · idle 4m · haiku · 1200→80 tokens' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: '> why did it stop?' }))?.props).toMatchObject({ dimColor: true })
   expect((await ui.find({ type: 'Text', text: ' Working ' }))?.props).toMatchObject({ backgroundColor: 'suggestion', color: 'inverseText', bold: true })
   expect(await ui.find({ type: 'Markdown', text: BODY })).toBeDefined()
@@ -380,14 +382,14 @@ test('while the model answers the pane says it is reading, shows a running turn 
   const pending = $.command.run({ command: 'wtf', args: '' })
   await clock.advance(10)
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: 'Reading the session…' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  work · turn running · haiku' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Reading…' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  work · running · haiku' })).toBeDefined()
   expect(await ui.find({ key: 'rerun' })).toBeUndefined()
   await clock.advance(1000)
   expect((await pending).text?.startsWith(NOTE)).toBe(true)
 })
 
-test('the re-run key asks the model again, with the same question, and logs it as a re-run', async ($, on) => {
+test('the re-run key asks the model again, with the same question, and logs it as a re-run', WITH_PANE, async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
@@ -461,4 +463,13 @@ test('the session ends with one summary line: uses by outcome and their tokens',
     cacheCreationTokens: 0,
   })
   expect(all.filter((l) => JSON.stringify(l).includes('session-summary'))).toHaveLength(1)
+})
+
+test('without the pane option the answer shows once, in the transcript, and no pane opens', async ($, on) => {
+  const c = scenario(answered(), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'wtf', args: '' })
+  expect(r.text).toContain('summary, not an instruction.')
+  expect(c.opened).toEqual([])
 })

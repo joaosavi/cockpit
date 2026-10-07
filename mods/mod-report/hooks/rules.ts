@@ -228,23 +228,22 @@ export function attention(stats: readonly ModStats[]): string[] {
   const out: string[] = []
   for (const s of stats) {
     const avg = perCall(s)
-    if (avg !== null && avg > SLOW_MS) out.push(`${s.mod} adds ${ms(avg)} per tool call, above ${SLOW_MS} ms`)
+    if (avg !== null && avg > SLOW_MS) out.push(`${s.mod}: ${ms(avg)} per tool call, above ${SLOW_MS} ms`)
   }
   const get = (mod: string) => stats.find((s) => s.mod === mod)
   const memory = get('memory-guard')
   if (memory !== undefined && count(memory, 'refused') > 0) {
-    out.push(`memory-guard refused ${plural(count(memory, 'refused'), 'command')}, after holding them ${duration(memory.waitedMs)} in all`)
+    out.push(`memory-guard: refused ${plural(count(memory, 'refused'), 'command')}, ${duration(memory.waitedMs)} held in all`)
   }
   const skills = get('skill-loader')
   if (skills !== undefined && count(skills, 'refused') > 0) {
-    const n = count(skills, 'refused')
-    out.push(`skill-loader held ${plural(n, 'write')} to deliver a skill, and the agent had to redo ${n === 1 ? 'it' : 'them'}`)
+    out.push(`skill-loader: held ${plural(count(skills, 'refused'), 'write')} to deliver a skill, redone by the agent`)
   }
   const loops = get('loop-breaker')
   const nudges = loops === undefined ? 0 : total(loops.actions, 'nudge')
-  if (loops !== undefined && nudges > 0) out.push(`loop-breaker nudged the agent ${plural(nudges, 'time')}: ${actionsText(loops.actions).replace(/^nudge: /, '')}`)
+  if (loops !== undefined && nudges > 0) out.push(`loop-breaker: ${plural(nudges, 'nudge')} (${actionsText(loops.actions).replace(/^nudge: /, '')})`)
   const usage = get('usage-limit')
-  if (usage !== undefined && count(usage, 'paused') > 0) out.push(`usage-limit paused ${plural(count(usage, 'paused'), 'time')} and resumed ${count(usage, 'resumed')}`)
+  if (usage !== undefined && count(usage, 'paused') > 0) out.push(`usage-limit: ${plural(count(usage, 'paused'), 'pause')}, ${plural(count(usage, 'resumed'), 'resume')}`)
   return out
 }
 

@@ -156,9 +156,9 @@ test('the session ends with one summary line: calls seen and nudges by kind', as
 
 test('each nudge names what repeated and tells the agent how to change approach', () => {
   const tail =
-    'Stop before the next attempt. Write in up to 3 lines what you tried and why it did not work. Then change the approach: ' +
-    're-read the code around the failure, form a new hypothesis and test it, or ask the user if you are blocked.'
-  expect(nudgeText({ kind: 'edits', file: '/w/a.ts', count: 5 })).toBe(`Loop check from the loop-breaker mod: you have edited /w/a.ts 5 times after failed commands in this turn. ${tail}`)
-  expect(nudgeText({ kind: 'error', count: 3 })).toBe(`Loop check from the loop-breaker mod: the same error came back 3 times in this turn. ${tail}`)
-  expect(nudgeText({ kind: 'repeat', tool: 'Bash', count: 3 })).toBe(`Loop check from the loop-breaker mod: you called Bash with the same arguments 3 times in a row. ${tail}`)
+    'Stop and write in up to 3 lines what you tried and why it failed. ' +
+    'Then change approach: re-read the code around the failure, test a new hypothesis, or ask the user if blocked.'
+  expect(nudgeText({ kind: 'edits', file: '/w/a.ts', count: 5 })).toBe(`Loop check: you edited /w/a.ts 5 times after failed commands this turn. ${tail}`)
+  expect(nudgeText({ kind: 'error', count: 3 })).toBe(`Loop check: the same error came back 3 times this turn. ${tail}`)
+  expect(nudgeText({ kind: 'repeat', tool: 'Bash', count: 3 })).toBe(`Loop check: you called Bash with the same arguments 3 times in a row. ${tail}`)
 })

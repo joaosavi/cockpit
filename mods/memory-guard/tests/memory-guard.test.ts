@@ -160,7 +160,7 @@ test('a command that died with 137 runs again with a single process', async ($, 
   await $.session.start(start)
   const r = await $.tool.call({ tool: 'Bash', command: 'yarn turbo run test' })
   expect(c.commands).toEqual(['yarn turbo run test', 'yarn turbo run test --concurrency=1'])
-  expect(r).toMatchObject({ text: 'ok', context: [expect.stringContaining('died for lack of memory')] })
+  expect(r).toMatchObject({ text: 'ok', context: [expect.stringContaining('died of memory')] })
 })
 
 test('a previously measured peak beats the estimate', async ($, on) => {
@@ -308,8 +308,7 @@ test('the status line shows only when the headroom is under 500 MB, and the agen
   expect(statusText(-5 * MB)).toBe('Memory headroom: 0 MB')
   const h = { kind: 'typecheck', key: 'npx tsc' } as const
   expect(refusalText(h, 120, 'Headroom: 10 MB, after the 2% margin')).toBe(
-    "The memory-guard mod held this command (npx tsc) for 120s, and the group's memory did not drop enough. " +
-      'Another session or process is using the memory:\nHeadroom: 10 MB, after the 2% margin\n' +
-      'Do not retry now. Tell the user, or continue with work that does not need this command.',
+    'memory-guard: refused npx tsc after waiting 120s for memory; another session or process holds it.\nHeadroom: 10 MB, after the 2% margin\n' +
+      'Tell the user, or continue with work that does not need this command.',
   )
 })

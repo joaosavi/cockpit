@@ -276,16 +276,15 @@ export function peakLines(peaks: Readonly<Record<string, readonly number[]>>): s
 
 export function refusalText(h: Heavy, waitSeconds: number, explanation: string): string {
   return (
-    `The memory-guard mod held this command (${h.key}) for ${waitSeconds}s, and the group's memory did not drop enough. ` +
-    `Another session or process is using the memory:\n${explanation}\n` +
-    'Do not retry now. Tell the user, or continue with work that does not need this command.'
+    `memory-guard: refused ${h.key} after waiting ${waitSeconds}s for memory; another session or process holds it.\n${explanation}\n` +
+    'Tell the user, or continue with work that does not need this command.'
   )
 }
 
 export function reducedNotice(command: string): string {
-  return `The memory-guard mod ran this command with a single process, because the whole command did not fit in the group's memory: ${command}`
+  return `memory-guard: the full command did not fit in memory, so it ran with a single process: ${command}`
 }
 
 export function retriedNotice(command: string): string {
-  return `The first attempt died for lack of memory (exit 137), and the memory-guard mod reran it with a single process: ${command}`
+  return `memory-guard: the first run died of memory (exit 137), so it reran with a single process: ${command}`
 }

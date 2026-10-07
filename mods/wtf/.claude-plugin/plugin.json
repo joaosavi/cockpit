@@ -1,6 +1,6 @@
 {
   "name": "wtf",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "/wtf sums up where this session stands and what the agent needs from you, in a few plain lines from Haiku, so you can return to a session without rereading it. The agent keeps working",
   "author": {
     "name": "João Savi"
@@ -11,6 +11,12 @@
       "title": "Language",
       "description": "Language of the /wtf answer. English and Portuguese have full tables. Any other language gets the answer and its labels translated by the model, and the fixed messages in English",
       "default": "English"
+    },
+    "pane": {
+      "type": "boolean",
+      "title": "Pane",
+      "description": "Also open the answer in a pane with a re-run key. Off, the answer shows once, in the transcript",
+      "default": false
     }
   }
 }

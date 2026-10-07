@@ -96,42 +96,41 @@ export function msUntilReset(window: Window, now: number): number | null {
 export function pauseText(window: Window, o: Options): string {
   const back = window.resetsAt === undefined ? 'when the limit resets' : `at ${formatTime(window.resetsAt, o.timeZone)}`
   return (
-    `Paused by the usage-limit mod: the account's ${windowName(window.kind)} is at ${window.percentUsed}%, ` +
-    `and the last ${o.reserve}% is kept in reserve for the user. Do not call any more tools. ` +
-    `Write in up to 3 lines where you stopped and what is left. The session resumes on its own ${back}.`
+    `usage-limit: paused at ${window.percentUsed}% of the ${windowName(window.kind)}, to keep the user's ${o.reserve}% reserve. ` +
+    `Stop calling tools and write in up to 3 lines where you stopped and what is left. The session resumes ${back}.`
   )
 }
 
 export function reserveTurnText(window: Window): string {
   return (
-    `The account's usage limit is at ${window.percentUsed}% (${windowName(window.kind)}), and this turn spends the user's reserve. ` +
-    'Answer the user directly, without subagents, and read only the part of each file you need.'
+    `usage-limit: the ${windowName(window.kind)} is at ${window.percentUsed}% and this turn spends the user's reserve. ` +
+    'Answer directly, without subagents, reading only the parts of files you need.'
   )
 }
 
 export function reserveSubagentText(): string {
-  return 'The usage-limit mod refused this subagent: the account is in its reserve, where no subagent runs. Do the task directly, reading only the part you need.'
+  return 'usage-limit: no subagents in the reserve. Do the task directly, reading only the parts you need.'
 }
 
 export function throttledSubagentText(window: Window, o: Pick<Options, 'alert'>): string {
   return (
-    `The usage-limit mod refused this subagent: the account's usage limit is at ${window.percentUsed}%, and above ${o.alert}% only one subagent runs at a time. ` +
-    'Wait for the running one to finish, or do the task directly.'
+    `usage-limit: usage at ${window.percentUsed}%, and from ${o.alert}% only one subagent runs at a time. ` +
+    'Wait for the running one or do the task directly.'
   )
 }
 
 export function heldText(window: Window, o: Pick<Options, 'timeZone'>): string {
   const back = window.resetsAt === undefined ? 'when the limit resets' : `at ${formatTime(window.resetsAt, o.timeZone)}`
-  return `Held by the usage-limit mod: the account is in its reserve. This message is delivered when the session resumes, ${back}.`
+  return `usage-limit: held during the reserve, delivered when the session resumes ${back}.`
 }
 
 export function resumeText(window: Window, queue: readonly string[]): string {
   const base =
-    `This session paused when the account's ${windowName(window.kind)} reached ${window.percentUsed}%, to keep the user's reserve. ` +
-    'The limit has reset. Continue where you left off, with at most one subagent at a time, reading excerpts instead of whole files.'
+    `usage-limit: the limit reset. This session paused at ${window.percentUsed}% of the ${windowName(window.kind)}. ` +
+    'Continue where you left off, one subagent at a time, reading excerpts instead of whole files.'
   if (queue.length === 0) return base
   const received = queue.map((t, i) => `${i + 1}. ${t}`).join('\n')
-  return `${base}\n\nThese messages arrived during the pause and were held for you:\n${received}`
+  return `${base}\n\nHeld during the pause:\n${received}`
 }
 
 export function plural(n: number, word: string): string {
@@ -143,13 +142,13 @@ export function stateText(zone: Zone, o: Options): string {
   switch (zone.kind) {
     case 'paused': {
       const at = zone.window.resetsAt
-      const back = at === undefined ? 'no reset time known' : `resumes ${formatTime(at, o.timeZone)}`
-      return `paused at ${zone.window.percentUsed}% to keep the ${o.reserve}% reserve, ${back}`
+      const back = at === undefined ? 'no reset time' : `resumes ${formatTime(at, o.timeZone)}`
+      return `paused at ${zone.window.percentUsed}% (${o.reserve}% reserve), ${back}`
     }
     case 'throttled':
-      return `throttled at ${zone.window.percentUsed}%, one subagent at a time above ${o.alert}%`
+      return `throttled at ${zone.window.percentUsed}%, one subagent at a time from ${o.alert}%`
     case 'free':
-      return `normal (one subagent at a time from ${o.alert}%, pause at ${100 - o.reserve}%)`
+      return `normal, one subagent at a time from ${o.alert}%, pause at ${100 - o.reserve}%`
     default: {
       const exhaustive: never = zone
       return exhaustive
@@ -167,12 +166,12 @@ export type Pending = { isResumeScheduled: boolean; held: number }
 
 // The /limit reply: plain lines, so it reads the same in Remote Control.
 export function limitReport(windows: readonly Window[], zone: Zone, o: Options, pending: Pending): string {
-  if (windows.length === 0) return 'Usage limit: no reading yet. The first model response in this session reports it.'
+  if (windows.length === 0) return 'Usage limit: no reading yet. It arrives with the first model response.'
   const lines = windows.map((w) => {
     const back = w.resetsAt === undefined ? '' : `, resets ${formatTime(w.resetsAt, o.timeZone)}`
     return `${windowName(w.kind)}: ${w.percentUsed}%${back}`
   })
-  if (pending.isResumeScheduled) lines.push('Resume scheduled for when the window resets.')
+  if (pending.isResumeScheduled) lines.push('Resume scheduled for the window reset.')
   if (pending.held > 0) lines.push(`${plural(pending.held, 'message')} held for the resume.`)
   return [`Usage limit: ${stateText(zone, o)}`, ...lines].join('\n')
 }
@@ -296,5 +295,5 @@ export function bandRows(windows: readonly Window[], columns: number, o: Options
 export function pausedText(zone: Zone, o: Pick<Options, 'timeZone'>): string | null {
   if (zone.kind !== 'paused') return null
   const at = zone.window.resetsAt
-  return at === undefined ? 'Paused: no reset time known' : `Paused: resumes ${formatTime(at, o.timeZone)}`
+  return at === undefined ? 'Paused: no reset time' : `Paused: resumes ${formatTime(at, o.timeZone)}`
 }

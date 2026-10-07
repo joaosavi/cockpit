@@ -150,14 +150,14 @@ test('/rate 4 verbose -- too long writes the rating for the last turn', async ($
   expect(r.text).toBe('Rated 4/5: abcdef12:t1 "summarize the quarterly report for the board meeting next we…"')
   expect(lines(s, 'ratings')).toEqual([{ v: 1, turn: 'abcdef12:t1', score: 4, tags: ['verbose'], comment: 'too long', at: '2026-10-07T13:00:00.000Z', source: 'user' }])
   const shown = await $.command.run({ command: 'rate', args: '' })
-  expect(shown.text).toContain('Your score: 4/5 · implicit score: pending, written at your next prompt')
+  expect(shown.text).toContain('You: 4/5 · implicit: pending until your next prompt')
 })
 
 test('/rate before any turn, and an invalid /rate 9', async ($, on) => {
   const s: Scene = { appends: [] }
   prepare(on, s)
   await $.session.start(start)
-  expect((await $.command.run({ command: 'rate', args: '' })).text).toContain('No completed turn')
+  expect((await $.command.run({ command: 'rate', args: '' })).text).toContain('no finished turn')
   expect((await $.command.run({ command: 'rate', args: '9' })).text).toContain('Usage: /rate <1-5>')
   expect((await $.command.run({ command: 'rate', args: 'great' })).text).toContain('Usage: /rate <1-5>')
   expect(lines(s, 'ratings').length).toBe(0)
@@ -232,7 +232,7 @@ test('an approval raises the implicit score, and /rate shows it', async ($, on) 
   await turn($, 't1', 'draft the email to the client', 'Draft...')
   await $.prompt.submit({ text: 'Perfeito, valeu!', wait: false, origin: { kind: 'bridge' } })
   expect(lines(s, 'signals')).toMatchObject([{ turn: 'abcdef12:t1', signals: { approval: true, correction: false, retried: false }, implicitScore: 4.5 }])
-  expect((await $.command.run({ command: 'rate', args: '' })).text).toContain('implicit score: 4.5')
+  expect((await $.command.run({ command: 'rate', args: '' })).text).toContain('implicit: 4.5')
 })
 
 test('automatic-origin prompts do not count as correction or approval, and leave the turn waiting for a human', async ($, on) => {
@@ -254,7 +254,7 @@ test('loop nudges, refusals and tool errors are counted, and the last turn is la
     appends: [],
     results: [
       { result: 'fail', isError: true },
-      { result: 'fail', context: ['Loop check from the loop-breaker mod: the same error came back 3 times. Stop.'] },
+      { result: 'fail', context: ['Loop check: the same error came back 3 times this turn. Stop.'] },
       { deny: 'refused by policy' },
     ],
   }
@@ -343,7 +343,7 @@ test('/ratings aggregates per project, per skill and per signal, lists the lowes
     [
       'Ratings, last 7 days (Oct 1 to Oct 7)',
       '3 turns recorded, 2 rated by you (67%)',
-      'Average score: 3.00 from you, 3.25 implicit (2 with signals)',
+      'Average: you 3.00, implicit 3.25 (2 with signals)',
       'Per project',
       '  acme: 2 turns, you 2.00 over 1 rating, implicit 3.25',
       '  billing: 1 turn, you 4.00 over 1 rating',

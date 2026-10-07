@@ -508,9 +508,9 @@ test('a Bash command that mentions .env checks the folders right away', REPOS, a
 
 test('the redaction note names the secrets and tells the agent how to use the placeholder', () => {
   expect(redactedNotice(['API_KEY', 'DB_PASSWORD'])).toBe(
-    "This tool's output contained the value of API_KEY, DB_PASSWORD, and the secret-guard mod replaced it with <hidden:NAME> before it reached you. " +
-      'Use the placeholder as is: written into a .env or secrets file, it becomes the real value again. ' +
-      'If you see the value itself anywhere, tell the user that API_KEY, DB_PASSWORD leaked into the transcript and must be rotated.',
+    'secret-guard: replaced the value of API_KEY, DB_PASSWORD in this output with <hidden:NAME>. ' +
+      'Use the placeholder as is; written into a .env or secrets file, it becomes the real value. ' +
+      'If you see the real value anywhere, tell the user API_KEY, DB_PASSWORD leaked into the transcript and must be rotated.',
   )
 })
 

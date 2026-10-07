@@ -66,6 +66,8 @@ let view: View = { kind: 'waiting', question: '', activity: '' }
 
 let t: Texts = texts(DEFAULT_LANGUAGE)
 let lang = DEFAULT_LANGUAGE
+// The pane repeats the text reply, so it opens only when the pane option asks for it.
+let usePane = false
 let diary = ''
 let project = ''
 let cwd = ''
@@ -136,7 +138,7 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
   let text: string
   try {
     showIfLatest({ kind: 'waiting', ...shared })
-    if (trigger === 'command') await openPane($)
+    if (trigger === 'command' && usePane) await openPane($)
     const messages = await $.session.messages()
     const d = messages.length === 0 ? '' : digest(messages)
     digestChars = d.length
@@ -213,6 +215,7 @@ function pane(ui: Ui, v: View, width: number, rerun: () => Promise<void>): Rende
 
 export function register(on: On, values: PluginOptions) {
   lang = language(values)
+  usePane = Reflect.get(values ?? {}, 'pane') === true
   t = texts(lang)
 
   on('session.start', async ($, e, next) => {

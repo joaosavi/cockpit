@@ -220,8 +220,8 @@ export function register(on: On, values: PluginOptions) {
       configVersion = git.exitCode === 0 && head !== '' ? head : null
     }
     try {
-      await $.command.register({ name: 'rate', description: 'Rate the last answer: /rate <1-5> [tags...] [-- comment]', argumentHint: '<1-5> [tags...] [-- comment]', immediate: true })
-      await $.command.register({ name: 'ratings', description: 'Report the ratings dataset: /ratings [days], 7 by default', argumentHint: '[days]', immediate: true })
+      await $.command.register({ name: 'rate', description: 'Rate the last answer', argumentHint: '<1-5> [tags...] [-- comment]', immediate: true })
+      await $.command.register({ name: 'ratings', description: 'Report the ratings, last 7 days by default', argumentHint: '[days]', immediate: true })
     } catch {
       // a taken name leaves the mod recording without the command
     }
@@ -334,14 +334,14 @@ export function register(on: On, values: PluginOptions) {
   on('command.run', { command: 'rate' }, async ($, e) => {
     const req = parseRate(e.args)
     if (req.kind === 'invalid') return { text: RATE_USAGE }
-    if (last === null) return { text: `No completed turn to rate in this session yet.\n${RATE_USAGE}` }
+    if (last === null) return { text: `/rate: no finished turn in this session yet.\n${RATE_USAGE}` }
     if (req.kind === 'show') return { text: showText(last.id, last.prompt, userScores.get(last.id) ?? null, last.implicit) }
     await rate($, last, req.score, req.tags, req.comment)
     return { text: rateText(last.id, req.score, last.prompt) }
   })
 
   on('command.run', { command: 'ratings' }, async ($, e) => {
-    if (dir === '') return { text: 'The rating mod has no dataset folder, because HOME is not set.' }
+    if (dir === '') return { text: '/ratings: HOME is not set, so there is no dataset folder.' }
     const days = parseDays(e.args)
     const today = day(await nowIso($))
     const turns = await readKind($, 'turns', today, days, isTurn)

@@ -2,7 +2,8 @@
 
 A heads-up display. It shows the model, the project and its git branch, the context window, the
 plan limits and the memory headroom, under the prompt as a status line or above it in the band. While
-a turn runs, the band adds the tool in flight, the running subagents and the turn's calls and errors.
+a turn runs, the band adds what Claude Code's own screen leaves out: the turn's errors and the latest
+note another mod added to a tool result.
 `/hud` opens the full view in a pane.
 
 ## The status line
@@ -30,7 +31,7 @@ git and the cgroup memory itself. The tool call count comes from the mod, which 
 call to `~/.local/state/mods/hud/live/<session>.json` and removes the file when the session ends.
 Without the file, the row shows `0 calls`.
 
-With `band` set to `off`, the band still draws the activity block while a turn runs, unless
+With `band` set to `off`, the band still draws the activity row while a turn runs, unless
 `activity` is `false`.
 
 The band works in the terminal and the Desktop app. Remote Control draws no band, so there `/hud`
@@ -49,14 +50,15 @@ Opus 5.5 · my-app  main●                              38m · 214 calls
 ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61% resets 2h30m   7d ▰▰▰▰▱▱▱▱▱▱  44%   mem 1.9G free
 ```
 
-While a turn runs, the activity block follows. It hides when the turn ends:
+While a turn runs and something went wrong, the activity row follows. It hides when the turn ends,
+and it does not show while the turn has no error and no note:
 
 ```text
-● Bash  yarn turbo run test                                            0:42
-  ├ Explore  map the routes                                            1:10
-  └ general  research evals                                            3:02
-  turn 4:12 · 37 calls · 2 errors · loop-breaker: repeated error
+2 errors · loop-breaker: repeated error
 ```
+
+Claude Code already draws the running tool, its time, the subagents and the turn's time, so the band
+leaves them out. `/hud` still lists the tool and the subagents in its `NOW` row.
 
 | Field | Source | Colors |
 | :- | :- | :- |
@@ -66,9 +68,7 @@ While a turn runs, the activity block follows. It hides when the turn ends:
 | `ctx` | Context window fill | green below 60%, yellow below 85%, red from 85% |
 | `5h`, `7d` | The plan's 5-hour and 7-day windows. `resets 2h30m` is the time left until the window resets, `resets 3d20h` past a day. | green below 75%, yellow below 90%, red from 90% |
 | `mem` | Memory that still fits before the tightest cgroup limit, minus a 2% margin. Without a cgroup limit, the machine's available memory. Hidden when neither can be read. | yellow below 1 GB, red below 500 MB |
-| Tool row | The main loop's running tool, its short input (command, file, pattern or description) and its elapsed time | |
-| Subagent rows | Each running subagent from `$.agent.list()`, its description and the time since the band first saw it | |
-| Turn row | Turn time, tool calls, errors, and the latest note another mod added to a tool result, such as a loop-breaker loop check or a memory-guard single-process rerun | errors red, the note yellow |
+| Activity row | The turn's errors, and the latest note another mod added to a tool result, such as a loop-breaker loop check or a memory-guard single-process rerun | errors red, the note yellow |
 
 In a narrow terminal the band drops fields instead of wrapping. The panel first shortens its bars,
 then drops `mem`, then shows `7d`, `5h` and `ctx` as percents only, then drops the reset countdown.
@@ -100,8 +100,8 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 
 | Option | Default | What it does |
 | :- | :- | :- |
-| `band` | `panel` | `panel` draws the two rows above. `line` draws one row. `off` leaves the band to the other mods and to the activity block, and `/hud` still works. Use `off` with the status line. |
-| `activity` | `true` | Shows the activity block while a turn runs |
+| `band` | `panel` | `panel` draws the two rows above. `line` draws one row. `off` leaves the band to the other mods and to the activity row, and `/hud` still works. Use `off` with the status line. |
+| `activity` | `true` | Shows the activity row while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |
 | `datasetDir` | `~/datasets/agent-ratings` | The rating mod's dataset folder, for the `RATINGS` row |
 | `bar` | `blocks` | The bar glyphs: `blocks` (`▰▱`), `solid` (`█░`), `line` (`━─`), `dots` (`●○`) or `squares` (`■□`) |
@@ -124,8 +124,7 @@ With `band` set to `line`:
 Opus 5.5 │ my-app  main● │ ctx 42% │ 5h 61% │ 7d 44% │ mem 1.9G
 ```
 
-With `activity` set to `false`, the band keeps its rows during a turn and draws no tool or subagent
-rows.
+With `activity` set to `false`, the band draws no activity row.
 
 With `datasetDir` set to `~/data/ratings`, `/hud` reads `~/data/ratings/ratings/<day>.jsonl`.
 
@@ -134,8 +133,8 @@ With `datasetDir` set to `~/data/ratings`, `/hud` reads `~/data/ratings/ratings/
 The band's render hook does no I/O. It lays out values that events and timers already read. The
 work it causes:
 
-- During a turn, a 1-second timer reads `$.agent.list()` and redraws, so the elapsed times move.
-  The timer stops when the turn ends.
+- During a turn, a 1-second timer reads `$.agent.list()` for `/hud`, and redraws only while the
+  pane is open. The timer stops when the turn ends.
 - Every 15 seconds, idle or not, one `git status` (3-second timeout) and a read of the cgroup files
   under `/sys/fs/cgroup`. The band redraws only when what it shows changed.
 - Each tool call adds two redraw requests, one at its start and one at its end. Claude Code throttles

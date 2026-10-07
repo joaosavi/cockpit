@@ -167,9 +167,8 @@ test('the session ends with one summary line: loads by skill, refusals and calls
 
 test('the agent texts say what the mod did and what to do next', () => {
   // The rating mod reads the skill name from a note that starts with `The skill <name>`.
-  expect(loadedText('domain-modeling', 'BODY')).toBe('The skill domain-modeling comes in full below, loaded by the skill-loader mod. Follow it from here on.\n\nBODY')
+  expect(loadedText('domain-modeling', 'BODY')).toBe('The skill domain-modeling follows in full, loaded by skill-loader. Follow it from here on.\n\nBODY')
   expect(refusalText('technical-writing', '/w/README.md', 'BODY')).toBe(
-    'The skill-loader mod held this call so you follow the technical-writing skill, which applies to /w/README.md. ' +
-      'The skill comes in full below. Read it, then make the same call again, following it.\n\nBODY',
+    'skill-loader: the technical-writing skill applies to /w/README.md and follows in full. Read it, then repeat the call following it.\n\nBODY',
   )
 })

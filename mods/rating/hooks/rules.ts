@@ -340,8 +340,8 @@ export function rateText(id: string, score: number, prompt: string): string {
 
 export function showText(id: string, prompt: string, user: number | null, implicit: number | null): string {
   const u = user === null ? 'not rated' : `${user}/5`
-  const i = implicit === null ? 'pending, written at your next prompt' : `${implicit}`
-  return `Last turn ${id} "${excerpt(prompt)}"\nYour score: ${u} · implicit score: ${i}\n${RATE_USAGE}`
+  const i = implicit === null ? 'pending until your next prompt' : `${implicit}`
+  return `Last turn: ${id} "${excerpt(prompt)}"\nYou: ${u} · implicit: ${i}\n${RATE_USAGE}`
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -502,7 +502,7 @@ export function report(turns: readonly TurnRecord[], ratings: readonly RatingRec
   return [
     title,
     { text: `${plural(total.turns, 'turn')} recorded, ${total.user.length} rated by you (${pct(total.user.length, total.turns)})`, tone: 'plain' },
-    { text: `Average score: ${total.user.length === 0 ? 'not rated by you yet' : `${avg(total.user)} from you`}, ${avg(total.implicit)} implicit (${total.implicit.length} with signals)`, tone: 'plain' },
+    { text: `Average: ${total.user.length === 0 ? 'not rated by you yet' : `you ${avg(total.user)}`}, implicit ${avg(total.implicit)} (${total.implicit.length} with signals)`, tone: 'plain' },
     ...section('Per project', byProject),
     ...section('Per skill used', bySkill),
     ...signalsSection([compare('loop nudges', nudge.with, nudge.without), compare('refusals', refusal.with, refusal.without)]),

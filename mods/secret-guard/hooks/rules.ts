@@ -289,12 +289,11 @@ export function total(found: Found): number {
 export function redactedNotice(names: readonly string[]): string {
   const list = names.join(', ')
   return (
-    `This tool's output contained the value of ${list}, and the secret-guard mod replaced it with <hidden:NAME> before it reached you. ` +
-    'Use the placeholder as is: written into a .env or secrets file, it becomes the real value again. ' +
-    `If you see the value itself anywhere, tell the user that ${list} leaked into the transcript and must be rotated.`
+    `secret-guard: replaced the value of ${list} in this output with <hidden:NAME>. ` +
+    'Use the placeholder as is; written into a .env or secrets file, it becomes the real value. ' +
+    `If you see the real value anywhere, tell the user ${list} leaked into the transcript and must be rotated.`
   )
 }
 
 export const RESTORED_NOTICE =
-  'The secret-guard mod wrote the real value in place of each <hidden:NAME> before the file was changed. ' +
-  'The file holds the real value, and tool output keeps showing the placeholder.'
+  'secret-guard: the file got the real value in place of each <hidden:NAME>. Tool output keeps showing the placeholder.'

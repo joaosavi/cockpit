@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
-import { clean, DEFAULT_MODEL, EXCERPT_CHARS, excerpt, lineFor, options, parseLines, prompt, rotatedTip, SWAP_MS, system } from '../hooks/rules.ts'
+import { clean, DEFAULT_MODEL, drawn, EXCERPT_CHARS, excerpt, kindFor, label, lineFor, options, parseLines, prompt, rotatedTip, SWAP_MS, system } from '../hooks/rules.ts'
 
 const USAGE = { input_tokens: 900, output_tokens: 40, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const REPLY = 'NOW: Running the tests after the fix to the date filter\nTIP: /wtf [question] sums up where this session stands'
@@ -83,6 +83,16 @@ test('which line shows: rotation before a reply, then summary and tip alternatin
   expect(rotatedTip('Portuguese', 0).startsWith('/wtf [pergunta]')).toBe(true)
 })
 
+test('each line carries a label that tells it apart from the native Tip line', () => {
+  const lines = { now: 'Deploying', tip: '/hud opens it' }
+  expect(kindFor({ mode: 'mixed', lines, phase: 0 })).toBe('now')
+  expect(kindFor({ mode: 'mixed', lines, phase: 1 })).toBe('tip')
+  expect(kindFor({ mode: 'mixed', lines: null, phase: 0 })).toBe('tip')
+  expect(kindFor({ mode: 'summary', lines, phase: 1 })).toBe('now')
+  expect([label('now', 'English'), label('now', 'Portuguese'), label('tip', 'Portuguese')]).toEqual(['Now:', 'Agora:', 'Mods:'])
+  expect(drawn('a'.repeat(200), 'Agora:', 40).length).toBe(40 - 5 - 7 - 1)
+})
+
 // --- the hooks ---
 
 type Scenario = { reply: { value: unknown } | { deny: string }; calls: { model: string; system: unknown; prompt: unknown; maxTokens: unknown }[]; written: string[]; modelMs: number }
@@ -136,16 +146,18 @@ test('a turn asks Haiku once in the background, and the spinner keeps its own li
   // The model has not answered yet: the rotation tip shows, under the spinner's own line.
   let ui = await $.ui.mount(SPINNER)
   expect(await ui.find({ type: 'Text', text: '✻ Caramelizing…' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: `  ⎿  ${rotatedTip('English', 1)}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Mods:' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip('English', 1)}` })).toBeDefined()
   await ui.unmount()
   await clock.advance(2000)
   ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: '  ⎿  Running the tests after the fix to the date filter' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' Running the tests after the fix to the date filter' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Now:' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /Running the tests/ }))?.props).toMatchObject({ dimColor: true })
   await ui.unmount()
   await clock.advance(SWAP_MS)
   ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: '  ⎿  /wtf [question] sums up where this session stands' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' /wtf [question] sums up where this session stands' })).toBeDefined()
   expect(c.calls).toHaveLength(1)
   expect(c.calls[0]).toMatchObject({ model: DEFAULT_MODEL, maxTokens: 150 })
   expect(c.calls[0]?.prompt).toBe(prompt(excerpt(SESSION, 'Run the tests')))
@@ -172,7 +184,7 @@ test('a failed call keeps the previous line and is counted in the diary', async 
   await $.turn.start({ text: 'a', turnId: 't1' })
   await clock.settle()
   const ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: `  ⎿  ${rotatedTip('English', 1)}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip('English', 1)}` })).toBeDefined()
   await $.session.end({ sessionId: 'abcdef123456', reason: 'other' })
   expect(summary(c)).toMatchObject({ actions: { 'haiku:api-error': 1 }, calls: 1 })
 })
@@ -184,7 +196,7 @@ test('tips mode makes no model call and rotates the Portuguese catalog', { optio
   await $.turn.start({ text: 'a', turnId: 't1' })
   await clock.settle()
   const ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: `  ⎿  ${rotatedTip('Portuguese', 1)}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip('Portuguese', 1)}` })).toBeDefined()
   expect(c.calls).toHaveLength(0)
 })
 
@@ -199,7 +211,7 @@ test('summary mode leaves the spinner alone until a summary arrives', { options:
   await ui.unmount()
   await clock.advance(1000)
   ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: '  ⎿  Running the tests after the fix to the date filter' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' Running the tests after the fix to the date filter' })).toBeDefined()
   expect(c.calls[0]?.system).toBe(system('summary', 'English'))
 })
 
