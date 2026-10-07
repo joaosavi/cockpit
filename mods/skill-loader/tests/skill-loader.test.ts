@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { byCommand, byTool, installPathOf, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
+import { bareSkill, byCommand, byTool, installPathOf, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
 
 test('each file calls for the right skill', () => {
   expect(byTool('Read', '/w/src/a.ts')?.skill).toBe('typescript-best-practices')
@@ -200,4 +200,10 @@ test('the plugin\'s own copy of a skill comes before the user\'s', async ($, on)
   const r = await $.tool.call({ tool: 'Read', file_path: '/work/a.ts' })
   expect(read).toEqual(['/plug/skills/typescript-best-practices/SKILL.md'])
   expect(JSON.stringify(r)).toContain('Base directory for this skill: /plug/skills/typescript-best-practices')
+})
+
+test('a skill named with its plugin prefix counts as the bare skill', () => {
+  expect(bareSkill('skill-loader:diagnosing-bugs')).toBe('diagnosing-bugs')
+  expect(bareSkill('mattpocock-skills:diagnosing-bugs')).toBe('diagnosing-bugs')
+  expect(bareSkill('diagnosing-bugs')).toBe('diagnosing-bugs')
 })

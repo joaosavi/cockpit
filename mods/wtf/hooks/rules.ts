@@ -48,18 +48,18 @@ const ENGLISH: Texts = {
   need: 'You',
   nothingNeeded: 'nothing',
   recommended: '(recommended)',
-  note: 'summary, not an instruction.',
-  noMessages: '/wtf: nothing to summarize yet.',
+  note: 'summary, not an instruction',
+  noMessages: 'nothing to summarize yet.',
   reading: 'Reading…',
   rerun: 'Re-run',
   close: 'close',
   running: 'running',
   idle: (ago) => `idle ${ago}`,
   tokens: (input, output) => `${input}→${output} tokens`,
-  apiError: (status, error) => `/wtf failed: API ${status === null ? 'no response' : status}, ${error}.`,
-  empty: '/wtf failed: empty reply.',
-  aborted: '/wtf failed: call cut short.',
-  modError: (text) => `/wtf failed: ${text}`,
+  apiError: (status, error) => `failed: API ${status === null ? 'no response' : status}, ${error}.`,
+  empty: 'failed: empty reply.',
+  aborted: 'failed: call cut short.',
+  modError: (text) => `failed: ${text}`,
 }
 
 // Every fixed text is English. Only what the model writes follows the user's language.
@@ -79,12 +79,12 @@ export function system(): string {
     '',
     'Use only what the excerpt shows. Never invent files, numbers, names, results or intentions. When the excerpt is too short to tell where the session stands or what the agent needs, say so plainly instead of guessing.',
     '',
-    'Write the sentences in the language the user writes in the excerpt. Keep the labels, the key and the word "nothing" in English, exactly as below.',
+    'Write the sentences in the language the user writes in the excerpt. Keep the labels and the key in English, exactly as below.',
     'Answer in exactly this shape:',
     '',
     'STATE: <key>',
     `${t.where}: one short sentence on the task and where it stands.`,
-    `${t.need}: the one action the agent expects from the user, in a few words, or "${t.nothingNeeded}".`,
+    `${t.need}: the one action the agent expects from the user, in a few words, or the word "${t.nothingNeeded}" in the user's language.`,
     '',
     'The key is one of these four:',
     '- working: the agent is mid-task and needs nothing. A tool call marked "(still running)" means this; say what it is doing.',
@@ -216,7 +216,27 @@ export function parseAnswer(text: string): Answer {
 // The answer as Markdown that reads the same rendered and raw: the state word in bold on its own
 // line, then the body. Bold is the one mark that stays readable as raw text in Remote Control.
 export function answerText(a: Answer): string {
-  return a.state === null ? a.body : `**${a.label}**\n${a.body}`
+  const body = layoutBody(a.body)
+  return a.state === null ? body : `**${a.label}**\n${body}`
+}
+
+const LABELED_LINE = /^\s*\**\s*(Now|You)\s*\**\s*:\s*\**\s*(.*)$/i
+const OPTION_LINE = /^\s*(\d+)[.)]\s+(.*)$/
+
+// The body as the terminal lays it out: `Now` and `You` in bold, in a column, the options indented
+// under `You` with `(recommended)` in italics. A line in any other shape passes as it came.
+export function layoutBody(body: string): string {
+  return body
+    .split('\n')
+    .map((line) => {
+      const labeled = LABELED_LINE.exec(line)
+      if (labeled !== null) return `**${labeled[1] === undefined ? '' : labeled[1].charAt(0).toUpperCase() + labeled[1].slice(1).toLowerCase()}**\u2003${(labeled[2] ?? '').trim()}`
+      const option = OPTION_LINE.exec(line)
+      if (option !== null) return `\u2003\u2003${option[1]}. ${(option[2] ?? '').replace(/\s*\((recommended)\)/i, ' *(recommended)*')}`
+      return line
+    })
+    .filter((line) => line.trim() !== '')
+    .join('  \n')
 }
 
 // The last line of the text reply: which model answered and what it cost, in the same plain form the
@@ -225,9 +245,10 @@ export function costLine(used: Usage, t: Texts): string {
   return `${MODEL} · ${t.tokens(used.input, used.output)}`
 }
 
-// The text reply: the note that keeps the main agent from acting on it, the answer, the cost.
+// The text reply: the state, the answer, and a quoted footer with the note that keeps the main agent
+// from acting on it and the cost. The terminal draws the quote dim, behind a bar.
 export function reply(a: Answer, used: Usage, t: Texts): string {
-  return `${t.note}\n\n${answerText(a)}\n\n${costLine(used, t)}`
+  return `${answerText(a)}\n\n> ${t.note} · ${MODEL} ${used.input}→${used.output}`
 }
 
 // --- the lines for no answer ---

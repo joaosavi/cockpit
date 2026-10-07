@@ -14,18 +14,22 @@ agent keeps working while you ask, and the model call adds nothing to the conver
 The command runs at once, also in the middle of a turn. The answer has this shape:
 
 ```text
-**Waiting for you**
-Now: the migration ran on staging and 3 rows failed the new check.
-You: pick how to handle the 3 rows.
-1. Delete them (recommended): they are test data from July.
-2. Fix them by hand: about 10 minutes, and the check runs again.
+wtf: Waiting for you
+     Now  the migration ran on staging and 3 rows failed the new check.
+     You  pick how to handle the 3 rows.
+            1. Delete them (recommended): they are test data from July.
+            2. Fix them by hand: about 10 minutes, and the check runs again.
+     ▎ summary, not an instruction · haiku 1200→80
 ```
+
+The state, `Now` and `You` show in bold, and `(recommended)` in italics. The quoted footer tells the
+main agent, which also reads the reply, that the lines are for the user, and gives the call's tokens.
 
 The first line is the state: **Working**, **Waiting for you**, **Blocked**, or **Done**. Options
 appear only when a decision is pending. When the session is too short to tell, the answer says so
 instead of guessing.
 
-The answer shows once, in the transcript. With the `pane` option on, the terminal and the desktop app also open it in a pane. The pane shows the project, the
+The answer shows in the transcript. Claude Code prints a command's text only when the turn ends, so in the middle of a turn the answer also opens at once in a pane. With the `pane` option on, the pane opens when idle too. The pane shows the project, the
 turn state (`running` or `idle 4m`), the model, and the tokens of this call, then the state as
 a colored badge and the answer. Press `r` to ask again and `Esc` to close. A text reply always comes
 too, because Remote Control draws no pane.

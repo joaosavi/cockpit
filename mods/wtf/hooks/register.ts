@@ -21,6 +21,7 @@ import {
   type Answer,
   askedEntry,
   costLine,
+  layoutBody,
   digest,
   errorLine,
   failureLine,
@@ -63,7 +64,7 @@ type View =
 let view: View = { kind: 'waiting', question: '', activity: '' }
 
 const t: Texts = texts()
-// The pane repeats the text reply, so it opens only when the pane option asks for it.
+// The pane repeats the text reply, so when idle it opens only when the pane option asks for it.
 let usePane = false
 let diary = ''
 let project = ''
@@ -135,7 +136,9 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
   let text: string
   try {
     showIfLatest({ kind: 'waiting', ...shared })
-    if (trigger === 'command' && usePane) await openPane($)
+    // Claude Code prints a command's text only when the turn ends, so mid-turn the pane is the one
+    // place the answer shows at once.
+    if (trigger === 'command' && (usePane || turnRunning)) await openPane($)
     const messages = await $.session.messages()
     const d = messages.length === 0 ? '' : digest(messages)
     digestChars = d.length
@@ -188,10 +191,10 @@ function body(ui: Ui, v: View): RenderElement {
   if (v.kind === 'waiting') return ui.Text({ dimColor: true, children: [t.reading] })
   if (v.kind === 'failed') return ui.Text({ wrap: 'wrap', ...(v.isError ? { color: 'error' } : { dimColor: true }), children: [v.line] })
   const { state, label, body: text } = v.answer
-  if (state === null) return ui.Markdown({ text })
+  if (state === null) return ui.Markdown({ text: layoutBody(text) })
   return ui.Box({
     flexDirection: 'column',
-    children: [ui.Text({ bold: true, color: 'inverseText', backgroundColor: STATE_COLOR[state], children: [` ${label} `] }), ui.Markdown({ text })],
+    children: [ui.Text({ bold: true, color: 'inverseText', backgroundColor: STATE_COLOR[state], children: [` ${label} `] }), ui.Markdown({ text: layoutBody(text) })],
   })
 }
 

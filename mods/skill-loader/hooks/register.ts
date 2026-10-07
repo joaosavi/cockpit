@@ -11,7 +11,7 @@
 // time its tool.call hook spent outside `next`.
 
 import type { Hook, On } from 'claude-code'
-import { alreadyDeliveredText, asSkill, installPathOf, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
+import { alreadyDeliveredText, asSkill, bareSkill, installPathOf, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -140,8 +140,9 @@ export function register(on: On) {
       // The agent loaded the skill on its own: the mod does not deliver it again. One the mod already
       // delivered does not come again through the tool, because its full text is already in the conversation.
       if (e.tool === 'Skill') {
-        const requested: unknown = Reflect.get(e, 'skill')
-        if (typeof requested !== 'string') return pass(e)
+        const asked: unknown = Reflect.get(e, 'skill')
+        if (typeof asked !== 'string') return pass(e)
+        const requested = bareSkill(asked)
         if (delivered.has(requested)) {
           countAction(tally, 'already-delivered')
           return { deny: alreadyDeliveredText(requested) }

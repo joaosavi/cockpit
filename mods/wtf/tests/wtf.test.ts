@@ -7,7 +7,9 @@ const WITH_PANE = { options: { pane: true } }
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const BODY = 'Now: the deploy is running after 84 tests passed.\nYou: nothing.'
 const ANSWER = `STATE: working\n${BODY}`
-const NOTE = 'summary, not an instruction.'
+const NOTE = 'summary, not an instruction'
+const FOOTER = `> ${NOTE} · haiku 1200→80`
+const LAID = '**Now**\u2003the deploy is running after 84 tests passed.  \n**You**\u2003nothing.'
 
 function user(text: string): SessionMessage {
   return { role: 'user', text, toolUses: [] }
@@ -185,7 +187,7 @@ test('answered: Haiku reads the digest, and the reply is the note, the state, th
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`${NOTE}\n\n**Working**\n${BODY}\n\nhaiku · 1200→80 tokens`)
+  expect(r.text).toBe(`**Working**\n${LAID}\n\n${FOOTER}`)
   expect(c.calls).toEqual([{ model: 'haiku', system: system(), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
   expect(c.opened).toEqual(['wtf'])
 })
@@ -195,7 +197,7 @@ test('an answer without a state line still comes back whole, under the note', as
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`${NOTE}\n\nThe agent is deploying.\n\nhaiku · 1200→80 tokens`)
+  expect(r.text).toBe(`The agent is deploying.\n\n${FOOTER}`)
 })
 
 test('the desktop app gets the pane too', WITH_PANE, async ($, on) => {
@@ -211,7 +213,7 @@ test('without a surface that draws, no pane opens and the text still comes back'
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text?.startsWith(NOTE)).toBe(true)
+  expect(r.text?.endsWith(FOOTER)).toBe(true)
   expect(c.opened).toEqual([])
 })
 
@@ -229,10 +231,10 @@ test('no messages gives one line without calling the model', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf: nothing to summarize yet.')
+  expect(r.text).toBe('nothing to summarize yet.')
   expect(c.calls).toEqual([])
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: '/wtf: nothing to summarize yet.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'nothing to summarize yet.' })).toBeDefined()
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'command', hasQuestion: false, outcome: 'no-messages', state: null, usage: null })
 })
 
@@ -241,7 +243,7 @@ test('an API error gives one line with the status and the kind', async ($, on) =
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf failed: API 529, overloaded.')
+  expect(r.text).toBe('failed: API 529, overloaded.')
 })
 
 test('an API error with no response says so', async ($, on) => {
@@ -249,7 +251,7 @@ test('an API error with no response says so', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf failed: API no response, unknown.')
+  expect(r.text).toBe('failed: API no response, unknown.')
 })
 
 test('an empty reply gives one line', async ($, on) => {
@@ -257,7 +259,7 @@ test('an empty reply gives one line', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf failed: empty reply.')
+  expect(r.text).toBe('failed: empty reply.')
 })
 
 test('an aborted call gives one line', async ($, on) => {
@@ -265,7 +267,7 @@ test('an aborted call gives one line', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('/wtf failed: call cut short.')
+  expect(r.text).toBe('failed: call cut short.')
 })
 
 test('a model call that throws gives one line, in the reply and in the pane in the error color', async ($, on) => {
@@ -273,10 +275,10 @@ test('a model call that throws gives one line, in the reply and in the pane in t
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toMatch(/^\/wtf failed: .*boom$/)
+  expect(r.text).toMatch(/^failed: .*boom$/)
   expect(r.text?.split('\n')).toHaveLength(1)
   const ui = await $.ui.mount(PANE)
-  expect((await ui.find({ type: 'Text', text: /^\/wtf failed:/ }))?.props).toMatchObject({ color: 'error' })
+  expect((await ui.find({ type: 'Text', text: /^failed:/ }))?.props).toMatchObject({ color: 'error' })
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', outcome: 'error', usage: null })
 })
 
@@ -295,7 +297,7 @@ test('the pane draws the header, the question, the state badge, the body and the
   expect(await ui.find({ type: 'Text', text: '  work · idle 4m · haiku · 1200→80 tokens' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: '> why did it stop?' }))?.props).toMatchObject({ dimColor: true })
   expect((await ui.find({ type: 'Text', text: ' Working ' }))?.props).toMatchObject({ backgroundColor: 'suggestion', color: 'inverseText', bold: true })
-  expect(await ui.find({ type: 'Markdown', text: BODY })).toBeDefined()
+  expect(await ui.find({ type: 'Markdown', text: LAID })).toBeDefined()
   expect(await ui.find({ key: 'rerun', text: 'Re-run' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Esc: close' })).toBeDefined()
 })
@@ -329,7 +331,7 @@ test('while the model answers the pane says it is reading, shows a running turn 
   expect(await ui.find({ type: 'Text', text: '  work · running · haiku' })).toBeDefined()
   expect(await ui.find({ key: 'rerun' })).toBeUndefined()
   await clock.advance(1000)
-  expect((await pending).text?.startsWith(NOTE)).toBe(true)
+  expect((await pending).text?.endsWith(FOOTER)).toBe(true)
 })
 
 test('the re-run key asks the model again, with the same question, and logs it as a re-run', WITH_PANE, async ($, on) => {
@@ -413,6 +415,15 @@ test('without the pane option the answer shows once, in the transcript, and no p
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toContain('summary, not an instruction.')
+  expect(r.text).toContain(FOOTER)
   expect(c.opened).toEqual([])
+})
+
+test('in the middle of a turn the pane opens even without the pane option, because the text waits for the turn', async ($, on) => {
+  const c = scenario(answered(), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  await $.turn.start({ text: 'deploy', turnId: 't1' })
+  await $.command.run({ command: 'wtf', args: '' })
+  expect(c.opened).toEqual(['wtf'])
 })

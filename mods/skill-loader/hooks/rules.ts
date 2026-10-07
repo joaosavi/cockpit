@@ -60,7 +60,13 @@ export function looksLikeError(text: string): boolean {
   return ERROR_SIGNS.some((re) => re.test(text))
 }
 
-export const BUG_REMINDER = 'skill-loader: the user pasted an error or said something broke. Load the diagnosing-bugs skill before investigating.'
+export const BUG_REMINDER = 'skill-loader: the user pasted an error or said something broke. Load the skill-loader:diagnosing-bugs skill before investigating.'
+
+// A skill's name without its plugin prefix: `skill-loader:diagnosing-bugs` and
+// `mattpocock-skills:diagnosing-bugs` both count as `diagnosing-bugs`, the same text.
+export function bareSkill(name: string): string {
+  return name.slice(name.lastIndexOf(':') + 1)
+}
 
 // The context note that delivers a skill with a read. It starts with `The skill <name>`, which the
 // rating mod reads to record the skills a turn used.
