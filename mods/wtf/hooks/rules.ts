@@ -92,7 +92,7 @@ export function system(): string {
     '- blocked: an error, a refusal or a missing access stops the agent, and only the user can clear it.',
     '- done: the task is finished and nothing is pending.',
     '',
-    `Only when a decision or a validation is pending, add numbered options after "${t.need}", the recommended one first, each with its cost in one line:`,
+    `Only when a decision or a validation is pending, add numbered options after "${t.need}", the recommended one first, each with its cost, at most 70 characters per option:`,
     `1. <option> ${t.recommended}: <its cost>`,
     '2. <option>: <its cost>',
     'Recommend the option the agent recommends, or the one you would.',
@@ -217,27 +217,39 @@ export function parseAnswer(text: string): Answer {
 // line, then the body. Bold is the one mark that stays readable as raw text in Remote Control.
 export function answerText(a: Answer): string {
   const body = layoutBody(a.body)
-  return a.state === null ? body : `**${a.label}**\n${body}`
+  return a.state === null ? body : `**${a.label}**\n\n${body}`
 }
 
 const LABELED_LINE = /^\s*\**\s*(Now|You)\s*\**\s*:\s*\**\s*(.*)$/i
 const OPTION_LINE = /^\s*(\d+)[.)]\s+(.*)$/
 
-// The body as the terminal lays it out: `Now` and `You` in bold, in a column, the options indented
-// under `You` with `(recommended)` in italics. A line in any other shape passes as it came.
+// The body as the terminal lays it out: `Now:` and `You:` in bold, and the options indented under
+// `You:`, each name in bold and its parenthesized mark, such as `(recommended)`, in italics. Claude
+// Code drops blank lines from a command's text, so the indent is what sets the options apart; it is
+// made of no-break spaces, which the markdown renderer keeps. A line in any other shape passes as it came.
 export function layoutBody(body: string): string {
-  return body
-    .split('\n')
-    .map((line) => {
-      const labeled = LABELED_LINE.exec(line)
-      if (labeled !== null) return `**${labeled[1] === undefined ? '' : labeled[1].charAt(0).toUpperCase() + labeled[1].slice(1).toLowerCase()}**\u2003${(labeled[2] ?? '').trim()}`
-      const option = OPTION_LINE.exec(line)
-      if (option !== null) return `\u2003\u2003${option[1]}. ${(option[2] ?? '').replace(/\s*\((recommended)\)/i, ' *(recommended)*')}`
-      return line
-    })
-    .filter((line) => line.trim() !== '')
-    .join('  \n')
+  const out: string[] = []
+  for (const line of body.split('\n')) {
+    if (line.trim() === '') continue
+    const labeled = LABELED_LINE.exec(line)
+    const option = labeled === null ? OPTION_LINE.exec(line) : null
+    if (labeled !== null) {
+      const label = (labeled[1] ?? '').charAt(0).toUpperCase() + (labeled[1] ?? '').slice(1).toLowerCase()
+      out.push(`**${label}:** ${(labeled[2] ?? '').trim()}`)
+    } else if (option !== null) {
+      const parts = OPTION_PARTS.exec(option[2] ?? '')
+      const text =
+        parts === null
+          ? (option[2] ?? '')
+          : `**${(parts[1] ?? '').trim()}**${parts[2] === undefined ? '' : ` *(${parts[2]})*`}${parts[3] === undefined ? '' : `: ${parts[3].trim()}`}`
+      out.push(`\u00a0\u00a0\u00a0${option[1]}. ${text}`)
+    } else out.push(line)
+  }
+  return out.join('  \n')
 }
+
+// An option as the model writes it: a name, an optional mark in parentheses, then a colon and its cost.
+const OPTION_PARTS = /^([^():]+?)\s*(?:\(([^)]+)\))?\s*(?::\s*(.*))?$/
 
 // The last line of the text reply: which model answered and what it cost, in the same plain form the
 // pane's header shows.

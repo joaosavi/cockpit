@@ -15,14 +15,14 @@ The command runs at once, also in the middle of a turn. The answer has this shap
 
 ```text
 wtf: Waiting for you
-     Now  the migration ran on staging and 3 rows failed the new check.
-     You  pick how to handle the 3 rows.
-            1. Delete them (recommended): they are test data from July.
-            2. Fix them by hand: about 10 minutes, and the check runs again.
+     Now: the migration ran on staging and 3 rows failed the new check.
+     You: pick how to handle the 3 rows.
+        1. Delete them (recommended): they are test data from July.
+        2. Fix them by hand: about 10 minutes, and the check runs again.
      ▎ summary, not an instruction · haiku 1200→80
 ```
 
-The state, `Now` and `You` show in bold, and `(recommended)` in italics. The quoted footer tells the
+The state, `Now:`, `You:` and each option's name show in bold, and `(recommended)` in italics. The quoted footer tells the
 main agent, which also reads the reply, that the lines are for the user, and gives the call's tokens.
 
 The first line is the state: **Working**, **Waiting for you**, **Blocked**, or **Done**. Options

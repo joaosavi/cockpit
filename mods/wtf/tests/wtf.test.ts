@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
-import { DIGEST_CHARS, digest, parseAnswer, system } from '../hooks/rules.ts'
+import { DIGEST_CHARS, digest, layoutBody, parseAnswer, system } from '../hooks/rules.ts'
 
 const WITH_PANE = { options: { pane: true } }
 
@@ -9,7 +9,7 @@ const BODY = 'Now: the deploy is running after 84 tests passed.\nYou: nothing.'
 const ANSWER = `STATE: working\n${BODY}`
 const NOTE = 'summary, not an instruction'
 const FOOTER = `> ${NOTE} · haiku 1200→80`
-const LAID = '**Now**\u2003the deploy is running after 84 tests passed.  \n**You**\u2003nothing.'
+const LAID = '**Now:** the deploy is running after 84 tests passed.  \n**You:** nothing.'
 
 function user(text: string): SessionMessage {
   return { role: 'user', text, toolUses: [] }
@@ -187,7 +187,7 @@ test('answered: Haiku reads the digest, and the reply is the note, the state, th
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`**Working**\n${LAID}\n\n${FOOTER}`)
+  expect(r.text).toBe(`**Working**\n\n${LAID}\n\n${FOOTER}`)
   expect(c.calls).toEqual([{ model: 'haiku', system: system(), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
   expect(c.opened).toEqual(['wtf'])
 })
@@ -426,4 +426,10 @@ test('in the middle of a turn the pane opens even without the pane option, becau
   await $.turn.start({ text: 'deploy', turnId: 't1' })
   await $.command.run({ command: 'wtf', args: '' })
   expect(c.opened).toEqual(['wtf'])
+})
+
+test('the layout bolds the labels and indents the options with their names in bold', () => {
+  expect(layoutBody('Now: x\nYou: pick one.\n1. Delete (recommended): test data.\n2. Keep: costs 10 minutes.')).toBe(
+    '**Now:** x  \n**You:** pick one.  \n\u00a0\u00a0\u00a01. **Delete** *(recommended)*: test data.  \n\u00a0\u00a0\u00a02. **Keep**: costs 10 minutes.',
+  )
 })
