@@ -1,6 +1,6 @@
 {
   "name": "hud",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
   "author": {
     "name": "João Savi"
@@ -56,7 +56,7 @@
     "bar": {
       "type": "string",
       "title": "Bar style",
-      "description": "Glyphs of the bars: blocks (▰▱), solid (█░), line (━─), dots (●○) or squares (■□)",
+      "description": "Glyphs of the bars: dots (●○, the default), blocks (▰▱), solid (█░), line (━─) or squares (■□)",
       "options": [
         "blocks",
         "solid",
@@ -64,7 +64,7 @@
         "dots",
         "squares"
       ],
-      "default": "blocks"
+      "default": "dots"
     },
     "barWidth": {
       "type": "number",
@@ -115,6 +115,17 @@
         "unicode"
       ],
       "default": "nerd"
+    },
+    "barColor": {
+      "type": "string",
+      "title": "Bar colors",
+      "description": "gradient gives each bar cell the color of its place, green to red (the default). solid paints the whole bar one color that slides from green to red with the percent. tone keeps the three threshold colors of the colors option",
+      "options": [
+        "gradient",
+        "solid",
+        "tone"
+      ],
+      "default": "gradient"
     }
   }
 }

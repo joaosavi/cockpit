@@ -36,7 +36,7 @@ narrow, so no row passes the width.
 
 ```text
 refined   󰚩 Opus 5.5    my-app    feat/hud-git   2   1   3    #252            12m  ·  37 calls
-          ctx ▰▰▰▰▱▱▱▱▱▱ 38%   5h ▰▱▱▱▱▱▱▱▱▱ 11%  resets 4h13m   7d ▰▰▰▰▰▰▱▱▱▱ 59%   󰍛 1.8G free
+          ctx ●●●●○○○○○○ 38%   5h ●○○○○○○○○○ 11%  resets 4h13m   7d ●●●●●●○○○○ 59%   󰍛 1.8G free
 
 blocks     󰚩 Opus 5.5    my-app    feat/hud-git   2   1   3    #252              12m
            ctx 38%   5h 11%  resets 4h13m  7d 59%   󰍛 1.8G free
@@ -141,10 +141,11 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 | `activity` | `true` | Shows the activity row while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |
 | `datasetDir` | `~/datasets/agent-ratings` | The rating mod's dataset folder, for the `RATINGS` row |
-| `bar` | `blocks` | The bar glyphs: `blocks` (`▰▱`), `solid` (`█░`), `line` (`━─`), `dots` (`●○`) or `squares` (`■□`) |
+| `bar` | `dots` | The bar glyphs: `blocks` (`▰▱`), `solid` (`█░`), `line` (`━─`), `dots` (`●○`) or `squares` (`■□`) |
 | `barWidth` | `10` | Cells of a full-width bar, 4 to 30. A narrow terminal still shrinks the bars |
 | `colors` | empty | The colors for ok, warning and critical, separated by spaces. Each one is a name (`green`, `bright-cyan`), `#rrggbb` or a 256-color number. Empty uses green, yellow and red |
 | `hide` | empty | Fields to leave out, separated by commas: `model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem` |
+| `barColor` | `gradient` | `gradient` colors each bar cell by its place, green to red. `solid` colors the whole bar by its percent. `tone` keeps the three threshold colors of `colors`. The percents follow the same color |
 | `style` | `refined` | The status line layout: `refined`, `blocks`, `minimal` or `compact` |
 | `icons` | `nerd` | `nerd` for Nerd Font glyphs, `unicode` for plain marks |
 | `contextBase` | `compact` | What `ctx` measures against. With `compact`, 100% is the auto-compact window that `/autocompact` or `CLAUDE_CODE_AUTO_COMPACT_WINDOW` sets, when it is smaller than the model's window. With `window`, the model's full window. The status line only. The band and `/hud` read the model's window |

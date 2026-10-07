@@ -10,3 +10,4 @@
 - [TeamSpeak na VPS](teamspeak-na-vps.md) — TS6 da galera no Coolify, ts.joaosavi.cloud; admin por ~/tsq/q.sh
 - [Testar no PC](testar-no-pc.md) — mudou algo para o João testar: push e comandos para atualizar no PC dele
 - [Resolver de forma definitiva](resolver-de-forma-definitiva.md) — bug se resolve na causa; gambiarra só quando o João pedir explicitamente
+- [Prévia no terminal](previa-no-terminal.md) — mudança visual de terminal: mandar comando para o João rodar no terminal dele antes de publicar

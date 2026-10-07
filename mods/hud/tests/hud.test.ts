@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import {
   activityRows,
+  heat,
   parsePr,
   ansiRow,
   compactWindowOf,
@@ -108,7 +109,7 @@ test('the panel at 120 columns: both rows as designed, right side flush with the
   const [first = [], second = []] = rows
   expect(rowText(first)).toMatch(/^Opus 5\.5 · my-app {2}main● +38m · 214 calls$/)
   expect(width(first)).toBe(120)
-  expect(rowText(second)).toBe('ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61% resets 2h30m   7d ▰▰▰▰▱▱▱▱▱▱  44%   mem 1.9G free')
+  expect(rowText(second)).toBe('ctx ●●●●○○○○○○  42%   5h ●●●●●●○○○○  61% resets 2h30m   7d ●●●●○○○○○○  44%   mem 1.9G free')
 })
 
 test('the panel degrades at 80 and 50 columns without passing the width or cutting an element', () => {
@@ -116,7 +117,7 @@ test('the panel degrades at 80 and 50 columns without passing the width or cutti
   const at80 = rowText(panelRows(snap(), 80)[1] ?? [])
   expect(at80).toContain('mem 1.9G')
   expect(at80).toContain('resets 2h30m')
-  expect(at80).toMatch(/7d ▰+▱+ +44%/)
+  expect(at80).toMatch(/7d ●+○+ +44%/)
   const at50 = rowText(panelRows(snap(), 50)[1] ?? [])
   expect(at50).not.toContain('mem')
   // At 50 columns the 7d bar goes first, then 5h's: percents stay whole.
@@ -523,14 +524,14 @@ test('the bar option swaps the glyphs and barWidth scales the bars', () => {
   const style = styleOf(options({ bar: 'solid', barWidth: 20 }))
   const second = rowText(panelRows(snap({ style }), 200)[1] ?? [])
   expect(second).toContain('ctx ████████░░░░░░░░░░░░  42%')
-  expect(rowText(panelRows(snap({ style: styleOf(options({ bar: 'nonsense', barWidth: 99 })) }), 120)[1] ?? [])).toContain('ctx ▰▰▰▰▱▱▱▱▱▱  42%')
+  expect(rowText(panelRows(snap({ style: styleOf(options({ bar: 'nonsense', barWidth: 99 })) }), 120)[1] ?? [])).toContain('ctx ●●●●○○○○○○  42%')
 })
 
 test('hide leaves the named fields out of the panel and the line', () => {
   const style = styleOf(options({ hide: 'branch, calls mem reset 7d bogus' }))
   const [first = [], second = []] = panelRows(snap({ style }), 120)
   expect(rowText(first)).toMatch(/^Opus 5\.5 · my-app +38m$/)
-  expect(rowText(second)).toBe('ctx ▰▰▰▰▱▱▱▱▱▱  42%   5h ▰▰▰▰▰▰▱▱▱▱  61%')
+  expect(rowText(second)).toBe('ctx ●●●●○○○○○○  42%   5h ●●●●●●○○○○  61%')
   expect(rowText(lineRow(snap({ style }), 120))).toBe('Opus 5.5 │ my-app │ ctx 42% │ 5h 61%')
 })
 
@@ -596,7 +597,7 @@ test('every style fits 100, 80 and 60 columns in every git state', () => {
 test('refined: identity and git on top, meters below, as designed', () => {
   const [top = [], bottom = []] = statusRows(RICH, 'refined', 'unicode', 100).map(rowText)
   expect(top).toMatch(/^Opus 5\.5 {3}my-app {3}feat\/hud-git {2}↑ 2 {2}\+ 1 {2}● 3 {3}PR #252 ✓ +38m {2}· {2}214 calls$/)
-  expect(bottom).toBe('ctx ▰▰▰▰▱▱▱▱▱▱ 42%   5h ▰▰▰▰▰▰▱▱▱▱ 61%  resets 2h30m   7d ▰▰▰▰▱▱▱▱▱▱ 44%   mem 1.9G free')
+  expect(bottom).toBe('ctx ●●●●○○○○○○ 42%   5h ●●●●●●○○○○ 61%  resets 2h30m   7d ●●●●○○○○○○ 44%   mem 1.9G free')
 })
 
 test('refined in a narrow terminal drops the calls first and keeps the git counts', () => {
@@ -629,4 +630,19 @@ test('blocks paint their background, and the nerd set uses Nerd Font glyphs', ()
 test('the style and icons options fall back to refined and nerd', () => {
   expect(options({ style: 'BLOCKS', icons: 'Unicode' })).toMatchObject({ style: 'blocks', icons: 'unicode' })
   expect(options({ style: 'fancy', icons: 'emoji' })).toMatchObject({ style: 'refined', icons: 'nerd' })
+})
+
+test('the bars color by heat: each cell by its place in gradient, the whole bar by its percent in solid', () => {
+  const cells = (colors: 'gradient' | 'solid' | 'tone') => (statusRows(snap({ context: 50 }), 'refined', 'unicode', 120, colors)[1] ?? []).filter((x) => x.text === '●' || /^●+$/.test(x.text))
+  const g = cells('gradient')
+  expect(g[0]?.rgb).toEqual(heat(0))
+  expect(g[1]?.rgb).toEqual(heat(1 / 9))
+  expect(cells('solid')[0]).toMatchObject({ text: '●●●●●', rgb: heat(0.5) })
+  expect(cells('tone')[0]).toMatchObject({ text: '●●●●●', tone: 'success' })
+  expect(heat(0)).toEqual([0, 200, 80])
+  expect(heat(0.5)).toEqual([255, 200, 80])
+  expect(heat(1)).toEqual([255, 0, 80])
+  expect(ansiRow([{ text: 'x', rgb: [1, 2, 3] }])).toBe('\x1b[38;2;1;2;3mx\x1b[0m')
+  expect(options({ barColor: 'SOLID' }).barColor).toBe('solid')
+  expect(options({}).barColor).toBe('gradient')
 })

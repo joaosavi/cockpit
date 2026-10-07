@@ -3,6 +3,8 @@
 // the columns, so a narrow terminal loses the least useful fields first and no row passes the width.
 
 import {
+  type BarColor,
+  heat,
   age,
   bytes,
   contextTone,
@@ -134,12 +136,21 @@ function join(parts: readonly Seg[][], sep: Seg): Seg[] {
   return parts.flatMap((p, i) => (i === 0 ? p : [sep, ...p]))
 }
 
+// The bar's colors, set once per render by statusRows from the barColor option.
+let barColor: BarColor = 'gradient'
+
 function bar(percent: number, cells: number, tone: Tone, on: string, off: string): Seg[] {
   const k = Math.min(cells, Math.max(0, Math.round((percent / 100) * cells)))
   const segs: Seg[] = []
-  if (k > 0) segs.push({ text: on.repeat(k), tone })
+  if (barColor === 'gradient') for (let i = 0; i < k; i++) segs.push({ text: on, rgb: heat(cells === 1 ? 1 : i / (cells - 1)) })
+  else if (k > 0) segs.push({ text: on.repeat(k), ...(barColor === 'solid' ? { rgb: heat(percent / 100) } : { tone }) })
   if (cells - k > 0) segs.push({ text: off.repeat(cells - k), dim: true })
   return segs
+}
+
+// A percent's color: the heat of its value, or the threshold tone with barColor `tone`.
+function level(percent: number, tone: Tone): Omit<Seg, 'text'> {
+  return barColor === 'tone' ? { tone } : { rgb: heat(percent / 100) }
 }
 
 const pct = (p: number): string => `${Math.round(p)}%`
@@ -196,15 +207,15 @@ function refined(s: Snapshot, ic: Icons, columns: number): Row[] {
     return edge(left, sessionRight(s, ic, withCalls, withTime), columns)
   }
   const bottom = (cells: number, free: boolean, word: boolean): Row => {
-    const on = s.style?.on ?? '▰'
-    const off = s.style?.off ?? '▱'
+    const on = s.style?.on ?? '●'
+    const off = s.style?.off ?? '○'
     const groups: Row[] = []
-    if (m.ctx !== null) groups.push([{ text: 'ctx ', dim: true }, ...bar(m.ctx, cells, contextTone(m.ctx), on, off), { text: ` ${pct(m.ctx)}`, tone: contextTone(m.ctx) }])
+    if (m.ctx !== null) groups.push([{ text: 'ctx ', dim: true }, ...bar(m.ctx, cells, contextTone(m.ctx), on, off), { text: ` ${pct(m.ctx)}`, ...level(m.ctx, contextTone(m.ctx)) }])
     if (m.five !== null) {
       const t = limitTone(m.five.p)
-      groups.push([{ text: '5h ', dim: true }, ...bar(m.five.p, cells, t, on, off), { text: ` ${pct(m.five.p)}`, tone: t }, ...(m.five.reset === null ? [] : [{ text: `${word ? '  resets ' : ' '}${m.five.reset}`, dim: true }])])
+      groups.push([{ text: '5h ', dim: true }, ...bar(m.five.p, cells, t, on, off), { text: ` ${pct(m.five.p)}`, ...level(m.five.p, t) }, ...(m.five.reset === null ? [] : [{ text: `${word ? '  resets ' : ' '}${m.five.reset}`, dim: true }])])
     }
-    if (m.seven !== null) groups.push([{ text: '7d ', dim: true }, ...bar(m.seven, cells, limitTone(m.seven), on, off), { text: ` ${pct(m.seven)}`, tone: limitTone(m.seven) }])
+    if (m.seven !== null) groups.push([{ text: '7d ', dim: true }, ...bar(m.seven, cells, limitTone(m.seven), on, off), { text: ` ${pct(m.seven)}`, ...level(m.seven, limitTone(m.seven)) }])
     if (m.mem !== null) groups.push([...(ic.mem === '' ? [{ text: 'mem ', dim: true }] : [{ text: `${ic.mem} `, dim: true }]), { text: bytes(m.mem), tone: memoryTone(m.mem) }, ...(free ? [{ text: ' free', dim: true }] : [])])
     return join(groups, { text: '   ' })
   }
@@ -243,9 +254,9 @@ function blocks(s: Snapshot, ic: Icons, columns: number): Row[] {
   const bottom = (free: boolean, word: boolean): Row => {
     const out: Row = []
     const add = (segs: Seg[]) => out.push(...(out.length > 0 ? [{ text: ' ' }] : []), ...segs)
-    if (m.ctx !== null) add([chip(`ctx ${pct(m.ctx)}`, { tone: contextTone(m.ctx) })])
-    if (m.five !== null) add([chip(`5h ${pct(m.five.p)}`, { tone: limitTone(m.five.p) }), ...(m.five.reset === null ? [] : [{ text: `${word ? ' resets ' : ' '}${m.five.reset}`, dim: true }])])
-    if (m.seven !== null) add([chip(`7d ${pct(m.seven)}`, { tone: limitTone(m.seven) })])
+    if (m.ctx !== null) add([chip(`ctx ${pct(m.ctx)}`, level(m.ctx, contextTone(m.ctx)))])
+    if (m.five !== null) add([chip(`5h ${pct(m.five.p)}`, level(m.five.p, limitTone(m.five.p))), ...(m.five.reset === null ? [] : [{ text: `${word ? ' resets ' : ' '}${m.five.reset}`, dim: true }])])
+    if (m.seven !== null) add([chip(`7d ${pct(m.seven)}`, level(m.seven, limitTone(m.seven)))])
     if (m.mem !== null) add([chip(lead(ic.mem === '' ? 'mem' : ic.mem, `${bytes(m.mem)}${free ? ' free' : ''}`), { tone: memoryTone(m.mem) })])
     return out
   }
@@ -274,9 +285,9 @@ function minimal(s: Snapshot, columns: number): Row[] {
   const bottom = (cells: number, gapN: number, long: boolean): Row => {
     const g = ' '.repeat(gapN)
     const groups: Row[] = []
-    if (m.ctx !== null) groups.push([{ text: long ? 'context ' : 'ctx ', dim: true }, ...bar(m.ctx, cells, contextTone(m.ctx), '━', '─'), { text: ` ${pct(m.ctx)}`, tone: contextTone(m.ctx) }])
-    if (m.five !== null) groups.push([{ text: long ? '5-hour ' : '5h ', dim: true }, ...bar(m.five.p, cells, limitTone(m.five.p), '━', '─'), { text: ` ${pct(m.five.p)}`, tone: limitTone(m.five.p) }, ...(m.five.reset === null ? [] : [{ text: ` ${m.five.reset}`, dim: true }])])
-    if (m.seven !== null) groups.push([{ text: long ? 'weekly ' : '7d ', dim: true }, ...bar(m.seven, cells, limitTone(m.seven), '━', '─'), { text: ` ${pct(m.seven)}`, tone: limitTone(m.seven) }])
+    if (m.ctx !== null) groups.push([{ text: long ? 'context ' : 'ctx ', dim: true }, ...bar(m.ctx, cells, contextTone(m.ctx), '━', '─'), { text: ` ${pct(m.ctx)}`, ...level(m.ctx, contextTone(m.ctx)) }])
+    if (m.five !== null) groups.push([{ text: long ? '5-hour ' : '5h ', dim: true }, ...bar(m.five.p, cells, limitTone(m.five.p), '━', '─'), { text: ` ${pct(m.five.p)}`, ...level(m.five.p, limitTone(m.five.p)) }, ...(m.five.reset === null ? [] : [{ text: ` ${m.five.reset}`, dim: true }])])
+    if (m.seven !== null) groups.push([{ text: long ? 'weekly ' : '7d ', dim: true }, ...bar(m.seven, cells, limitTone(m.seven), '━', '─'), { text: ` ${pct(m.seven)}`, ...level(m.seven, limitTone(m.seven)) }])
     if (m.mem !== null) groups.push([{ text: `${bytes(m.mem)} free`, dim: true }])
     return join(groups, { text: g })
   }
@@ -298,9 +309,9 @@ function compact(s: Snapshot, ic: Icons, columns: number): Row[] {
     if (s.pr) ident.push({ text: '  ' }, { text: lead(ic.pr, String(s.pr.number)), hue: 'pr' }, ...checkSeg(s.pr, ic))
   }
   const parts: Row[] = []
-  if (m.ctx !== null) parts.push([{ text: `ctx ${pct(m.ctx)}`, tone: contextTone(m.ctx) }])
-  if (m.five !== null) parts.push([{ text: `5h ${pct(m.five.p)}`, tone: limitTone(m.five.p) }, ...(m.five.reset === null ? [] : [{ text: ` ${lead(ic.clock, m.five.reset)}`, dim: true }])])
-  if (m.seven !== null) parts.push([{ text: `7d ${pct(m.seven)}`, tone: limitTone(m.seven) }])
+  if (m.ctx !== null) parts.push([{ text: `ctx ${pct(m.ctx)}`, ...level(m.ctx, contextTone(m.ctx)) }])
+  if (m.five !== null) parts.push([{ text: `5h ${pct(m.five.p)}`, ...level(m.five.p, limitTone(m.five.p)) }, ...(m.five.reset === null ? [] : [{ text: ` ${lead(ic.clock, m.five.reset)}`, dim: true }])])
+  if (m.seven !== null) parts.push([{ text: `7d ${pct(m.seven)}`, ...level(m.seven, limitTone(m.seven)) }])
   if (m.mem !== null) parts.push([{ text: lead(ic.mem === '' ? 'mem' : ic.mem, bytes(m.mem)), tone: memoryTone(m.mem) }])
   const model: Row = s.model === null ? [] : [{ text: lead(ic.model, s.model), dim: true }]
   const meterRow = join(parts, sep)
@@ -311,7 +322,8 @@ function compact(s: Snapshot, ic: Icons, columns: number): Row[] {
 
 // --- entry ---
 
-export function statusRows(snapshot: Snapshot, style: StatusStyle, icons: IconSet, columns: number): Row[] {
+export function statusRows(snapshot: Snapshot, style: StatusStyle, icons: IconSet, columns: number, colors: BarColor = 'gradient'): Row[] {
+  barColor = colors
   const s = visible(snapshot)
   const ic = iconsOf(icons)
   switch (style) {

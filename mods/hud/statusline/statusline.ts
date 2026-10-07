@@ -106,4 +106,4 @@ const dir = typeof input === 'object' && input !== null ? (Reflect.get(Reflect.g
 const git = readGit(dir)
 const snapshot = { ...statusSnapshot(input, live, { now: Date.now(), timeZone: o.timeZone, git, memory: o.memory ? readMemory() : null, compactWindow, style }), pr: readPr(dir, git) }
 const columns = Number(process.env['COLUMNS'])
-process.stdout.write(statusRows(snapshot, o.style, o.icons, Number.isFinite(columns) && columns > 20 ? columns : 120).map((r) => ansiRow(r, style.colors)).join('\n') + '\n')
+process.stdout.write(statusRows(snapshot, o.style, o.icons, Number.isFinite(columns) && columns > 20 ? columns : 120, o.barColor).map((r) => ansiRow(r, style.colors)).join('\n') + '\n')

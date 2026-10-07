@@ -14,6 +14,10 @@ export type BarStyle = 'blocks' | 'solid' | 'line' | 'dots' | 'squares'
 // The status line's layout, and the glyph set it draws its icons with.
 export type StatusStyle = 'refined' | 'blocks' | 'minimal' | 'compact'
 export type IconSet = 'nerd' | 'unicode'
+// How the status line colors its bars: `gradient` gives each cell the color of its place, green at
+// the start to red at the end; `solid` paints the whole bar one color that slides from green to red
+// with the percent; `tone` keeps the three threshold colors of the `colors` option.
+export type BarColor = 'gradient' | 'solid' | 'tone'
 export type ContextBase = 'compact' | 'window'
 
 // Fields the `hide` option takes, by the names the README gives them.
@@ -33,6 +37,7 @@ export type Options = {
   contextBase: ContextBase
   style: StatusStyle
   icons: IconSet
+  barColor: BarColor
 }
 
 export const DEFAULTS: Options = {
@@ -41,13 +46,14 @@ export const DEFAULTS: Options = {
   memory: true,
   datasetDir: '~/datasets/agent-ratings',
   timeZone: '',
-  bar: 'blocks',
+  bar: 'dots',
   barWidth: 10,
   colors: '',
   hide: '',
   contextBase: 'compact',
   style: 'refined',
   icons: 'nerd',
+  barColor: 'gradient',
 }
 
 // Percentage of each cgroup's limit kept free, as memory-guard counts it.
@@ -73,13 +79,14 @@ export function options(values: unknown): Options {
     memory: flag('memory', DEFAULTS.memory),
     datasetDir: text('datasetDir', DEFAULTS.datasetDir),
     timeZone: validTimeZone(text('timeZone', DEFAULTS.timeZone)),
-    bar: bar === 'solid' || bar === 'line' || bar === 'dots' || bar === 'squares' ? bar : 'blocks',
+    bar: bar === 'solid' || bar === 'line' || bar === 'blocks' || bar === 'squares' ? bar : 'dots',
     barWidth: Number.isFinite(barWidth) && barWidth >= 4 && barWidth <= 30 ? Math.round(barWidth) : DEFAULTS.barWidth,
     colors: text('colors', DEFAULTS.colors),
     hide: text('hide', DEFAULTS.hide),
     contextBase: text('contextBase', DEFAULTS.contextBase) === 'window' ? 'window' : 'compact',
     style: oneOf(text('style', DEFAULTS.style), ['refined', 'blocks', 'minimal', 'compact'] as const, DEFAULTS.style),
     icons: oneOf(text('icons', DEFAULTS.icons), ['nerd', 'unicode'] as const, DEFAULTS.icons),
+    barColor: oneOf(text('barColor', DEFAULTS.barColor), ['gradient', 'solid', 'tone'] as const, DEFAULTS.barColor),
   }
 }
 
@@ -148,7 +155,14 @@ export type Tone = 'success' | 'warning' | 'error'
 export type Hue = 'branch' | 'ahead' | 'behind' | 'pr' | 'accent'
 
 // `chip` paints the segment's background, for the blocks style: `strong` for the model, `soft` for the rest.
-export type Seg = { text: string; tone?: Tone; hue?: Hue; dim?: boolean; bold?: boolean; italic?: boolean; chip?: 'strong' | 'soft' }
+// `rgb` is a 24-bit color, which wins over `tone` and `hue`.
+export type Seg = { text: string; tone?: Tone; hue?: Hue; rgb?: readonly [number, number, number]; dim?: boolean; bold?: boolean; italic?: boolean; chip?: 'strong' | 'soft' }
+
+// Green at 0, yellow at 0.5, red at 1: the heat of a bar cell or of a percent.
+export function heat(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, t))
+  return x < 0.5 ? [Math.round(510 * x), 200, 80] : [255, Math.round(200 * (2 - 2 * x)), 80]
+}
 export type Row = Seg[]
 
 export function width(row: readonly Seg[]): number {
@@ -976,7 +990,7 @@ export function ansiRow(row: readonly Seg[], colors: Record<Tone, string> = DEFA
         ...(s.bold === true ? ['1'] : []),
         ...(s.dim === true ? ['2'] : []),
         ...(s.italic === true ? ['3'] : []),
-        ...(s.tone !== undefined ? [sgrColor(colors[s.tone])] : s.hue !== undefined ? [HUES[s.hue]] : []),
+        ...(s.rgb !== undefined ? [`38;2;${s.rgb.join(';')}`] : s.tone !== undefined ? [sgrColor(colors[s.tone])] : s.hue !== undefined ? [HUES[s.hue]] : []),
         ...(s.chip === undefined ? [] : [CHIPS[s.chip]]),
       ]
       return codes.length === 0 ? s.text : `\x1b[${codes.join(';')}m${s.text}\x1b[0m`
