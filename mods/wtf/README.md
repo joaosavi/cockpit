@@ -30,16 +30,11 @@ turn state (`running` or `idle 4m`), the model, and the tokens of this call, the
 a colored badge and the answer. Press `r` to ask again and `Esc` to close. A text reply always comes
 too, because Remote Control draws no pane.
 
-## Set the language
+## Language
 
-The `language` option sets the language of the answer. The default is `English`.
-
-- `English` and `Portuguese` (also `pt-BR`) have full tables: labels, state words, and every fixed
-  message.
-- Any other language, such as `Spanish`, makes the model translate the labels and the state word.
-  The fixed messages, such as the error lines, stay in English.
-
-The instructions to the model stay in English in every language. Haiku follows them best that way.
+The mod's own text is English: the labels, the state words and the fixed messages. Haiku writes the
+sentences in the language the user writes in, which it reads from the session. A user who writes in
+Portuguese gets `Now: a migração rodou em staging...`.
 
 ## Cost
 

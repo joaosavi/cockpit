@@ -26,7 +26,7 @@ Ask with AskUserQuestion, at most four questions per call, each with a recommend
 
 1. **HUD placement.** Under the prompt as the status line (recommended), or above the prompt in the band.
 2. **HUD style.** Bar glyphs (`blocks ▰▱`, `solid █░`, `line ━─`, `dots ●○`, `squares ■□`), colors for ok, warning and critical (names, `#rrggbb` or 0-255; default green, yellow, red), and fields to hide (`model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem`). Show a sample row in the option preview.
-3. **Language** of the `wtf` answers and the `tip` line (`English` by default), and the **time zone** for the `hud`, `audit` and `usage-limit` mods (IANA name; empty uses the system's).
+3. **Time zone** for the `hud`, `audit` and `usage-limit` mods (IANA name; empty uses the system's). The mods have no language option: their text is English, and the model-written lines follow the user's language.
 4. **Auto-compact window**, in tokens (`100000` to `1000000`). Claude Code compacts when the conversation reaches the window less a buffer of about 33K tokens. A smaller window compacts earlier, which keeps long sessions sharper and costs more summaries. To compact at 70% of a 1M model, set `733000`. Leave it unset to keep Claude Code's default, about 967K on a 1M model. Check the result with `claude -p /context`: the tokens used plus `Free space` is where compaction runs.
 
 Ask about these only when the user's setup calls for them, or when the user asked:
@@ -44,7 +44,6 @@ Merge exactly what the user chose:
 | HUD under the prompt | `statusLine: { "type": "command", "command": "<installLocation>/mods/hud/statusline/statusline.sh" }` and `pluginConfigs["hud@agent"].options.band: "off"`. If `claude-hud@claude-hud` is enabled, set it to `false`, because its status line is the one replaced. If another status line is set, show it to the user and confirm before you replace it. |
 | HUD above the prompt | `pluginConfigs["hud@agent"].options.band: "panel"`. Leave `statusLine` as it is. |
 | HUD style | `bar`, `colors` (space-separated), `hide` (comma-separated) under `pluginConfigs["hud@agent"].options` |
-| Language | `language` under `pluginConfigs["wtf@agent"].options` and `pluginConfigs["tip@agent"].options` |
 | Time zone | `timeZone` under the `hud@agent`, `audit@agent` and `usage-limit@agent` options |
 | Spinner tip | `spinnerTipsEnabled: false` whenever `tip@agent` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | Auto-compact window | top-level `autoCompactWindow: <tokens>` |

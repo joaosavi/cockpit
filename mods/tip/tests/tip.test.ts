@@ -18,8 +18,8 @@ const SESSION: SessionMessage[] = [user('Fix the date filter'), assistant('Found
 // --- the rules ---
 
 test('options fall back to their defaults', () => {
-  expect(options(undefined)).toEqual({ enabled: true, mode: 'mixed', language: 'English', model: DEFAULT_MODEL })
-  expect(options({ enabled: false, mode: 'TIPS', language: ' Portuguese ', model: '' })).toEqual({ enabled: false, mode: 'tips', language: 'Portuguese', model: DEFAULT_MODEL })
+  expect(options(undefined)).toEqual({ enabled: true, mode: 'mixed', model: DEFAULT_MODEL })
+  expect(options({ enabled: false, mode: 'TIPS', model: '' })).toEqual({ enabled: false, mode: 'tips', model: DEFAULT_MODEL })
   expect(options({ mode: 'loud' }).mode).toBe('mixed')
 })
 
@@ -66,21 +66,21 @@ test('the reply is data: newlines, control characters and markup go, and the lin
   expect(clean('"Deploying now"')).toBe('Deploying now')
 })
 
-test('the instructions carry the catalog in mixed mode only, and the language', () => {
-  expect(system('mixed', 'English')).toContain('/wtf [question]')
-  expect(system('summary', 'English')).not.toContain('/wtf')
-  expect(system('mixed', 'Portuguese')).toContain('Write in Brazilian Portuguese.')
+test('the instructions carry the catalog in mixed mode only, and follow the user language', () => {
+  expect(system('mixed')).toContain('/wtf [question]')
+  expect(system('summary')).not.toContain('/wtf')
+  expect(system('mixed')).toContain('Write in the language the user writes in the excerpt.')
   expect(prompt('x')).toBe('<session>\nx\n</session>')
 })
 
 test('which line shows: rotation before a reply, then summary and tip alternating', () => {
   const lines = { now: 'Deploying', tip: '/hud opens it' }
-  expect(lineFor({ mode: 'mixed', lang: 'English', lines: null, turn: 1, phase: 0 })).toBe(rotatedTip('English', 1))
-  expect(lineFor({ mode: 'mixed', lang: 'English', lines, turn: 1, phase: 0 })).toBe('Deploying')
-  expect(lineFor({ mode: 'mixed', lang: 'English', lines, turn: 1, phase: 1 })).toBe('/hud opens it')
-  expect(lineFor({ mode: 'summary', lang: 'English', lines: null, turn: 1, phase: 0 })).toBe('')
-  expect(lineFor({ mode: 'tips', lang: 'Portuguese', lines, turn: 2, phase: 0 })).toBe(rotatedTip('Portuguese', 2))
-  expect(rotatedTip('Portuguese', 0).startsWith('/wtf [pergunta]')).toBe(true)
+  expect(lineFor({ mode: 'mixed', lines: null, turn: 1, phase: 0 })).toBe(rotatedTip(1))
+  expect(lineFor({ mode: 'mixed', lines, turn: 1, phase: 0 })).toBe('Deploying')
+  expect(lineFor({ mode: 'mixed', lines, turn: 1, phase: 1 })).toBe('/hud opens it')
+  expect(lineFor({ mode: 'summary', lines: null, turn: 1, phase: 0 })).toBe('')
+  expect(lineFor({ mode: 'tips', lines, turn: 2, phase: 0 })).toBe(rotatedTip(2))
+  expect(rotatedTip(0).startsWith('/wtf [question]')).toBe(true)
 })
 
 test('each line carries a label that tells it apart from the native Tip line', () => {
@@ -89,8 +89,8 @@ test('each line carries a label that tells it apart from the native Tip line', (
   expect(kindFor({ mode: 'mixed', lines, phase: 1 })).toBe('tip')
   expect(kindFor({ mode: 'mixed', lines: null, phase: 0 })).toBe('tip')
   expect(kindFor({ mode: 'summary', lines, phase: 1 })).toBe('now')
-  expect([label('now', 'English'), label('now', 'Portuguese'), label('tip', 'Portuguese')]).toEqual(['Now:', 'Agora:', 'Mods:'])
-  expect(drawn('a'.repeat(200), 'Agora:', 40).length).toBe(40 - 5 - 7 - 1)
+  expect([label('now'), label('tip')]).toEqual(['Now:', 'Mods:'])
+  expect(drawn('a'.repeat(200), 'Now:', 40).length).toBe(40 - 5 - 5 - 1)
 })
 
 // --- the hooks ---
@@ -147,7 +147,7 @@ test('a turn asks Haiku once in the background, and the spinner keeps its own li
   let ui = await $.ui.mount(SPINNER)
   expect(await ui.find({ type: 'Text', text: '✻ Caramelizing…' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Mods:' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip('English', 1)}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip(1)}` })).toBeDefined()
   await ui.unmount()
   await clock.advance(2000)
   ui = await $.ui.mount(SPINNER)
@@ -184,19 +184,19 @@ test('a failed call keeps the previous line and is counted in the diary', async 
   await $.turn.start({ text: 'a', turnId: 't1' })
   await clock.settle()
   const ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip('English', 1)}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip(1)}` })).toBeDefined()
   await $.session.end({ sessionId: 'abcdef123456', reason: 'other' })
   expect(summary(c)).toMatchObject({ actions: { 'haiku:api-error': 1 }, calls: 1 })
 })
 
-test('tips mode makes no model call and rotates the Portuguese catalog', { options: { mode: 'tips', language: 'Portuguese' } }, async ($, on) => {
+test('tips mode makes no model call and rotates the catalog', { options: { mode: 'tips' } }, async ($, on) => {
   const c = scenario()
   const clock = setup(on, c)
   await $.session.start(start)
   await $.turn.start({ text: 'a', turnId: 't1' })
   await clock.settle()
   const ui = await $.ui.mount(SPINNER)
-  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip('Portuguese', 1)}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ` ${rotatedTip(1)}` })).toBeDefined()
   expect(c.calls).toHaveLength(0)
 })
 
@@ -212,7 +212,7 @@ test('summary mode leaves the spinner alone until a summary arrives', { options:
   await clock.advance(1000)
   ui = await $.ui.mount(SPINNER)
   expect(await ui.find({ type: 'Text', text: ' Running the tests after the fix to the date filter' })).toBeDefined()
-  expect(c.calls[0]?.system).toBe(system('summary', 'English'))
+  expect(c.calls[0]?.system).toBe(system('summary'))
 })
 
 test('disabled, the mod draws nothing and calls nothing', { options: { enabled: false } }, async ($, on) => {

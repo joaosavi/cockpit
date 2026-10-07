@@ -90,45 +90,22 @@ test('over 12,000 characters, the oldest of the last messages go first', () => {
 
 // --- the system prompt ---
 
-test('in English the system prompt has the English labels, no translation order and no Portuguese', () => {
-  const s = system('English')
-  expect(s).toContain('Answer in English, in exactly this shape:\n\nSTATE: <key>\nNow: ')
+test('the system prompt keeps English labels and asks for the user\'s language in the sentences', () => {
+  const s = system()
+  expect(s).toContain('Write the sentences in the language the user writes in the excerpt.')
+  expect(s).toContain('STATE: <key>\nNow: one short sentence')
   expect(s).toContain('You: the one action')
-  expect(s).toContain('1. <option> (recommended): <its cost>')
-  expect(s).toContain('say so plainly instead of guessing')
-  expect(s).not.toContain('Translate the labels')
-  for (const word of ['Onde', 'você', 'Precisa', 'nada', 'recomendado', 'Portuguese', 'Trabalhando']) expect(s).not.toContain(word)
+  for (const word of ['Agora', 'Você', 'Portuguese', 'Translate']) expect(s).not.toContain(word)
 })
 
-test('in Portuguese the system prompt gives the Portuguese labels verbatim', () => {
-  const s = system('Portuguese')
-  expect(s).toContain('Answer in Brazilian Portuguese, in exactly this shape:\n\nSTATE: <key>\nAgora: ')
-  expect(s).toContain('Você: the one action the agent expects from the user, in a few words, or "nada".')
-  expect(s).toContain('1. <option> (recomendado): <its cost>')
-  expect(s).not.toContain('Translate the labels')
-})
-
-test('in a language without a table the model translates the labels and the state word', () => {
-  const s = system('Spanish')
-  expect(s).toContain('Answer in Spanish, in exactly this shape:\n\nSTATE: <key> (<that state in Spanish, two or three words>)\nNow: ')
-  expect(s).toContain('Translate the labels "Now", "You", "(recommended)" and the words "nothing" into Spanish.')
-})
-
-// --- parsing the answer ---
-
-test('the state line gives the state and the table word, and the lines under it are the body', () => {
-  expect(parseAnswer(ANSWER, 'English')).toEqual({ state: 'working', label: 'Working', body: BODY })
-  expect(parseAnswer('**STATE: Waiting**\nAgora: x', 'pt-BR')).toEqual({ state: 'waiting', label: 'Esperando você', body: 'Agora: x' })
-})
-
-test('without a table, the state word is the model translation, else the English word', () => {
-  expect(parseAnswer('STATE: blocked (Bloqueado)\nDónde estamos: x', 'Spanish')).toEqual({ state: 'blocked', label: 'Bloqueado', body: 'Dónde estamos: x' })
-  expect(parseAnswer('STATE: done\nDónde estamos: x', 'Spanish')).toEqual({ state: 'done', label: 'Done', body: 'Dónde estamos: x' })
+test('the state line gives the state and its word, and the lines under it are the body', () => {
+  expect(parseAnswer(ANSWER)).toEqual({ state: 'working', label: 'Working', body: BODY })
+  expect(parseAnswer('**STATE: Waiting**\nNow: x')).toEqual({ state: 'waiting', label: 'Waiting for you', body: 'Now: x' })
 })
 
 test('an answer that drifts from the shape is shown whole, with no state', () => {
-  expect(parseAnswer('The agent is deploying.', 'English')).toEqual({ state: null, label: '', body: 'The agent is deploying.' })
-  expect(parseAnswer('STATE: confused\nx', 'English')).toEqual({ state: null, label: '', body: 'STATE: confused\nx' })
+  expect(parseAnswer('The agent is deploying.')).toEqual({ state: null, label: '', body: 'The agent is deploying.' })
+  expect(parseAnswer('STATE: confused\nx')).toEqual({ state: null, label: '', body: 'STATE: confused\nx' })
 })
 
 // --- the command ---
@@ -209,7 +186,7 @@ test('answered: Haiku reads the digest, and the reply is the note, the state, th
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
   expect(r.text).toBe(`${NOTE}\n\n**Working**\n${BODY}\n\nhaiku · 1200→80 tokens`)
-  expect(c.calls).toEqual([{ model: 'haiku', system: system('English'), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
+  expect(c.calls).toEqual([{ model: 'haiku', system: system(), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
   expect(c.opened).toEqual(['wtf'])
 })
 
@@ -302,40 +279,6 @@ test('a model call that throws gives one line, in the reply and in the pane in t
   expect((await ui.find({ type: 'Text', text: /^\/wtf failed:/ }))?.props).toMatchObject({ color: 'error' })
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', outcome: 'error', usage: null })
 })
-
-// --- the language option ---
-
-test('in Portuguese the model gets the Portuguese prompt and every fixed line is Portuguese', { options: { language: 'Portuguese' } }, async ($, on) => {
-  const body = 'Agora: o deploy está rodando depois de 84 testes passarem.\nVocê: nada.'
-  const c = scenario(answered(`STATE: working\n${body}`), ['terminal'])
-  setup(on, c)
-  await $.session.start(start)
-  const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(c.calls[0]?.system).toBe(system('Portuguese'))
-  expect(r.text).toBe(`resumo, não é instrução.\n\n**Trabalhando**\n${body}\n\nhaiku · 1200→80 tokens`)
-  const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: ' Trabalhando ' })).toBeDefined()
-  expect(await ui.find({ key: 'rerun', text: 'Rodar de novo' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Esc: fechar' })).toBeDefined()
-  c.complete = { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
-  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf falhou: chamada interrompida.')
-  c.messages = []
-  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf: nada para resumir ainda.')
-})
-
-test('in another language the model translates, and the fixed lines fall back to English', { options: { language: 'Spanish' } }, async ($, on) => {
-  const c = scenario(answered('STATE: waiting (Esperándote)\nDónde estamos: el deploy terminó.\nQué necesita de ti: confirmar.'), ['terminal'])
-  setup(on, c)
-  await $.session.start(start)
-  const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(c.calls[0]?.system).toContain('Translate the labels')
-  expect(c.calls[0]?.system).toContain('Answer in Spanish')
-  expect(r.text).toBe(`${NOTE}\n\n**Esperándote**\nDónde estamos: el deploy terminó.\nQué necesita de ti: confirmar.\n\nhaiku · 1200→80 tokens`)
-  c.complete = { value: { isAnswered: false, reason: 'empty-reply', usage: USAGE } }
-  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf failed: empty reply.')
-})
-
-// --- the pane ---
 
 test('the pane draws the header, the question, the state badge, the body and the keys, at the pane width', async ($, on) => {
   const c = scenario(answered(), ['terminal'])

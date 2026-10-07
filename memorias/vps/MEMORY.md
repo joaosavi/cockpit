@@ -1,6 +1,6 @@
 - [Cofre de credenciais para agentes](cofre-credenciais-agentes.md) — Vaultwarden + MCP navegador-cofre montado em out/2026, onde fica cada peça
 - [Repo da VPS](vps-claude-devcontainer.md) — joaosavi/claude-devcontainer guarda a VPS; chezmoi é só das máquinas locais
-- [Mods do agente](mods-do-agente.md) — marketplace `agent` no claude-devcontainer, ordem dos mods, o que funciona no Remote Control
+- [Mods do agente](mods-do-agente.md) — marketplace `agent` no claude-devcontainer, ordem dos mods, o que funciona no Remote Control, texto fixo só em inglês
 - [Gmail do agente](gmail-do-agente.md) — conta própria no cofre (ACCOUNTS_GOOGLE_COM_*); o Google barra login headless
 - [Acesso ao Coolify](acesso-coolify.md) — ssh oracle + psql no coolify-db; tabelas de notificação; aviso do Traefik desligado
 - [Agentes em paralelo](agentes-em-paralelo.md) — no máximo um agente em segundo plano por vez
@@ -9,3 +9,4 @@
 - [Validar por cadeia](validar-por-cadeia.md) — para o João conferir fato ou raciocínio, usar a skill global chain-check
 - [TeamSpeak na VPS](teamspeak-na-vps.md) — TS6 da galera no Coolify, ts.joaosavi.cloud; admin por ~/tsq/q.sh
 - [Testar no PC](testar-no-pc.md) — mudou algo para o João testar: push e comandos para atualizar no PC dele
+- [Resolver de forma definitiva](resolver-de-forma-definitiva.md) — bug se resolve na causa; gambiarra só quando o João pedir explicitamente

@@ -85,7 +85,7 @@ async function refresh($: Api, current: string): Promise<void> {
     if (ex === '') {
       outcome = 'no-text'
     } else {
-      const r = await $.model.complete({ model: opts.model, system: system(mode, opts.language), prompt: prompt(ex), maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS })
+      const r = await $.model.complete({ model: opts.model, system: system(mode), prompt: prompt(ex), maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS })
       used = usage(r.usage)
       if (r.isAnswered) {
         const got = parseLines(r.text)
@@ -157,11 +157,11 @@ export function register(on: On, values: PluginOptions) {
 
   // Claude Code's spinner stays as it is; the line goes under it, dim, in a column.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    const line = lineFor({ mode: opts.mode, lang: opts.language, lines, turn: turns, phase })
+    const line = lineFor({ mode: opts.mode, lines, turn: turns, phase })
     if (line === '') return next(e)
     const { Box, Text } = $.ui.resolve(e)
     const theirs = await next(e)
-    const tag = label(kindFor({ mode: opts.mode, lines, phase }), opts.language)
+    const tag = label(kindFor({ mode: opts.mode, lines, phase }))
     const row = Box({
       flexDirection: 'row',
       children: [

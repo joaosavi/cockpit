@@ -35,7 +35,7 @@ O que a validação provou numa sessão de Remote Control:
 
 O plano Team liga o guarda embutido `sec-default`, que tira os mods instalados pelo usuário dos ganchos `prompt.section`, `prompt.context`, `prompt.compose`, `skill.prompt` e `classic.*`: eles nunca disparam para mod nosso (provado em 07/10/2026 com sonda em -p e no terminal). A saída, em 07/10/2026: o `global-memory` roda como mod da organização. O arquivo `/etc/claude-code/managed-settings.json` (no repo, `claude/managed-settings.json`) declara o marketplace `agent` como pasta, liga o plugin e põe ele em `prependPlugins` antes do `sec-default@builtin`. Como o claude.ai já manda configuração gerenciada (`channelsEnabled`), o João pôs `"managedSourcesBehavior": "merge"` no painel de admin, senão o arquivo local era ignorado. Provado com log `tier prepend` e sessões em -p e Remote Control. Ele não entra no pacote `agent`. O contexto precisa injetar o índice mesmo antes da seção de memória, porque no terminal interativo o contexto vem primeiro.
 
-Em 07/10/2026 (noite) entraram o `hud` (faixa `panel` + atividade, `/hud`), o `wtf` com opção `language` (VPS em Portuguese) e uma revisão de todos os mods: README por plugin, licença MIT, textos padronizados, padrões genéricos e o que é da VPS em `pluginConfigs` (settings.json e managed-settings.json). O `secret-guard` monta a lista em segundo plano no início da sessão. 224+ testes passando.
+Em 07/10/2026 (noite) entraram o `hud` (faixa `panel` + atividade, `/hud`), o `wtf` e uma revisão de todos os mods: README por plugin, licença MIT, textos padronizados, padrões genéricos e o que é da VPS em `pluginConfigs` (settings.json e managed-settings.json). O `secret-guard` monta a lista em segundo plano no início da sessão. 224+ testes passando.
 
 Pendências do João (atualizado em 07/10/2026, fim da noite):
 - tirar o `segredo.pl` do `settings.json` depois de uns dias de `secret-guard` sem erro (olhar o diário e o `/mods`)
@@ -44,6 +44,8 @@ Pendências do João (atualizado em 07/10/2026, fim da noite):
 - julgar cada mod pelo `/mods` e pelo `/ratings` depois de alguns dias de uso real
 
 Em 07/10/2026 o João escolheu o painel do `hud` embaixo do prompt. Mod não desenha embaixo do prompt (só `$.ui.status`, uma linha com `⚠ hud:`, e o `tail` da linha de dica), então o `hud` 1.2.0 traz `statusline/statusline.sh`, que lê o JSON nativo da statusline e o arquivo `~/.local/state/mods/hud/live/<sessão>.json` com as chamadas. Na VPS ele substituiu o `claude-hud` (desligado) e a faixa de cima ficou com `band: off`, mostrando só a atividade do turno. Próximo pedido dele: trocar a dica do spinner por uma linha do Haiku (dica dos mods e resumo da sessão), com `spinnerTipsEnabled: false` e gancho no `Spinner`.
+
+Em 07/10/2026 o João fixou a regra de idioma: todo texto fixo dos mods (rótulos, nomes, mensagens, catálogos) é só em inglês, sem tabela em português nem opção `language`. O que o modelo escreve (Haiku no `/wtf` e no `tip`) sai na língua em que o usuário escreve, lida do trecho da sessão. Não mantenha duas línguas no repo.
 
 **Why:** regra em CLAUDE.md depende de o modelo lembrar; o mod é determinístico.
 **How to apply:** mod novo entra no marketplace `agent`, em inglês, com teste. Ver [[vps-claude-devcontainer]].

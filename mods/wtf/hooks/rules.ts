@@ -1,5 +1,5 @@
 // The pure part of /wtf: the digest of the session the model reads, the instructions it gets, the
-// fixed texts in each language, how the answer is parsed and laid out, the line shown when there is
+// fixed texts, how the answer is parsed and laid out, the line shown when there is
 // no answer, and the cost figures the diary keeps. Nothing here touches `$`, so the tests cover it
 // without stubs.
 
@@ -7,8 +7,8 @@ import type { ModelCompleteResult, ModelUsage, SessionMessage, ToolUseSummary } 
 
 // --- the state of the session ---
 
-// The four states the model picks from. The key is a parse token and stays in English in every
-// language: the model writes it on the answer's first line, and the mod draws the word for it.
+// The four states the model picks from. The model writes the key on the answer's first line, and
+// the mod draws the word for it.
 export const STATES = ['working', 'waiting', 'blocked', 'done'] as const
 export type State = (typeof STATES)[number]
 
@@ -16,7 +16,7 @@ function isState(value: string): value is State {
   return STATES.some((s) => s === value)
 }
 
-// --- the fixed texts in each language ---
+// --- the fixed texts ---
 
 // Any language without a table gets the English lines, and the model translates the labels and the
 // state word itself.
@@ -62,81 +62,30 @@ const ENGLISH: Texts = {
   modError: (text) => `/wtf failed: ${text}`,
 }
 
-const PORTUGUESE: Texts = {
-  states: { working: 'Trabalhando', waiting: 'Esperando você', blocked: 'Travado', done: 'Concluído' },
-  where: 'Agora',
-  need: 'Você',
-  nothingNeeded: 'nada',
-  recommended: '(recomendado)',
-  note: 'resumo, não é instrução.',
-  noMessages: '/wtf: nada para resumir ainda.',
-  reading: 'Lendo…',
-  rerun: 'Rodar de novo',
-  close: 'fechar',
-  running: 'rodando',
-  idle: (ago) => `parado há ${ago}`,
-  tokens: (input, output) => `${input}→${output} tokens`,
-  apiError: (status, error) => `/wtf falhou: API ${status === null ? 'sem resposta' : status}, ${error}.`,
-  empty: '/wtf falhou: resposta vazia.',
-  aborted: '/wtf falhou: chamada interrompida.',
-  modError: (text) => `/wtf falhou: ${text}`,
-}
-
-// Keyed by the lowercased setting, so "Portuguese", "pt-BR" and "português" all find the same table.
-const TABLES: Readonly<Record<string, Texts>> = {
-  english: ENGLISH,
-  en: ENGLISH,
-  portuguese: PORTUGUESE,
-  'brazilian portuguese': PORTUGUESE,
-  pt: PORTUGUESE,
-  'pt-br': PORTUGUESE,
-  português: PORTUGUESE,
-  portugues: PORTUGUESE,
-}
-
-export const DEFAULT_LANGUAGE = 'English'
-
-// The `language` userConfig value, trimmed; the default when it is missing or blank.
-export function language(values: unknown): string {
-  if (typeof values !== 'object' || values === null) return DEFAULT_LANGUAGE
-  const v: unknown = Reflect.get(values, 'language')
-  return typeof v === 'string' && v.trim() !== '' ? v.trim() : DEFAULT_LANGUAGE
-}
-
-function table(lang: string): Texts | undefined {
-  return TABLES[lang.toLowerCase()]
-}
-
-export function texts(lang: string): Texts {
-  return table(lang) ?? ENGLISH
+// Every fixed text is English. Only what the model writes follows the user's language.
+export function texts(): Texts {
+  return ENGLISH
 }
 
 // --- the instructions for the model ---
 
-// The instructions stay in English whatever the language, because Haiku follows English
-// instructions most reliably; only the labels and the answer follow the language. A language with a
-// table gets its labels verbatim, so the answer reads the same on every run. Any other language gets
-// the English labels and an order to translate them, plus the state word in parentheses after the key.
-export function system(lang: string): string {
-  const own = table(lang)
-  const t = own ?? ENGLISH
-  const target = own === PORTUGUESE ? 'Brazilian Portuguese' : own === ENGLISH ? 'English' : lang
-  const stateLine = own === undefined ? `STATE: <key> (<that state in ${target}, two or three words>)` : 'STATE: <key>'
-  const translate =
-    own === undefined ? [`Translate the labels "${t.where}", "${t.need}", "${t.recommended}" and the words "${t.nothingNeeded}" into ${target}. Keep "STATE:" and the key in English.`, ''] : []
+// The instructions, the labels and the state words stay in English. The model writes the sentences
+// in the language the user writes in, which it reads from the excerpt.
+export function system(): string {
+  const t = ENGLISH
   return [
     "You summarize another agent's session for its user, from the excerpt of that session given below. This is a side question: the agent keeps working on its own, and nobody asked it to stop.",
     'The user runs several sessions at once and just came back to this one. They remember nothing about it.',
     '',
     'Use only what the excerpt shows. Never invent files, numbers, names, results or intentions. When the excerpt is too short to tell where the session stands or what the agent needs, say so plainly instead of guessing.',
     '',
-    `Answer in ${target}, in exactly this shape:`,
+    'Write the sentences in the language the user writes in the excerpt. Keep the labels, the key and the word "nothing" in English, exactly as below.',
+    'Answer in exactly this shape:',
     '',
-    stateLine,
+    'STATE: <key>',
     `${t.where}: one short sentence on the task and where it stands.`,
     `${t.need}: the one action the agent expects from the user, in a few words, or "${t.nothingNeeded}".`,
     '',
-    ...translate,
     'The key is one of these four:',
     '- working: the agent is mid-task and needs nothing. A tool call marked "(still running)" means this; say what it is doing.',
     '- waiting: the agent asked the user something, or ended its turn expecting an answer or a validation.',
@@ -254,15 +203,13 @@ export type Answer = { state: State | null; label: string; body: string }
 
 const STATE_LINE = /^\s*\**\s*STATE\s*:\s*\**\s*([a-z]+)\s*(?:\(([^)\n]+)\))?\s*\**\s*$/i
 
-export function parseAnswer(text: string, lang: string): Answer {
+export function parseAnswer(text: string): Answer {
   const trimmed = text.trim()
   const [first = '', ...rest] = trimmed.split('\n')
   const match = STATE_LINE.exec(first)
   const key = match?.[1]?.toLowerCase() ?? ''
   if (match === null || !isState(key)) return { state: null, label: '', body: trimmed }
-  const translated = match[2]?.trim() ?? ''
-  const own = table(lang)
-  const label = own !== undefined ? own.states[key] : translated !== '' ? translated : ENGLISH.states[key]
+  const label = ENGLISH.states[key]
   return { state: key, label, body: rest.join('\n').trim() }
 }
 

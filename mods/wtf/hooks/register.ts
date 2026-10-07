@@ -21,11 +21,9 @@ import {
   type Answer,
   askedEntry,
   costLine,
-  DEFAULT_LANGUAGE,
   digest,
   errorLine,
   failureLine,
-  language,
   MAX_TOKENS,
   MODEL,
   NO_USAGE,
@@ -64,8 +62,7 @@ type View =
   | ({ kind: 'failed'; line: string; isError: boolean } & Shared)
 let view: View = { kind: 'waiting', question: '', activity: '' }
 
-let t: Texts = texts(DEFAULT_LANGUAGE)
-let lang = DEFAULT_LANGUAGE
+const t: Texts = texts()
 // The pane repeats the text reply, so it opens only when the pane option asks for it.
 let usePane = false
 let diary = ''
@@ -147,11 +144,11 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
       text = t.noMessages
       showIfLatest({ kind: 'failed', line: text, isError: false, ...shared })
     } else {
-      const r = await $.model.complete({ model: MODEL, system: system(lang), prompt: prompt(d, q), maxTokens: MAX_TOKENS })
+      const r = await $.model.complete({ model: MODEL, system: system(), prompt: prompt(d, q), maxTokens: MAX_TOKENS })
       used = usage(r.usage)
       if (r.isAnswered) {
         outcome = 'answered'
-        const answer = parseAnswer(r.text, lang)
+        const answer = parseAnswer(r.text)
         state = answer.state
         text = reply(answer, used, t)
         showIfLatest({ kind: 'answer', answer, used, ...shared })
@@ -214,9 +211,7 @@ function pane(ui: Ui, v: View, width: number, rerun: () => Promise<void>): Rende
 }
 
 export function register(on: On, values: PluginOptions) {
-  lang = language(values)
   usePane = Reflect.get(values ?? {}, 'pane') === true
-  t = texts(lang)
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd

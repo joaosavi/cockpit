@@ -11,8 +11,13 @@ have installed that fits the moment.
 
 The spinner itself stays as Claude Code draws it. The line goes under it, cut to the width of the
 screen and to 100 characters. A bold label says what the line is, so it reads apart from Claude
-Code's own `Tip:` line: `Now:` for where the session stands (`Agora:` in Portuguese) and `Mods:` for a
+Code's own `Tip:` line: `Now:` for where the session stands and `Mods:` for a
 tip about the mods.
+
+## Language
+
+The labels and the tip catalog are English. In `mixed` and `summary` modes, Haiku writes the line in
+the language the user writes in. The `tips` mode shows the catalog as written.
 
 ## Turn off the native tip
 
@@ -46,7 +51,6 @@ The catalog has one tip for each command and mod of the `agent` marketplace: `/w
 | :--- | :--- | :--- |
 | `enabled` | `true` | Off, the mod does nothing and makes no model call |
 | `mode` | `mixed` | `mixed`, `tips` or `summary`, as above |
-| `language` | `English` | Language of the line. English and Portuguese (also `pt-BR`) have their own catalog. In any other language Haiku writes the line in that language, and the `tips` mode shows the English catalog |
 | `model` | `claude-haiku-4-5-20251001` | The model that writes the line: an alias such as `haiku`, or a full model id |
 
 Set them in `settings.json` under `pluginConfigs`:
@@ -54,7 +58,7 @@ Set them in `settings.json` under `pluginConfigs`:
 ```json
 {
   "pluginConfigs": {
-    "tip@agent": { "options": { "language": "Portuguese" } }
+    "tip@agent": { "options": { "mode": "summary" } }
   }
 }
 ```

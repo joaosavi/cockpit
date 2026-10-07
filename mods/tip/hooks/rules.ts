@@ -9,10 +9,9 @@ import type { ModelCompleteResult, ModelUsage, SessionMessage } from 'claude-cod
 export const MODES = ['mixed', 'tips', 'summary'] as const
 export type Mode = (typeof MODES)[number]
 
-export const DEFAULT_LANGUAGE = 'English'
 export const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
-export type Options = { enabled: boolean; mode: Mode; language: string; model: string }
+export type Options = { enabled: boolean; mode: Mode; model: string }
 
 function isMode(value: string): value is Mode {
   return MODES.some((m) => m === value)
@@ -25,24 +24,22 @@ function text(values: object, key: string, fallback: string): string {
 
 // The userConfig values, each falling back to its default when missing, blank or of the wrong kind.
 export function options(values: unknown): Options {
-  const defaults: Options = { enabled: true, mode: 'mixed', language: DEFAULT_LANGUAGE, model: DEFAULT_MODEL }
+  const defaults: Options = { enabled: true, mode: 'mixed', model: DEFAULT_MODEL }
   if (typeof values !== 'object' || values === null) return defaults
   const enabled: unknown = Reflect.get(values, 'enabled')
   const mode = text(values, 'mode', defaults.mode).toLowerCase()
   return {
     enabled: typeof enabled === 'boolean' ? enabled : defaults.enabled,
     mode: isMode(mode) ? mode : defaults.mode,
-    language: text(values, 'language', defaults.language),
     model: text(values, 'model', defaults.model),
   }
 }
 
 // --- the catalog ---
 
-// One tip per command or mod of the `agent` marketplace. The model picks from the English list and
-// writes the tip in the target language; the tips mode rotates through the table of the language, or
-// the English one when the language has none.
-const ENGLISH_TIPS = [
+// One tip per command or mod of the `agent` marketplace. The tips mode rotates through them as
+// written; in mixed mode the model picks one and writes it in the user's language.
+const TIPS = [
   '/wtf [question] sums up where this session stands and what it needs from you',
   '/hud opens the full view: model, context, plan limits, memory and live tools',
   '/rate 1-5 scores the last answer for the ratings dataset; /ratings reviews them',
@@ -57,41 +54,13 @@ const ENGLISH_TIPS = [
   'usage-limit pauses at 98% of the plan limit and resumes when the window resets',
 ] as const
 
-const PORTUGUESE_TIPS = [
-  '/wtf [pergunta] resume onde a sessão está e o que ela precisa de você',
-  '/hud abre a visão completa: modelo, contexto, limites, memória e ferramentas',
-  '/rate 1-5 dá nota à última resposta; /ratings mostra as notas',
-  '/mods [dias] mostra o que cada mod fez e quanto custou por chamada',
-  '/limit mostra os limites de 5 horas e de 7 dias e o que está segurado',
-  '/ram mostra a folga de memória de cada grupo antes de comando pesado',
-  '/audit [quantidade] [filtro] lista as últimas chamadas MCP que escreveram',
-  'o memory-guard roda typecheck, teste e build com um processo quando falta memória',
-  'o loop-breaker avisa o agente quando ele repete o mesmo erro ou a mesma chamada',
-  'o secret-guard troca segredo por <hidden:NOME> antes de o agente ler',
-  'o pipefail impede teste cortado por tail ou head de passar quando falhou',
-  'o usage-limit pausa em 98% do limite e retoma quando a janela volta',
-] as const
-
-// Keyed by the lowercased setting, so "Portuguese", "pt-BR" and "português" find the same table.
-const TIP_TABLES: Readonly<Record<string, readonly string[]>> = {
-  english: ENGLISH_TIPS,
-  en: ENGLISH_TIPS,
-  portuguese: PORTUGUESE_TIPS,
-  'brazilian portuguese': PORTUGUESE_TIPS,
-  pt: PORTUGUESE_TIPS,
-  'pt-br': PORTUGUESE_TIPS,
-  português: PORTUGUESE_TIPS,
-  portugues: PORTUGUESE_TIPS,
-}
-
-export function catalog(lang: string): readonly string[] {
-  return TIP_TABLES[lang.toLowerCase()] ?? ENGLISH_TIPS
+export function catalog(): readonly string[] {
+  return TIPS
 }
 
 // The tip for the n-th turn, in rotation.
-export function rotatedTip(lang: string, n: number): string {
-  const tips = catalog(lang)
-  return tips[((n % tips.length) + tips.length) % tips.length] ?? ''
+export function rotatedTip(n: number): string {
+  return TIPS[((n % TIPS.length) + TIPS.length) % TIPS.length] ?? ''
 }
 
 // --- the excerpt ---
@@ -138,13 +107,8 @@ export const MAX_CHARS = 100
 export const MAX_TOKENS = 150
 export const TIMEOUT_MS = 20_000
 
-function target(lang: string): string {
-  return catalog(lang) === PORTUGUESE_TIPS ? 'Brazilian Portuguese' : lang
-}
-
-// The instructions stay in English whatever the language, because Haiku follows English instructions
-// most reliably; only the lines it writes follow the language.
-export function system(mode: Exclude<Mode, 'tips'>, lang: string): string {
+// The instructions are English. The model writes the lines in the language the user writes in.
+export function system(mode: Exclude<Mode, 'tips'>): string {
   const shape =
     mode === 'mixed'
       ? [
@@ -155,7 +119,7 @@ export function system(mode: Exclude<Mode, 'tips'>, lang: string): string {
       : ['Answer with exactly one line and nothing else:', 'NOW: <where the session stands, at most 90 characters>']
   const tips =
     mode === 'mixed'
-      ? ['', 'The catalog of tips about the mods the user has installed:', ...ENGLISH_TIPS.map((t) => `- ${t}`), 'Copy the tip as written, or shorten it to fit. Never merge two tips, and keep command names exactly as written.']
+      ? ['', 'The catalog of tips about the mods the user has installed:', ...TIPS.map((t) => `- ${t}`), 'Copy the tip as written, or shorten it to fit. Never merge two tips, and keep command names exactly as written.']
       : []
   return [
     'You write the short status line shown under the spinner while an AI coding agent works on a task for its user.',
@@ -163,7 +127,7 @@ export function system(mode: Exclude<Mode, 'tips'>, lang: string): string {
     'NOW says, in plain words, what the agent is doing for the user right now and why, like "Running the tests after the fix to the date filter".',
     'Describe the work in your own words, as an outcome the user cares about; never copy the user\'s request word for word.',
     'Use only what the excerpt shows. Never invent files, numbers or results. No preamble, no quotes, no markdown.',
-    `Write in ${target(lang)}.`,
+    'Write in the language the user writes in the excerpt. Keep command and mod names exactly as written.',
     '',
     ...shape,
     ...tips,
@@ -228,16 +192,14 @@ export function kindFor(a: { mode: Mode; lines: Lines | null; phase: number }): 
 }
 
 // The label in front of the line, so it reads apart from Claude Code's own `Tip:` line.
-export function label(kind: Kind, lang: string): string {
-  const pt = catalog(lang) === PORTUGUESE_TIPS
-  if (kind === 'now') return pt ? 'Agora:' : 'Now:'
-  return 'Mods:'
+export function label(kind: Kind): string {
+  return kind === 'now' ? 'Now:' : 'Mods:'
 }
 
 // The line for this moment. `lines` is the latest model reply, null before the first one arrives;
 // `phase` counts the swaps since the turn started. Empty means the spinner keeps its own drawing.
-export function lineFor(a: { mode: Mode; lang: string; lines: Lines | null; turn: number; phase: number }): string {
-  const rotation = rotatedTip(a.lang, a.turn)
+export function lineFor(a: { mode: Mode; lines: Lines | null; turn: number; phase: number }): string {
+  const rotation = rotatedTip(a.turn)
   switch (a.mode) {
     case 'tips':
       return rotation
