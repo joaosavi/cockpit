@@ -1,5 +1,6 @@
-// A heads-up display above the prompt: model, project and branch, context and plan limits, memory
-// headroom, and while a turn runs, the tool in flight, the subagents and the turn's figures. `/hud`
+// A heads-up display: model, project and branch, context and plan limits, memory headroom, under
+// the prompt through the status line script, or above it in the band; and while a turn runs, the
+// tool in flight, the subagents and the turn's figures in the band. `/hud`
 // opens the full view in a pane, or answers in text where nothing draws (Remote Control).
 //
 // The band's render hook does no I/O: events and timers read into module state, and the hook lays
@@ -69,6 +70,8 @@ let o: Options = DEFAULTS
 let cwd = ''
 let home: string | undefined
 let diary = ''
+// The live file the status line script reads: `~/.local/state/mods/hud/live/<session>.json`.
+let liveFile = ''
 let tally = newTally()
 
 // What the band draws. Only events and timers write these.
@@ -166,6 +169,30 @@ function visibleKey(): string {
   return JSON.stringify([s.startedAt === null ? null : Math.floor((s.now - s.startedAt) / 60_000), s.memory === null ? null : Math.floor(s.memory.headroom / 107_374_182), s.git, s.model])
 }
 
+// Leaves the call count and the start time for the status line script. A failed write only leaves
+// the status line one count behind.
+async function writeLive($: Api) {
+  if (liveFile === '') return
+  try {
+    await $.fs.write(liveFile, JSON.stringify({ calls, startedAt }))
+  } catch {
+    // the status line falls back to the session's duration
+  }
+}
+
+async function openLive($: Api) {
+  if (home === undefined || home === '') return
+  const dir = `${home}/.local/state/mods/hud/live`
+  liveFile = `${dir}/${await $.session.id()}.json`
+  await writeLive($)
+  try {
+    // Files of sessions that ended without a session.end, such as a killed terminal.
+    await $.process.run(['find', dir, '-name', '*.json', '-mtime', '+2', '-delete'], { timeoutMs: GIT_TIMEOUT_MS })
+  } catch {
+    // stale files stay until the next start
+  }
+}
+
 function redraw($: Api) {
   shownKey = visibleKey()
   $.ui.invalidate('ui.render')
@@ -239,6 +266,18 @@ async function lightRefresh($: Api) {
   git = await readGit($)
   model = (await readModel($)) ?? model
   if (visibleKey() !== shownKey) redraw($)
+}
+
+// The context and the plan limits. The context is missing until the first response of the window,
+// and session.measure may come later than that, so tool calls ask again while it is missing.
+async function readUsage($: Api) {
+  try {
+    const u = await $.session.usage()
+    context = u.context.percent ?? null
+    windows = u.rateLimits
+  } catch {
+    // no reading until the first measure
+  }
 }
 
 async function readAgents($: Api) {
@@ -373,7 +412,7 @@ function rowElement(ui: Ui, row: Row): RenderElement {
 
 function bandRows(columns: number, isWorking: boolean): Row[] {
   const s = snapshot()
-  const rows = o.band === 'line' ? [lineRow(s, columns)] : panelRows(s, columns)
+  const rows = o.band === 'off' ? [] : o.band === 'line' ? [lineRow(s, columns)] : panelRows(s, columns)
   const a = activity()
   if (o.activity && isWorking && a !== null) rows.push(...activityRows(a, columns))
   return rows.filter((r) => r.length > 0)
@@ -430,13 +469,8 @@ export function register(on: On, values: PluginOptions) {
       diary = ''
     }
     await loadStart($)
-    try {
-      const u = await $.session.usage()
-      context = u.context.percent ?? null
-      windows = u.rateLimits
-    } catch {
-      // no reading until the first measure
-    }
+    await openLive($)
+    await readUsage($)
     await lightRefresh($)
     $.clock.every(LIGHT_MS, async () => {
       await lightRefresh($)
@@ -456,6 +490,7 @@ export function register(on: On, values: PluginOptions) {
     calls = 0
     endTurn()
     await loadStart($)
+    await openLive($)
     redraw($)
     return next(e)
   }).catch(async ($, e, next) => next(e))
@@ -503,6 +538,7 @@ export function register(on: On, values: PluginOptions) {
       const id = String(Reflect.get(e, 'tool_use_id') ?? `call-${++toolSeq}`)
       const isMain = e.agentId === undefined
       if (isMain) tools.set(id, { name: toolName(e.tool), detail: toolDetail(e, cwd), startedAt: now })
+      await writeLive($)
       $.ui.invalidate('ui.render')
       try {
         const r = await pass(e)
@@ -515,6 +551,7 @@ export function register(on: On, values: PluginOptions) {
       } finally {
         tools.delete(id)
         now = await $.clock.now()
+        if (context === null) await readUsage($)
         $.ui.invalidate('ui.render')
       }
     }),
@@ -522,7 +559,7 @@ export function register(on: On, values: PluginOptions) {
 
   // The band, shared with other mods: their content stays under these rows.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (o.band === 'off' || e.props.hasSurvey) return next(e)
+    if ((o.band === 'off' && !(o.activity && e.props.isWorking)) || e.props.hasSurvey) return next(e)
     const theirs = await next(e)
     try {
       const started = Date.now()
@@ -583,6 +620,13 @@ export function register(on: On, values: PluginOptions) {
     renders = 0
     maxRenderMs = 0
     endTurn()
+    if (liveFile !== '') {
+      try {
+        await $.process.run(['rm', '-f', liveFile], { timeoutMs: GIT_TIMEOUT_MS })
+      } catch {
+        // removed by the next start's sweep after two days
+      }
+    }
     await log($, sessionSummary(t, e.sessionId, cwd, extra))
     return next(e)
   })

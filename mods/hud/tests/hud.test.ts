@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import {
   activityRows,
+  ansiRow,
   type Activity,
   bytes,
   contextTone,
@@ -17,8 +18,11 @@ import {
   paneSections,
   paneText,
   parseGit,
+  parseLive,
   parseRatings,
   resetLabel,
+  statusSession,
+  statusSnapshot,
   rowText,
   type Snapshot,
   summarizeRatings,
@@ -475,4 +479,48 @@ test('an empty or unknown time zone falls back to the system time zone', () => {
   const local = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(at))
   expect(resetLabel('2026-10-11T16:00:00Z', NOW, '')).toBe(local)
   expect(localDay(at, 'America/New_York')).toBe('2026-10-11')
+})
+
+// ---------------------------------------------------------------------------------------------
+// The status line
+// ---------------------------------------------------------------------------------------------
+
+const STATUS = {
+  session_id: 'abc-123',
+  model: { id: 'claude-opus-5-5', display_name: 'Opus 5.5 (1M context)' },
+  workspace: { current_dir: '/home/me/my-app' },
+  context_window: { used_percentage: 42, context_window_size: 1_000_000 },
+  rate_limits: { five_hour: { used_percentage: 61, resets_at: Date.parse(FIVE_RESET) / 1000 }, seven_day: { used_percentage: 44, resets_at: Date.parse(SEVEN_RESET) / 1000 } },
+  cost: { total_duration_ms: 10 * 60_000 },
+}
+const READ = { now: NOW, timeZone: TZ, git: { branch: 'main', isDirty: true }, memory: snap().memory }
+
+test('the status line draws the same panel from the status JSON and the live file', () => {
+  const s = statusSnapshot(STATUS, { calls: 214, startedAt: NOW - 38 * 60_000 }, READ)
+  expect(panelRows(s, 120).map(rowText)).toEqual(panelRows(snap(), 120).map(rowText))
+})
+
+test('without a live file the status line counts no calls and ages the session by its duration', () => {
+  const s = statusSnapshot(STATUS, null, READ)
+  expect(s.calls).toBe(0)
+  expect(rowText(panelRows(s, 120)[0] ?? [])).toMatch(/10m · 0 calls$/)
+})
+
+test('the context comes from current_usage while used_percentage is missing, and hides without either', () => {
+  const usage = { ...STATUS, context_window: { context_window_size: 200_000, current_usage: { input_tokens: 10_000, cache_read_input_tokens: 20_000, cache_creation_input_tokens: 0 } } }
+  expect(statusSnapshot(usage, null, READ).context).toBe(15)
+  expect(statusSnapshot({ ...STATUS, context_window: { context_window_size: 200_000 } }, null, READ).context).toBeNull()
+  expect(statusSnapshot(null, null, READ)).toMatchObject({ model: null, project: null, context: null, windows: [] })
+})
+
+test('the live file and the session id are checked before use', () => {
+  expect(parseLive('{"calls":3,"startedAt":5}')).toEqual({ calls: 3, startedAt: 5 })
+  expect(parseLive('{"calls":"3"}')).toBeNull()
+  expect(parseLive('not json')).toBeNull()
+  expect(statusSession(STATUS)).toBe('abc-123')
+  expect(statusSession({ session_id: '../../etc/passwd' })).toBeNull()
+})
+
+test('ansi rows color tones, dim and bold, and leave plain text bare', () => {
+  expect(ansiRow([{ text: 'a' }, { text: 'b', tone: 'error' }, { text: 'c', dim: true, bold: true }])).toBe('a\x1b[31mb\x1b[0m\x1b[1;2mc\x1b[0m')
 })

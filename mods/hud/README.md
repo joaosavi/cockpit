@@ -1,9 +1,36 @@
 # hud
 
-A heads-up display drawn by a mod in the band above the prompt. It shows the model, the project and
-its git branch, the context window, the plan limits and the memory headroom. While a turn runs, it
-adds the tool in flight, the running subagents and the turn's calls and errors. `/hud` opens the
-full view in a pane.
+A heads-up display. It shows the model, the project and its git branch, the context window, the
+plan limits and the memory headroom, under the prompt as a status line or above it in the band. While
+a turn runs, the band adds the tool in flight, the running subagents and the turn's calls and errors.
+`/hud` opens the full view in a pane.
+
+## The status line
+
+A mod cannot draw rows under the prompt: that place belongs to the status line command of the
+settings. The mod ships one, `statusline/statusline.sh`, which draws the two `panel` rows there.
+Set it in `~/.claude/settings.json`, and set `band` to `off` so the rows do not show twice:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh" },
+  "pluginConfigs": { "hud@agent": { "options": { "band": "off" } } }
+}
+```
+
+The path above is a clone of the repo. An installed copy lives under the `installPath` that
+`~/.claude/plugins/installed_plugins.json` lists for `hud@agent`, and that path changes with each
+version, so a clone is the steadier target. The script needs Node 22.18 or later, which runs its
+TypeScript as is.
+
+The status line reads the model, the folder, the context window and the plan limits from the JSON
+Claude Code pipes to it, so they show from the session's first screen, before any prompt. It reads
+git and the cgroup memory itself. The tool call count comes from the mod, which writes it at each
+call to `~/.local/state/mods/hud/live/<session>.json` and removes the file when the session ends.
+Without the file, the row shows `0 calls`.
+
+With `band` set to `off`, the band still draws the activity block while a turn runs, unless
+`activity` is `false`.
 
 The band works in the terminal and the Desktop app. Remote Control draws no band, so there `/hud`
 answers with the same content as text.
@@ -72,7 +99,7 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 
 | Option | Default | What it does |
 | :- | :- | :- |
-| `band` | `panel` | `panel` draws the two rows above. `line` draws one row. `off` leaves the band to the other mods, and `/hud` still works. |
+| `band` | `panel` | `panel` draws the two rows above. `line` draws one row. `off` leaves the band to the other mods and to the activity block, and `/hud` still works. Use `off` with the status line. |
 | `activity` | `true` | Shows the activity block while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |
 | `datasetDir` | `~/datasets/agent-ratings` | The rating mod's dataset folder, for the `RATINGS` row |

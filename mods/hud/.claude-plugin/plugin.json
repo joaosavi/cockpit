@@ -1,7 +1,7 @@
 {
   "name": "hud",
-  "version": "1.1.0",
-  "description": "A heads-up display above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
+  "version": "1.2.0",
+  "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
   "author": { "name": "João Savi" },
   "license": "MIT",
   "keywords": ["hud", "status", "band", "context", "usage", "rate-limit", "memory", "subagents", "activity"],
@@ -9,7 +9,7 @@
     "band": {
       "type": "string",
       "title": "Band",
-      "description": "What the band above the prompt shows: panel (two rows with bars), line (one compact row) or off",
+      "description": "What the band above the prompt shows: panel (two rows with bars), line (one compact row) or off. Use off with the status line script, which draws the panel under the prompt",
       "options": ["panel", "line", "off"],
       "default": "panel"
     },

@@ -718,3 +718,96 @@ export const LABEL_WIDTH = 10
 export function paneText(sections: readonly Section[]): string {
   return sections.map((x) => `${x.label.padEnd(LABEL_WIDTH)}${rowText(x.segs)}`).join('\n')
 }
+
+// ---------------------------------------------------------------------------------------------
+// The status line under the prompt
+// ---------------------------------------------------------------------------------------------
+
+// What the mod leaves for the status line script, one file per session: the figures only the mods
+// API sees. The script reads the rest from the JSON Claude Code pipes to it.
+export type Live = { calls: number; startedAt: number | null }
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+function field(v: unknown, ...path: string[]): unknown {
+  let at = v
+  for (const key of path) {
+    if (typeof at !== 'object' || at === null) return undefined
+    at = Reflect.get(at, key)
+  }
+  return at
+}
+
+// The session id in the status line's JSON, or null.
+export function statusSession(input: unknown): string | null {
+  const id = field(input, 'session_id')
+  return typeof id === 'string' && /^[\w-]{1,128}$/.test(id) ? id : null
+}
+
+export function parseLive(text: string): Live | null {
+  try {
+    const v: unknown = JSON.parse(text)
+    const calls = num(field(v, 'calls'))
+    return calls === null ? null : { calls, startedAt: num(field(v, 'startedAt')) }
+  } catch {
+    return null
+  }
+}
+
+// The context fill: the status line's own percentage, or the last response's input tokens over the
+// window while the percentage is still missing.
+function contextOf(input: unknown): number | null {
+  const pct = num(field(input, 'context_window', 'used_percentage'))
+  if (pct !== null) return pct
+  const size = num(field(input, 'context_window', 'context_window_size'))
+  const usage = field(input, 'context_window', 'current_usage')
+  if (size === null || size <= 0 || typeof usage !== 'object' || usage === null) return null
+  const tokens = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'].reduce((n, k) => n + (num(field(usage, k)) ?? 0), 0)
+  return tokens > 0 ? Math.min(100, (tokens / size) * 100) : null
+}
+
+function windowsOf(input: unknown): Window[] {
+  const out: Window[] = []
+  for (const kind of ['five_hour', 'seven_day']) {
+    const used = num(field(input, 'rate_limits', kind, 'used_percentage'))
+    if (used === null) continue
+    const reset = num(field(input, 'rate_limits', kind, 'resets_at'))
+    out.push(reset === null ? { kind, percentUsed: used } : { kind, percentUsed: used, resetsAt: new Date(reset * 1000).toISOString() })
+  }
+  return out
+}
+
+// The snapshot the status line draws: the status line's JSON, the mod's live file, and what the
+// script read itself (git, memory).
+export function statusSnapshot(input: unknown, live: Live | null, read: { now: number; timeZone: string; git: Git | null; memory: Memory | null }): Snapshot {
+  const id = field(input, 'model', 'id')
+  const name = field(input, 'model', 'display_name')
+  const dir = field(input, 'workspace', 'current_dir') ?? field(input, 'cwd')
+  const duration = num(field(input, 'cost', 'total_duration_ms'))
+  return {
+    now: read.now,
+    timeZone: read.timeZone,
+    model: typeof id === 'string' && id !== '' ? modelName(id) : typeof name === 'string' && name !== '' ? name : null,
+    project: typeof dir === 'string' && dir !== '' ? basename(dir) : null,
+    git: read.git,
+    startedAt: live?.startedAt ?? (duration === null ? null : read.now - duration),
+    calls: live?.calls ?? 0,
+    context: contextOf(input),
+    windows: windowsOf(input),
+    memory: read.memory,
+  }
+}
+
+const SGR: Record<Tone, string> = { success: '32', warning: '33', error: '31' }
+
+// A row as terminal text with SGR colors, each segment reset after itself.
+export function ansiRow(row: readonly Seg[]): string {
+  return row
+    .map((s) => {
+      const codes = [...(s.bold === true ? ['1'] : []), ...(s.dim === true ? ['2'] : []), ...(s.tone === undefined ? [] : [SGR[s.tone]])]
+      return codes.length === 0 ? s.text : `\x1b[${codes.join(';')}m${s.text}\x1b[0m`
+    })
+    .join('')
+}
