@@ -98,7 +98,8 @@
     "rating@agent": true,
     "wtf@agent": true,
     "hud@agent": true,
-    "tip@agent": true
+    "tip@agent": true,
+    "mattpocock-skills@mattpocock": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -119,9 +120,18 @@
         "path": "/home/sv/claude-devcontainer"
       },
       "autoUpdate": true
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      },
+      "autoUpdate": true
     }
   },
+  "spinnerTipsEnabled": false,
   "effortLevel": "xhigh",
+  "autoCompactWindow": 733000,
   "pluginConfigs": {
     "secret-guard@agent": {
       "options": {
@@ -166,7 +176,5 @@
   "theme": "dark-ansi",
   "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true,
-  "autoCompactWindow": 733000,
-  "spinnerTipsEnabled": false
+  "agentPushNotifEnabled": true
 }
