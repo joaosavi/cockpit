@@ -95,7 +95,8 @@
     "secret-guard@agent": true,
     "pipefail@agent": true,
     "mod-report@agent": true,
-    "rating@agent": true
+    "rating@agent": true,
+    "wtf@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

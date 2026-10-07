@@ -58,6 +58,11 @@ MCP=$(sed -n "s/^MCP='\(.*\)'.*/\1/p" "$R/bin/navegador-cofre")
 DIR=$(dirname "$(dirname "$(readlink -f "$(npx -y -p "$MCP" which playwright-mcp)")")")
 node "$DIR/../playwright/cli.js" install chromium chromium-headless-shell
 
+# A configuração gerenciada desta máquina faz o global-memory contar como mod da organização, o único
+# jeito de ele rodar numa conta Team. O painel de admin do claude.ai precisa de "managedSourcesBehavior": "merge".
+sudo mkdir -p /etc/claude-code
+sudo cp "$R/claude/managed-settings.json" /etc/claude-code/managed-settings.json
+
 # As units são do root e entram como cópia.
 sudo cp -r "$R"/systemd/* /etc/systemd/system/
 sudo systemctl daemon-reload

@@ -54,6 +54,16 @@
       "name": "rating",
       "source": "./mods/rating",
       "description": "Records every agent turn as a dataset with your 1-5 ratings and automatic weak labels, for analysis and fine-tuning. /rate, /ratings and a rating band above the prompt"
+    },
+    {
+      "name": "global-memory",
+      "source": "./mods/global-memory",
+      "description": "A VPS-wide memory folder next to the per-project auto memory: rewrites the memory section for both folders and loads the global MEMORY.md. On Team and Enterprise plans it must be an organization mod (prependPlugins in managed settings)"
+    },
+    {
+      "name": "wtf",
+      "source": "./mods/wtf",
+      "description": "/wtf explains in a few plain lines where this session is and what it needs from you, without interrupting the agent or entering the conversation"
     }
   ]
 }

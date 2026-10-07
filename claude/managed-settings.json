@@ -1,0 +1,9 @@
+{
+  "extraKnownMarketplaces": {
+    "agent": {
+      "source": { "source": "directory", "path": "/home/sv/claude-devcontainer" }
+    }
+  },
+  "enabledPlugins": { "global-memory@agent": true },
+  "prependPlugins": ["global-memory@agent", "sec-default@builtin"]
+}

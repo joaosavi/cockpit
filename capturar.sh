@@ -6,6 +6,7 @@ R=$(cd "$(dirname "$0")" && pwd)
 
 cp "$HOME/.claude/settings.json" "$R/claude/settings.json"
 cp "$HOME/.claude/settings.local.json" "$R/claude/settings.local.json"
+[ -f /etc/claude-code/managed-settings.json ] && cp /etc/claude-code/managed-settings.json "$R/claude/managed-settings.json"
 
 rm -rf "$R/systemd"
 mkdir -p "$R/systemd"
