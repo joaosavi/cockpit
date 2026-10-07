@@ -1,9 +1,27 @@
 {
   "name": "global-memory",
-  "version": "1.0.0",
-  "description": "Adds a VPS-wide memory folder beside the per-project auto memory: the memory section describes both folders and where each type of memory goes, and the global MEMORY.md reaches every session from any folder",
-  "author": { "name": "João Savi" },
+  "version": "1.1.0",
+  "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/global-memory",
+  "repository": "https://github.com/joaosavi/claude-devcontainer",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "auto-memory",
+    "claude-md",
+    "organization",
+    "mod"
+  ],
   "userConfig": {
-    "globalDir": { "type": "string", "title": "Global memory folder", "description": "Folder of the VPS-wide memory, with its own MEMORY.md. A leading ~ is the HOME folder", "default": "~/claude-devcontainer/memorias/vps" }
+    "globalDir": {
+      "type": "string",
+      "title": "Global memory folder",
+      "description": "Folder of the machine-wide memory, with its own MEMORY.md. It can be a folder in a git repo, to version the memories. A leading ~ is your home folder.",
+      "default": "~/.claude/global-memory"
+    }
   }
 }

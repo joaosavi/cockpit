@@ -50,7 +50,7 @@ test('the diary names the runner of each rewrite, and the session ends with one 
   await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit -p . | head -30' })
   await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
   const all = lines(s)
-  expect(all[0]).toEqual({ at: '2026-10-07T13:00:00.000Z', event: 'rewritten', key: 'yarn vitest' })
+  expect(all[0]).toEqual({ at: '2026-10-07T13:00:00.000Z', session: 'abcdef12', event: 'rewritten', key: 'yarn vitest' })
   expect(all[1]).toMatchObject({ event: 'rewritten', key: 'npx tsc' })
   expect(all.length).toBe(3)
   expect(all[2]).toEqual({
@@ -63,4 +63,24 @@ test('the diary names the runner of each rewrite, and the session ends with one 
     hookMs: 0,
     maxHookMs: 0,
   })
+})
+
+const EXTRA = { options: { extraRunners: ['verify', 'rules'] } }
+
+test('with extraRunners set, a piped repo check script is rewritten', EXTRA, async ($, on) => {
+  const s = { ran: [], written: new Map<string, string>() }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'git add -A && yarn verify 2>&1 | grep -E "FAIL|all green"' })
+  await $.tool.call({ tool: 'Bash', command: 'yarn rules 2>&1 | head -20' })
+  expect(s.ran).toEqual(['set -o pipefail; git add -A && yarn verify 2>&1 | grep -E "FAIL|all green"', 'set -o pipefail; yarn rules 2>&1 | head -20'])
+  expect(lines(s)[1]).toMatchObject({ event: 'rewritten', key: 'yarn rules' })
+})
+
+test('without extraRunners, a piped repo check script runs as written', async ($, on) => {
+  const s = { ran: [], written: new Map<string, string>() }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn verify 2>&1 | grep FAIL' })
+  expect(s.ran).toEqual(['yarn verify 2>&1 | grep FAIL'])
 })

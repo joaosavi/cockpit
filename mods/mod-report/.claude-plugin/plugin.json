@@ -1,6 +1,19 @@
 {
   "name": "mod-report",
-  "version": "1.0.0",
-  "description": "/mods [days] reads the other mods' diaries and reports, per mod, how often it acted, what it did, and what it cost per tool call, with a short list of what deserves attention",
-  "author": { "name": "João Savi" }
+  "version": "1.1.0",
+  "description": "/mods [days] reports what each mod did and what it cost per tool call, read from the mods' diaries, and flags the ones that get in the way.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/mod-report",
+  "repository": "https://github.com/joaosavi/claude-devcontainer",
+  "license": "MIT",
+  "keywords": [
+    "report",
+    "overhead",
+    "diagnostics",
+    "mods",
+    "mod"
+  ]
 }

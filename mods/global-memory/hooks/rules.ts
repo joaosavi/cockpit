@@ -6,7 +6,7 @@
 import type { InstructionFile, PluginOptions } from 'claude-code'
 
 export const INDEX = 'MEMORY.md'
-export const DEFAULT_DIR = '~/claude-devcontainer/memorias/vps'
+export const DEFAULT_DIR = '~/.claude/global-memory'
 // Core cuts MEMORY.md at 200 lines and 25,000 bytes before it reaches the model.
 const MAX_LINES = 200
 const MAX_CHARS = 25000
@@ -53,7 +53,7 @@ export function globalDir(values: PluginOptions, home: string | undefined): stri
 
 function openingSentence(p: Parsed, global: string): string {
   const lead = p.isFull ? 'You have a persistent, file-based memory system' : 'You have a persistent file-based memory'
-  const where = `with two directories: a project directory at \`${p.projectDir}\` and a VPS-wide global directory at \`${global}\`.`
+  const where = `with two directories: a project directory at \`${p.projectDir}\` and a machine-wide global directory at \`${global}\`.`
   const tail =
     p.mode === 'writable'
       ? 'Both directories already exist — write to them directly with the Write tool (do not run mkdir or check for their existence).'
@@ -66,7 +66,7 @@ function openingSentence(p: Parsed, global: string): string {
 export function scopeBlock(p: Parsed, global: string, hasIndex: boolean): string {
   const levels = [
     `- project: memories that apply only to the current project. They persist across conversations opened in this project and are stored at the root \`${p.projectDir}\`.`,
-    `- global: memories that are true for the whole VPS, whatever folder a session is opened in. They persist across conversations in every project on this VPS and are stored at \`${global}\`.`,
+    `- global: memories that are true for the whole machine, whatever folder a session is opened in. They persist across conversations in every project on this machine and are stored at \`${global}\`.`,
   ]
   if (p.mode === 'read-only') return ['## Memory scope', '', 'There are two scope levels, both read-only this session:', '', ...levels].join('\n')
   return [
@@ -79,12 +79,12 @@ export function scopeBlock(p: Parsed, global: string, hasIndex: boolean): string
     'Choose the directory by type:',
     '',
     '- `user` and `feedback`: default to global. Save them in the project directory only when they apply only to this project.',
-    '- `reference`: global when it is about the VPS, its tools, access or services; project when it points to something only this project uses.',
+    '- `reference`: global when it is about the machine, its tools, access or services; project when it points to something only this project uses.',
     '- `project`: always the project directory.',
     '',
     ...(hasIndex ? [`Each directory has its own \`${INDEX}\` index. Add the pointer to the \`${INDEX}\` of the directory where you saved the memory.`, ''] : []),
     '- Before saving, check both directories for an existing memory that covers it, and update that file rather than writing the same fact in the other directory.',
-    '- You MUST avoid saving sensitive data within the global directory: every session on this VPS reads it. For example, never save API keys or user credentials.',
+    '- You MUST avoid saving sensitive data within the global directory: every session on this machine reads it. For example, never save API keys or user credentials.',
   ].join('\n')
 }
 

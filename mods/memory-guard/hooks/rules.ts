@@ -33,7 +33,7 @@ export const DEFAULTS: Options = { margin: 2, waitSeconds: 120 }
 const MB = 1024 * 1024
 const GB = 1024 * MB
 
-// Estimates until the mod measures the command. The zippi typecheck was measured at 1 GB. The others are guesses.
+// Estimates until the mod measures the command. A large monorepo's typecheck was measured at 1 GB. The others are guesses.
 export const ESTIMATE: Record<Kind, number> = {
   typecheck: 1 * GB,
   build: 1 * GB,
@@ -184,17 +184,26 @@ export function workingSet(current: number, inactive: number): number {
   return Math.max(0, current - inactive)
 }
 
+// One group in plain words: what it uses, the file cache on top, and its limits.
+function groupText(l: Level): string {
+  const limits = [l.high === null ? null : `high ${mb(l.high)}`, l.max === null ? null : `max ${mb(l.max)}`].filter((x) => x !== null)
+  const cache = l.inactiveFile > 0 ? [`${mb(l.inactiveFile)} file cache`] : []
+  return [`${mb(l.used)} in use`, ...cache, ...(limits.length === 0 ? ['no limit'] : limits)].join(', ')
+}
+
+// The /ram reply and the refusal's explanation: plain lines, so it reads the same in Remote Control.
 export function report(levels: readonly Level[], machine: { available: number; total: number } | null, margin: number): string {
-  if (levels.length === 0 && machine === null) return 'no memory reading on this machine'
-  const lines = levels.map((l) => {
-    const high = l.high === null ? 'no high' : `high ${mb(l.high)}`
-    const max = l.max === null ? 'no max' : `max ${mb(l.max)}`
-    return `${l.group}: uses ${mb(l.used)} (memory.current ${mb(l.used + l.inactiveFile)} minus ${mb(l.inactiveFile)} inactive_file), ${high}, ${max}`
-  })
-  if (machine !== null) lines.push(`machine: ${mb(machine.available)} available of ${mb(machine.total)}`)
+  if (levels.length === 0 && machine === null) return 'No memory reading on this machine.'
+  const lines: string[] = []
   const h = headroomLine(levels, machine, margin)
   if (h !== null) lines.push(h)
+  for (const l of levels) lines.push(`${l.group}: ${groupText(l)}`)
+  if (machine !== null) lines.push(machineLine(machine))
   return lines.join('\n')
+}
+
+export function machineLine(m: { available: number; total: number }): string {
+  return `Machine: ${mb(m.available)} available of ${mb(m.total)}`
 }
 
 export type Machine = { available: number; total: number }
@@ -240,17 +249,43 @@ export function bar(l: Level, width: number): Run[] | null {
   return runs
 }
 
+// The figures under a group's bar in the /ram pane.
 export function levelLine(l: Level): string {
-  const limit = limitOf(l)
-  const tail = limit === null ? 'no limit' : `limit ${mb(limit.bytes)} (${limit.kind})`
-  return `uses ${mb(l.used)} · inactive_file ${mb(l.inactiveFile)} · ${tail}`
+  const limits = [l.high === null ? null : `high ${mb(l.high)}`, l.max === null ? null : `max ${mb(l.max)}`].filter((x) => x !== null)
+  const cache = l.inactiveFile > 0 ? [`${mb(l.inactiveFile)} cache`] : []
+  return [`${mb(l.used)} in use`, ...cache, ...(limits.length === 0 ? ['no limit'] : limits)].join(' · ')
 }
+
+export const LEGEND = '█ in use  ▒ file cache  ░ free  │ high mark'
 
 export function headroomLine(levels: readonly Level[], machine: Machine | null, margin: number): string | null {
   const h = headroom(levels, machine, margin)
-  return h === null ? null : `${mb(Math.max(0, h))} still fits, after the ${margin}% margin`
+  return h === null ? null : `Headroom: ${mb(Math.max(0, h))}, after the ${margin}% margin`
+}
+
+// The status line under the prompt: shown only when memory is tight, so it does not become background noise.
+export const STATUS_BELOW = 500 * MB
+
+export function statusText(h: number | null): string | undefined {
+  return h === null || h > STATUS_BELOW ? undefined : `Memory headroom: ${mb(Math.max(0, h))}`
 }
 
 export function peakLines(peaks: Readonly<Record<string, readonly number[]>>): string[] {
-  return Object.entries(peaks).map(([k, v]) => `measured peaks of ${k}: ${v.map(mb).join(', ')}`)
+  return Object.entries(peaks).map(([k, v]) => `Measured peak${v.length === 1 ? '' : 's'} of ${k}: ${v.map(mb).join(', ')}`)
+}
+
+export function refusalText(h: Heavy, waitSeconds: number, explanation: string): string {
+  return (
+    `The memory-guard mod held this command (${h.key}) for ${waitSeconds}s, and the group's memory did not drop enough. ` +
+    `Another session or process is using the memory:\n${explanation}\n` +
+    'Do not retry now. Tell the user, or continue with work that does not need this command.'
+  )
+}
+
+export function reducedNotice(command: string): string {
+  return `The memory-guard mod ran this command with a single process, because the whole command did not fit in the group's memory: ${command}`
+}
+
+export function retriedNotice(command: string): string {
+  return `The first attempt died for lack of memory (exit 137), and the memory-guard mod reran it with a single process: ${command}`
 }

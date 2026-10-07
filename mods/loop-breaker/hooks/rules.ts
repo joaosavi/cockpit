@@ -81,13 +81,25 @@ export function checkKey(command: string): string {
 
 export type Nudge = { kind: 'edits'; file: string; count: number } | { kind: 'error'; count: number } | { kind: 'repeat'; tool: string; count: number }
 
+// The note added to the tool result. It starts with `Loop check`, which the rating mod reads to count
+// the nudges of a turn.
 export function nudgeText(n: Nudge): string {
-  const what =
-    n.kind === 'edits'
-      ? `you have edited ${n.file} ${n.count} times after failed commands in this turn`
-      : n.kind === 'error'
-        ? `the same error came back ${n.count} times in this turn`
-        : `you called ${n.tool} with the same arguments ${n.count} times in a row`
+  let what: string
+  switch (n.kind) {
+    case 'edits':
+      what = `you have edited ${n.file} ${n.count} times after failed commands in this turn`
+      break
+    case 'error':
+      what = `the same error came back ${n.count} times in this turn`
+      break
+    case 'repeat':
+      what = `you called ${n.tool} with the same arguments ${n.count} times in a row`
+      break
+    default: {
+      const exhaustive: never = n
+      return exhaustive
+    }
+  }
   return (
     `Loop check from the loop-breaker mod: ${what}. Stop before the next attempt. ` +
     'Write in up to 3 lines what you tried and why it did not work. Then change the approach: ' +

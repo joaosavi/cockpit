@@ -11,7 +11,7 @@
 // time its tool.call hook spent outside `next`.
 
 import type { Hook, On } from 'claude-code'
-import { asSkill, BUG_REMINDER, byCommand, byTool, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
+import { alreadyDeliveredText, asSkill, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -28,16 +28,19 @@ let tally = newTally()
 
 const AUTOMATIC_ORIGINS = new Set(['task-notification', 'scheduled-trigger', 'peer', 'peer-send-message', 'projects-relay', 'channel', 'coordinator', 'observer', 'observer-activity', 'plugin'])
 
+// One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
+// on each write, because `/clear` and `/resume` change it without reloading the mod.
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
   try {
     before = await $.fs.read(diary)
   } catch {
-    // first entry of the session
+    // the diary's first line
   }
-  const line = JSON.stringify({ at: new Date(await $.clock.now()).toISOString(), ...entry })
-  await $.fs.write(diary, before + line + '\n')
+  const at = new Date(await $.clock.now()).toISOString()
+  const session = (await $.session.id()).slice(0, 8)
+  await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
 // Reads SKILL.md straight from disk. The Skill tool called by a mod answers "Launching skill" but
@@ -55,6 +58,8 @@ async function skillText($: Api, skill: string): Promise<string | null> {
   return null
 }
 
+// The skill's text the first time a call needs it in this conversation; null when it is already
+// loaded or does not exist on this machine.
 async function load($: Api, skill: string, reason: string): Promise<string | null> {
   if (loaded.has(skill) || missing.has(skill)) return null
   const text = await skillText($, skill)
@@ -67,7 +72,7 @@ async function load($: Api, skill: string, reason: string): Promise<string | nul
     countAction(tally, `loaded:${skill}`)
   }
   await log($, { event: text === null ? 'not-found' : 'loaded', skill, reason })
-  return text === null ? null : `The skill ${skill} comes in full below, already loaded by the skill-loader mod.\n\n${text}`
+  return text
 }
 
 function pathOf(e: { tool: string }): string {
@@ -97,12 +102,12 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
 export function register(on: On) {
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
+    // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     const home = await $.env.get('HOME')
     if (home !== undefined) {
-      const dir = `${home}/.local/state/mods/skill-loader`
-      await $.process.run(['mkdir', '-p', dir])
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
-      diary = `${dir}/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
+      diary = `${home}/.local/state/mods/skill-loader/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
     return next(e)
   })
@@ -116,13 +121,13 @@ export function register(on: On) {
       // delivered does not come again through the tool, because its full text is already in the conversation.
       if (e.tool === 'Skill') {
         const requested: unknown = Reflect.get(e, 'skill')
-        if (typeof requested === 'string' && delivered.has(requested)) {
+        if (typeof requested !== 'string') return pass(e)
+        if (delivered.has(requested)) {
           countAction(tally, 'already-delivered')
-          return { deny: `The skill ${requested} already came in full from the skill-loader mod, earlier in this conversation. Follow it directly.` }
+          return { deny: alreadyDeliveredText(requested) }
         }
         const r = await pass(e)
-        const name: unknown = Reflect.get(e, 'skill')
-        if (typeof name === 'string' && !('deny' in r) && r.isError !== true) loaded.add(name)
+        if (!('deny' in r) && r.isError !== true) loaded.add(requested)
         return r
       }
 
@@ -133,7 +138,8 @@ export function register(on: On) {
         const text = await load($, t.skill, 'command')
         if (text === null) return pass(e)
         countAction(tally, 'refused')
-        return { deny: refusalText(t.skill, 'commit messages and PR descriptions', text) }
+        await log($, { event: 'refused', skill: t.skill, tool: e.tool })
+        return { deny: refusalText(t.skill, 'commit messages and pull request descriptions', text) }
       }
 
       const path = pathOf(e)
@@ -144,12 +150,13 @@ export function register(on: On) {
         const r = await pass(e)
         if ('deny' in r || r.isError === true) return r
         const text = await load($, t.skill, `read of ${path}`)
-        return text === null ? r : { ...r, context: [...(r.context ?? []), text] }
+        return text === null ? r : { ...r, context: [...(r.context ?? []), loadedText(t.skill, text)] }
       }
       if (WRITE_TOOLS.has(e.tool)) {
         const text = await load($, t.skill, `write to ${path}`)
         if (text === null) return pass(e)
         countAction(tally, 'refused')
+        await log($, { event: 'refused', skill: t.skill, tool: e.tool })
         return { deny: refusalText(t.skill, path, text) }
       }
       return pass(e)

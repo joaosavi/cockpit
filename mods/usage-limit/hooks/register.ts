@@ -16,17 +16,21 @@ import {
   classify,
   DEFAULTS,
   fullest,
+  heldText,
   isAutomatic,
+  limitReport,
   msUntilReset,
   type Options,
   options,
   pausedText,
   pauseText,
   reading,
+  reserveSubagentText,
   reserveTurnText,
   resumeText,
   showsBand,
-  summary,
+  statusText,
+  throttledSubagentText,
   type Window,
   withoutExpired,
   type Zone,
@@ -57,16 +61,19 @@ const KEY = 'windows'
 type Api = Parameters<Hook<'session.start'>>[0]
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text'>
 
+// One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
+// on each write, because `/clear` and `/resume` change it without reloading the mod.
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
   try {
     before = await $.fs.read(diary)
   } catch {
-    // first entry of the day
+    // the diary's first line
   }
-  const line = JSON.stringify({ at: new Date(await $.clock.now()).toISOString(), ...entry })
-  await $.fs.write(diary, before + line + '\n')
+  const at = new Date(await $.clock.now()).toISOString()
+  const session = (await $.session.id()).slice(0, 8)
+  await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
 function update($: Api, fresh: readonly Window[]) {
@@ -74,8 +81,7 @@ function update($: Api, fresh: readonly Window[]) {
   const before = zone.kind
   zone = classify(windows, o)
   if (zone.kind === 'paused' && before !== 'paused') countAction(tally, 'paused')
-  if (zone.kind === 'free') $.ui.status(undefined)
-  else $.ui.status(summary(windows, zone, o).split('\n')[0] ?? '')
+  $.ui.status(statusText(zone, o))
   $.ui.invalidate('ui.render')
 }
 
@@ -134,6 +140,7 @@ async function scheduleResume($: Api, window: Window, reason: string) {
 }
 
 // Runs the tool.call hook's body and adds its own wall time, outside `next`, to the session tally.
+// It stays in this file because the hooks loader follows `$` only into functions of the same file.
 async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: (input: I) => Promise<R>) => Promise<R>): Promise<R> {
   const started = await $.clock.now()
   let inside = 0
@@ -157,14 +164,12 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
+    // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     const home = await $.env.get('HOME')
     if (home !== undefined) {
-      const dir = `${home}/.local/state/mods/usage-limit`
-      await $.process.run(['mkdir', '-p', dir])
-      // One file per session, because `$.fs.write` rewrites the whole file and two sessions on the same
-      // file would erase each other's lines.
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
-      diary = `${dir}/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
+      diary = `${home}/.local/state/mods/usage-limit/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
     const own = (await $.session.usage()).rateLimits
     if (own.length > 0) {
@@ -178,7 +183,7 @@ export function register(on: On, values: PluginOptions) {
       await expire($)
     })
     try {
-      await $.command.register({ name: 'limit', description: 'Shows the account usage limit and what the usage-limit mod is holding back', immediate: true })
+      await $.command.register({ name: 'limit', description: 'Show the account usage limit and what the usage-limit mod is holding back', immediate: true })
     } catch (err) {
       await log($, { event: 'command-refused', error: String(err) })
     }
@@ -203,11 +208,9 @@ export function register(on: On, values: PluginOptions) {
     return ui.Box({ flexDirection: 'column', children: [...rows, await next(e)] })
   })
 
-  on('command.run', { command: 'limit' }, async () => {
-    const pending = resume === null ? '' : '\nresume scheduled'
-    const held = queue.length === 0 ? '' : `\n${queue.length} message(s) held for the resume`
-    return { text: summary(windows, zone, o) + pending + held }
-  })
+  on('command.run', { command: 'limit' }, async () => ({
+    text: limitReport(windows, zone, o, { isResumeScheduled: resume !== null, held: queue.length }),
+  }))
 
   on('prompt.submit', async ($, e, next) => {
     await expire($)
@@ -224,7 +227,7 @@ export function register(on: On, values: PluginOptions) {
     countAction(tally, 'prompt-held')
     await log($, { event: 'prompt-held', origin: e.origin.kind })
     await scheduleResume($, zone.window, 'automatic prompt during the pause')
-    return { drop: 'The usage limit is in its reserve. The message will be delivered when the session resumes.' }
+    return { drop: heldText(zone.window, o) }
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -248,7 +251,8 @@ export function register(on: On, values: PluginOptions) {
     await expire($)
     if (zone.kind === 'paused') {
       countAction(tally, 'subagent-refused')
-      return { deny: 'The usage limit is in its reserve, and no subagent runs in the reserve. Do the task directly, reading only the part you need.' }
+      await log($, { event: 'subagent-refused', reason: 'reserve' })
+      return { deny: reserveSubagentText() }
     }
     const list = await $.agent.list()
     for (const a of list) if (a.status !== 'running') alive.delete(a.id)
@@ -256,12 +260,8 @@ export function register(on: On, values: PluginOptions) {
     const running = Math.max(list.filter((a) => a.status === 'running').length, starting + alive.size)
     if (zone.kind === 'throttled' && running > 0) {
       countAction(tally, 'subagent-refused')
-      await log($, { event: 'subagent-refused', running })
-      return {
-        deny:
-          `The usage limit is at ${zone.window.percentUsed}%, and above ${o.alert}% only one subagent runs at a time. ` +
-          'Wait for the running one to finish, or do the task directly.',
-      }
+      await log($, { event: 'subagent-refused', reason: 'throttled', running })
+      return { deny: throttledSubagentText(zone.window, o) }
     }
     starting += 1
     try {

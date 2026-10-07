@@ -1,0 +1,41 @@
+{
+  "name": "hud",
+  "version": "1.1.0",
+  "description": "A heads-up display above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
+  "author": { "name": "João Savi" },
+  "license": "MIT",
+  "keywords": ["hud", "status", "band", "context", "usage", "rate-limit", "memory", "subagents", "activity"],
+  "userConfig": {
+    "band": {
+      "type": "string",
+      "title": "Band",
+      "description": "What the band above the prompt shows: panel (two rows with bars), line (one compact row) or off",
+      "options": ["panel", "line", "off"],
+      "default": "panel"
+    },
+    "activity": {
+      "type": "boolean",
+      "title": "Activity",
+      "description": "While a turn runs, show the tool in flight, the running subagents and the turn's calls and errors under the band",
+      "default": true
+    },
+    "memory": {
+      "type": "boolean",
+      "title": "Memory",
+      "description": "Show how much memory still fits before the tightest cgroup limit, or the machine's when there is none",
+      "default": true
+    },
+    "datasetDir": {
+      "type": "string",
+      "title": "Ratings dataset",
+      "description": "Folder of the rating mod's dataset, read for the RATINGS row of /hud. The row hides when the folder is missing",
+      "default": "~/datasets/agent-ratings"
+    },
+    "timeZone": {
+      "type": "string",
+      "title": "Time zone",
+      "description": "IANA time zone for the times shown and for what counts as today, such as America/New_York. Empty uses the system time zone.",
+      "default": ""
+    }
+  }
+}

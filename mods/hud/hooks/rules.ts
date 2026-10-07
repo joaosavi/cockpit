@@ -1,0 +1,720 @@
+// The hud mod's rules, without the mods API, so the tests run them directly: parsing what the timers
+// read, and laying out every row the band and the /hud pane draw, sized to the columns they get.
+//
+// A row is a list of segments, each a piece of text and its style. The layout functions pad and drop
+// segments so a row never passes the columns it is given, and never cuts an element in the middle.
+
+// ---------------------------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------------------------
+
+export type BandMode = 'panel' | 'line' | 'off'
+
+export type Options = {
+  band: BandMode
+  activity: boolean
+  memory: boolean
+  datasetDir: string
+  timeZone: string
+}
+
+export const DEFAULTS: Options = { band: 'panel', activity: true, memory: true, datasetDir: '~/datasets/agent-ratings', timeZone: '' }
+
+// Percentage of each cgroup's limit kept free, as memory-guard counts it.
+export const MEMORY_MARGIN = 2
+
+export function options(values: unknown): Options {
+  if (typeof values !== 'object' || values === null) return DEFAULTS
+  const text = (key: string, fallback: string): string => {
+    const v: unknown = Reflect.get(values, key)
+    return typeof v === 'string' && v.trim() !== '' ? v.trim() : fallback
+  }
+  const flag = (key: string, fallback: boolean): boolean => {
+    const v: unknown = Reflect.get(values, key)
+    return typeof v === 'boolean' ? v : fallback
+  }
+  const band = text('band', DEFAULTS.band)
+  return {
+    band: band === 'line' || band === 'off' ? band : 'panel',
+    activity: flag('activity', DEFAULTS.activity),
+    memory: flag('memory', DEFAULTS.memory),
+    datasetDir: text('datasetDir', DEFAULTS.datasetDir),
+    timeZone: validTimeZone(text('timeZone', DEFAULTS.timeZone)),
+  }
+}
+
+// A time zone the runtime knows, or empty for the system's own. An unknown name falls back to empty.
+function validTimeZone(tz: string): string {
+  if (tz === '') return ''
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+    return tz
+  } catch {
+    return ''
+  }
+}
+
+// The `timeZone` field of a date format: absent when empty, so the system time zone applies.
+export function zone(timeZone: string): { timeZone?: string } {
+  return timeZone === '' ? {} : { timeZone }
+}
+
+export function expandHome(path: string, home: string | undefined): string | null {
+  if (path === '~' || path.startsWith('~/')) return home === undefined || home === '' ? null : home + path.slice(1)
+  return path
+}
+
+// ---------------------------------------------------------------------------------------------
+// Segments and rows
+// ---------------------------------------------------------------------------------------------
+
+export type Tone = 'success' | 'warning' | 'error'
+
+export type Seg = { text: string; tone?: Tone; dim?: boolean; bold?: boolean }
+export type Row = Seg[]
+
+export function width(row: readonly Seg[]): number {
+  return row.reduce((n, s) => n + [...s.text].length, 0)
+}
+
+export function rowText(row: readonly Seg[]): string {
+  return row.map((s) => s.text).join('')
+}
+
+function gap(n: number): Seg {
+  return { text: ' '.repeat(Math.max(0, n)) }
+}
+
+// Left segments, then the right ones flush with the last column. Null when both do not fit.
+function spread(left: readonly Seg[], right: readonly Seg[], columns: number): Row | null {
+  const room = columns - width(left) - width(right)
+  if (room < 2) return null
+  return [...left, gap(room), ...right]
+}
+
+// Cuts text to `max` characters with an ellipsis. Used only for free text (commands, descriptions),
+// never for a figure.
+export function cut(text: string, max: number): string {
+  const chars = [...text]
+  if (chars.length <= max) return text
+  if (max <= 1) return max === 1 ? '…' : ''
+  return chars.slice(0, max - 1).join('') + '…'
+}
+
+// ---------------------------------------------------------------------------------------------
+// Figures
+// ---------------------------------------------------------------------------------------------
+
+const MODEL = /^(?:[a-z]+\.)?(?:anthropic\.)?claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(?:-v\d+(?::\d+)?)?(?:\[[^\]]*\])?$/i
+
+// `claude-opus-5-5` → `Opus 5.5`, `claude-haiku-4-5-20251001` → `Haiku 4.5`. Anything else as given.
+export function modelName(id: string): string {
+  const m = MODEL.exec(id.trim())
+  if (m === null || m[1] === undefined || m[2] === undefined) return id.trim()
+  const family = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()
+  return m[3] === undefined ? `${family} ${m[2]}` : `${family} ${m[2]}.${m[3]}`
+}
+
+export function basename(path: string): string {
+  const parts = path.split('/').filter((p) => p !== '')
+  return parts.at(-1) ?? path
+}
+
+// 42_000 → `0:42`, 3_725_000 → `1:02:05`.
+export function clock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const ss = String(s % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
+}
+
+// How long the session has run: `38m`, `2h 05m`.
+export function age(ms: number): string {
+  const m = Math.max(0, Math.floor(ms / 60_000))
+  if (m < 60) return `${m}m`
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+
+const MiB = 1024 * 1024
+const GiB = 1024 * MiB
+
+// 2_040_109_465 → `1.9G`, 440_401_920 → `420M`.
+export function bytes(n: number): string {
+  if (n >= GiB) return `${(Math.floor((n / GiB) * 10) / 10).toFixed(1)}G`
+  return `${Math.max(0, Math.round(n / MiB))}M`
+}
+
+// Used over limit in the limit's unit: `2.6/5.0G`, `300/800M`.
+export function ratio(used: number, limit: number): string {
+  if (limit >= GiB) return `${(Math.floor((Math.max(0, used) / GiB) * 10) / 10).toFixed(1)}/${bytes(limit)}`
+  return `${Math.max(0, Math.round(used / MiB))}/${bytes(limit)}`
+}
+
+export function percentTone(percent: number, warnFrom: number, errorFrom: number): Tone {
+  if (percent >= errorFrom) return 'error'
+  if (percent >= warnFrom) return 'warning'
+  return 'success'
+}
+
+export const contextTone = (p: number): Tone => percentTone(p, 60, 85)
+export const limitTone = (p: number): Tone => percentTone(p, 75, 90)
+
+export function memoryTone(headroom: number): Tone {
+  if (headroom < 500 * MiB) return 'error'
+  if (headroom < 1024 * MiB) return 'warning'
+  return 'success'
+}
+
+// The day a moment falls on in a time zone, as `YYYY-MM-DD`.
+export function localDay(ms: number, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', { ...zone(timeZone), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms))
+}
+
+// `19:30` when the reset falls on today in the time zone, `Oct 11` otherwise.
+export function resetLabel(iso: string, now: number, timeZone: string): string | null {
+  const at = Date.parse(iso)
+  if (!Number.isFinite(at)) return null
+  if (localDay(at, timeZone) === localDay(now, timeZone)) {
+    return new Intl.DateTimeFormat('en-US', { ...zone(timeZone), hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(at))
+  }
+  return new Intl.DateTimeFormat('en-US', { ...zone(timeZone), month: 'short', day: 'numeric' }).format(new Date(at))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Git
+// ---------------------------------------------------------------------------------------------
+
+export type Git = { branch: string; isDirty: boolean }
+
+// The output of `git status --porcelain=v2 --branch`: the branch (or the short commit when detached)
+// and whether any file changed.
+export function parseGit(stdout: string): Git | null {
+  let head: string | null = null
+  let oid: string | null = null
+  let isDirty = false
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('# branch.head ')) head = line.slice('# branch.head '.length).trim()
+    else if (line.startsWith('# branch.oid ')) oid = line.slice('# branch.oid '.length).trim()
+    else if (line.trim() !== '' && !line.startsWith('#')) isDirty = true
+  }
+  if (head === null) return null
+  if (head === '(detached)') return { branch: oid === null || oid === '(initial)' ? 'detached' : oid.slice(0, 7), isDirty }
+  return { branch: head, isDirty }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Memory, as memory-guard reads it
+// ---------------------------------------------------------------------------------------------
+
+export type Level = {
+  group: string
+  // memory.current minus the inactive_file of memory.stat: the kernel drops that cache before it kills.
+  used: number
+  high: number | null
+  max: number | null
+}
+
+export type Machine = { available: number; total: number }
+
+export function numberOrMax(text: string): number | null {
+  const t = text.trim()
+  if (t === 'max') return null
+  const n = Number(t)
+  return t !== '' && Number.isFinite(n) ? n : null
+}
+
+// The session's cgroup and each parent, innermost first.
+export function groups(procCgroup: string): string[] {
+  const path = procCgroup.trim().split('\n').find((l) => l.startsWith('0::'))?.slice(3) ?? ''
+  const parts = path.split('/').filter((p) => p !== '')
+  return parts.map((_, i) => '/' + parts.slice(0, i + 1).join('/')).reverse()
+}
+
+export function inactiveFile(stat: string): number {
+  const m = /^inactive_file (\d+)$/m.exec(stat)
+  return m?.[1] === undefined ? 0 : Number(m[1])
+}
+
+export function meminfo(text: string): Machine | null {
+  const kb = (name: string): number | null => {
+    const m = new RegExp(`^${name}:\\s+(\\d+) kB`, 'm').exec(text)
+    return m?.[1] === undefined ? null : Number(m[1]) * 1024
+  }
+  const available = kb('MemAvailable')
+  const total = kb('MemTotal')
+  return available === null || total === null ? null : { available, total }
+}
+
+export type Memory = {
+  // What still fits before the tightest limit, after the margin.
+  headroom: number
+  // The session's own group, when it has one.
+  session: number | null
+  // The group whose limit sets the headroom, when it is not the session's own group.
+  bound: { name: string; used: number; limit: number } | null
+  // The machine, when no group has a limit.
+  machine: Machine | null
+}
+
+function groupName(path: string): string {
+  const leaf = basename(path)
+  if (leaf.endsWith('.slice')) return 'slice'
+  if (leaf.endsWith('.service')) return 'service'
+  if (leaf.endsWith('.scope')) return 'scope'
+  return 'group'
+}
+
+// The limit is memory.max, where the kernel kills, or memory.high for a group without a max.
+export function memory(levels: readonly Level[], machine: Machine | null, margin: number): Memory | null {
+  const keep = 1 - margin / 100
+  let tightest: { level: Level; limit: number; room: number } | null = null
+  for (const level of levels) {
+    const limit = level.max ?? level.high
+    if (limit === null) continue
+    const room = limit * keep - level.used
+    if (tightest === null || room < tightest.room) tightest = { level, limit, room }
+  }
+  const own = levels[0]
+  if (tightest !== null) {
+    const isOwn = own !== undefined && tightest.level.group === own.group
+    return {
+      headroom: Math.max(0, tightest.room),
+      session: own?.used ?? null,
+      bound: isOwn ? { name: 'session', used: tightest.level.used, limit: tightest.limit } : { name: groupName(tightest.level.group), used: tightest.level.used, limit: tightest.limit },
+      machine: null,
+    }
+  }
+  if (machine === null) return null
+  return { headroom: Math.max(0, machine.available - machine.total * (margin / 100)), session: own?.used ?? null, bound: null, machine }
+}
+
+// ---------------------------------------------------------------------------------------------
+// What the band shows
+// ---------------------------------------------------------------------------------------------
+
+export type Window = { kind: string; percentUsed: number; resetsAt?: string }
+
+export type Snapshot = {
+  now: number
+  timeZone: string
+  model: string | null
+  project: string | null
+  git: Git | null
+  // When the session started, or null when unknown.
+  startedAt: number | null
+  calls: number
+  context: number | null
+  windows: readonly Window[]
+  memory: Memory | null
+}
+
+function windowOf(s: Snapshot, kind: string): Window | null {
+  return s.windows.find((w) => w.kind === kind) ?? null
+}
+
+const BAR_ON = '▰'
+const BAR_OFF = '▱'
+
+function barSegs(percent: number, cells: number, tone: Tone): Seg[] {
+  const on = Math.min(cells, Math.max(0, Math.round((percent / 100) * cells)))
+  const segs: Seg[] = []
+  if (on > 0) segs.push({ text: BAR_ON.repeat(on), tone })
+  if (cells - on > 0) segs.push({ text: BAR_OFF.repeat(cells - on), dim: true })
+  return segs
+}
+
+function pct(p: number): string {
+  return `${Math.round(p)}%`
+}
+
+// One meter: `ctx ▰▰▰▱▱ 42%`, or `ctx 42%` without a bar, with the reset time after it when asked.
+function meter(label: string, percent: number, tone: Tone, cells: number, reset: string | null): Seg[] {
+  const segs: Seg[] = [{ text: label, dim: true }, { text: ' ' }]
+  if (cells > 0) segs.push(...barSegs(percent, cells, tone), { text: ' ' })
+  segs.push({ text: cells > 0 ? pct(percent).padStart(4) : pct(percent), tone })
+  if (reset !== null) segs.push({ text: ` ↻${reset}`, dim: true })
+  return segs
+}
+
+function identity(s: Snapshot, sep: string, withProject: boolean, withBranch: boolean): Seg[] {
+  const segs: Seg[] = []
+  if (s.model !== null) segs.push({ text: s.model, bold: true })
+  if (withProject && s.project !== null) {
+    if (segs.length > 0) segs.push({ text: sep, dim: true })
+    segs.push({ text: s.project })
+    if (withBranch && s.git !== null) {
+      segs.push({ text: '  ' }, { text: s.git.branch, dim: true })
+      if (s.git.isDirty) segs.push({ text: '●', tone: 'warning' })
+    }
+  }
+  return segs
+}
+
+function memoryFree(m: Memory, suffix: boolean): Seg[] {
+  return [{ text: 'mem', dim: true }, { text: ' ' }, { text: bytes(m.headroom), tone: memoryTone(m.headroom) }, ...(suffix ? [{ text: ' free', dim: true }] : [])]
+}
+
+// The `line` band: `Opus 5.5 │ my-app  main● │ ctx 42% │ 5h 61% │ 7d 44% │ mem 1.9G`. Fields drop
+// from the right of the priority list (mem, 7d, the branch, the project, 5h, ctx) until the row fits.
+export function lineRow(s: Snapshot, columns: number): Row {
+  const five = windowOf(s, 'five_hour')
+  const seven = windowOf(s, 'seven_day')
+  const SEP: Seg = { text: ' │ ', dim: true }
+  type Field = { key: string; segs: Seg[] }
+  const build = (drop: ReadonlySet<string>): Row => {
+    const fields: Field[] = []
+    const id: Seg[] = []
+    if (s.model !== null) id.push({ text: s.model, bold: true })
+    if (id.length > 0) fields.push({ key: 'model', segs: id })
+    if (s.project !== null && !drop.has('project')) {
+      const p: Seg[] = [{ text: s.project }]
+      if (s.git !== null && !drop.has('branch')) {
+        p.push({ text: '  ' }, { text: s.git.branch, dim: true })
+        if (s.git.isDirty) p.push({ text: '●', tone: 'warning' })
+      }
+      fields.push({ key: 'project', segs: p })
+    }
+    if (s.context !== null && !drop.has('ctx')) fields.push({ key: 'ctx', segs: meter('ctx', s.context, contextTone(s.context), 0, null) })
+    if (five !== null && !drop.has('5h')) fields.push({ key: '5h', segs: meter('5h', five.percentUsed, limitTone(five.percentUsed), 0, null) })
+    if (seven !== null && !drop.has('7d')) fields.push({ key: '7d', segs: meter('7d', seven.percentUsed, limitTone(seven.percentUsed), 0, null) })
+    if (s.memory !== null && !drop.has('mem')) fields.push({ key: 'mem', segs: memoryFree(s.memory, false) })
+    return fields.flatMap((f, i) => (i === 0 ? f.segs : [SEP, ...f.segs]))
+  }
+  const order = ['mem', '7d', 'branch', 'project', '5h', 'ctx']
+  const drop = new Set<string>()
+  let row = build(drop)
+  for (const key of order) {
+    if (width(row) <= columns) return row
+    drop.add(key)
+    row = build(drop)
+  }
+  return width(row) <= columns ? row : [{ text: cut(rowText(row), columns), bold: true }]
+}
+
+// The second panel row's variants, from the richest to the barest. The first that fits wins.
+type MeterPlan = { ctx: number; five: number; seven: number; reset: boolean; mem: boolean; memSuffix: boolean; seven_: boolean }
+
+const PLANS: readonly MeterPlan[] = [
+  { ctx: 10, five: 10, seven: 10, reset: true, mem: true, memSuffix: true, seven_: true },
+  { ctx: 8, five: 8, seven: 8, reset: true, mem: true, memSuffix: true, seven_: true },
+  { ctx: 8, five: 8, seven: 8, reset: true, mem: true, memSuffix: false, seven_: true },
+  { ctx: 10, five: 10, seven: 10, reset: true, mem: false, memSuffix: false, seven_: true },
+  { ctx: 8, five: 8, seven: 8, reset: true, mem: false, memSuffix: false, seven_: true },
+  { ctx: 8, five: 8, seven: 0, reset: true, mem: false, memSuffix: false, seven_: true },
+  { ctx: 6, five: 6, seven: 0, reset: true, mem: false, memSuffix: false, seven_: true },
+  { ctx: 6, five: 0, seven: 0, reset: true, mem: false, memSuffix: false, seven_: true },
+  { ctx: 0, five: 0, seven: 0, reset: true, mem: false, memSuffix: false, seven_: true },
+  { ctx: 0, five: 0, seven: 0, reset: false, mem: false, memSuffix: false, seven_: true },
+  { ctx: 0, five: 0, seven: 0, reset: false, mem: false, memSuffix: false, seven_: false },
+]
+
+function metersRow(s: Snapshot, plan: MeterPlan): Row {
+  const five = windowOf(s, 'five_hour')
+  const seven = windowOf(s, 'seven_day')
+  const groupsOf: Seg[][] = []
+  if (s.context !== null) groupsOf.push(meter('ctx', s.context, contextTone(s.context), plan.ctx, null))
+  if (five !== null) {
+    const reset = plan.reset && five.resetsAt !== undefined ? resetLabel(five.resetsAt, s.now, s.timeZone) : null
+    groupsOf.push(meter('5h', five.percentUsed, limitTone(five.percentUsed), plan.five, reset))
+  }
+  if (seven !== null && plan.seven_) groupsOf.push(meter('7d', seven.percentUsed, limitTone(seven.percentUsed), plan.seven, null))
+  if (s.memory !== null && plan.mem) groupsOf.push(memoryFree(s.memory, plan.memSuffix))
+  return groupsOf.flatMap((g, i) => (i === 0 ? g : [gap(3), ...g]))
+}
+
+// The `panel` band: identity and session figures on the first row, the meters on the second.
+export function panelRows(s: Snapshot, columns: number): Row[] {
+  const right: Seg[] = []
+  if (s.startedAt !== null) right.push({ text: age(s.now - s.startedAt) })
+  if (right.length > 0) right.push({ text: ' · ', dim: true })
+  right.push({ text: `${s.calls} ${s.calls === 1 ? 'call' : 'calls'}` })
+  const rightShort: Seg[] = s.startedAt === null ? [] : [{ text: age(s.now - s.startedAt) }]
+
+  let first: Row | null = null
+  for (const [p, b] of [
+    [true, true],
+    [true, false],
+    [false, false],
+  ] as const) {
+    const left = identity(s, ' · ', p, b)
+    first = spread(left, right, columns) ?? (rightShort.length > 0 ? spread(left, rightShort, columns) : null)
+    if (first === null && width(left) <= columns) first = left
+    if (first !== null) break
+  }
+  const rows: Row[] = []
+  if (first !== null && first.length > 0) rows.push(first)
+
+  for (const plan of PLANS) {
+    const row = metersRow(s, plan)
+    if (width(row) <= columns) {
+      if (row.length > 0) rows.push(row)
+      break
+    }
+  }
+  return rows
+}
+
+// ---------------------------------------------------------------------------------------------
+// The activity block
+// ---------------------------------------------------------------------------------------------
+
+export type RunningTool = { name: string; detail: string; startedAt: number }
+export type RunningAgent = { type: string; description: string; startedAt: number }
+
+export type Activity = {
+  now: number
+  turnStartedAt: number
+  // The main loop's latest tool still running, or null between tools.
+  tool: RunningTool | null
+  agents: readonly RunningAgent[]
+  calls: number
+  errors: number
+  notable: string | null
+}
+
+// `mcp__claude_ai_Slack__slack_send_message` → `Slack slack_send_message`.
+export function toolName(tool: string): string {
+  if (!tool.startsWith('mcp__')) return tool
+  const [server = '', ...rest] = tool.slice(5).split('__')
+  return `${server.replace(/^claude_ai_/, '').replace(/^plugin_[^_]+_/, '')} ${rest.join('__')}`.trim()
+}
+
+export function agentType(type: string): string {
+  return type === 'general-purpose' ? 'general' : type
+}
+
+const DETAIL_KEYS = ['command', 'file_path', 'notebook_path', 'pattern', 'description', 'url', 'query', 'skill', 'prompt'] as const
+
+// The short input a tool row shows: the command, the file (relative to the project), the pattern...
+export function toolDetail(input: unknown, cwd: string): string {
+  if (typeof input !== 'object' || input === null) return ''
+  for (const key of DETAIL_KEYS) {
+    const v: unknown = Reflect.get(input, key)
+    if (typeof v !== 'string' || v.trim() === '') continue
+    let text = v.replace(/\s+/g, ' ').trim()
+    if ((key === 'file_path' || key === 'notebook_path') && cwd !== '' && text.startsWith(cwd + '/')) text = text.slice(cwd.length + 1)
+    return text
+  }
+  return ''
+}
+
+// A note another mod added to a tool result, shortened for the activity row.
+export function notableOf(r: { deny?: string; context?: readonly string[] }): string | null {
+  const texts = [...(r.context ?? []), ...(r.deny === undefined ? [] : [r.deny])]
+  for (const t of texts) {
+    if (t.includes('Loop check')) {
+      if (t.includes('same error')) return 'loop-breaker: repeated error'
+      if (t.includes('you have edited')) return 'loop-breaker: fix attempts'
+      if (t.includes('same arguments')) return 'loop-breaker: repeated call'
+      return 'loop-breaker: loop check'
+    }
+    if (t.includes('memory-guard mod ran the command with a single process')) return 'memory-guard: ran with 1 process'
+    if (t.includes('memory-guard mod reran')) return 'memory-guard: reran after OOM'
+    if (t.includes('memory-guard mod held')) return 'memory-guard: refused'
+    if (t.includes('usage-limit mod')) return 'usage-limit: paused'
+  }
+  return null
+}
+
+// A row with free text in the middle and the elapsed time flush right. The free text is the only
+// part that gets cut.
+function timedRow(head: readonly Seg[], detail: string, elapsed: string, columns: number): Row {
+  const tail: Seg[] = [{ text: elapsed, dim: true }]
+  const fixed = width(head) + width(tail) + 2
+  const room = columns - fixed
+  const text = room >= 4 ? cut(detail, room) : ''
+  const left: Seg[] = text === '' ? [...head] : [...head, { text }]
+  return spread(left, tail, columns) ?? (width(head) <= columns ? [...head] : [{ text: cut(rowText(head), columns) }])
+}
+
+export function activityRows(a: Activity, columns: number): Row[] {
+  const rows: Row[] = []
+  if (a.tool !== null) {
+    rows.push(timedRow([{ text: '● ', tone: 'success' }, { text: a.tool.name, bold: true }, { text: '  ' }], a.tool.detail, clock(a.now - a.tool.startedAt), columns))
+  } else {
+    rows.push(timedRow([{ text: '● ', dim: true }, { text: 'Thinking', dim: true }], '', clock(a.now - a.turnStartedAt), columns))
+  }
+  a.agents.forEach((g, i) => {
+    const branch = i === a.agents.length - 1 ? '  └ ' : '  ├ '
+    rows.push(timedRow([{ text: branch, dim: true }, { text: agentType(g.type), bold: true }, { text: '  ' }], g.description, clock(a.now - g.startedAt), columns))
+  })
+  const parts: Seg[][] = [[{ text: `turn ${clock(a.now - a.turnStartedAt)}`, dim: true }], [{ text: `${a.calls} ${a.calls === 1 ? 'call' : 'calls'}`, dim: true }]]
+  if (a.errors > 0) parts.push([{ text: `${a.errors} ${a.errors === 1 ? 'error' : 'errors'}`, tone: 'error' }])
+  if (a.notable !== null) parts.push([{ text: a.notable, tone: 'warning' }])
+  // Drops from the end until the summary fits.
+  for (let n = parts.length; n > 0; n--) {
+    const row: Row = [{ text: '  ' }, ...parts.slice(0, n).flatMap((p, i) => (i === 0 ? p : [{ text: ' · ', dim: true }, ...p]))]
+    if (width(row) <= columns) {
+      rows.push(row)
+      break
+    }
+  }
+  return rows
+}
+
+// ---------------------------------------------------------------------------------------------
+// Today's mod diaries and the ratings dataset
+// ---------------------------------------------------------------------------------------------
+
+export type Today = { skills: number; nudges: number; writes: number; refusals: number }
+
+export type DiaryFile = { mod: string; name: string; text: string }
+
+function records(text: string): unknown[] {
+  const out: unknown[] = []
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue
+    try {
+      out.push(JSON.parse(line))
+    } catch {
+      // a line cut by a crash mid-write
+    }
+  }
+  return out
+}
+
+// The diary folders the TODAY row reads.
+export const TODAY_MODS = ['skill-loader', 'loop-breaker', 'audit', 'usage-limit', 'memory-guard'] as const
+
+// The day in a diary's name (UTC, as the mods name them).
+export function fileDay(name: string): string | null {
+  return /^(\d{4}-\d{2}-\d{2})(?:-[\w-]+)?\.jsonl$/.exec(name)?.[1] ?? null
+}
+
+// A diary file can hold today's local lines when its UTC day is today or the day before.
+export function mayHoldToday(name: string, today: string): boolean {
+  const day = fileDay(name)
+  if (day === null) return false
+  const before = new Date(Date.parse(today) - 86_400_000).toISOString().slice(0, 10)
+  const after = new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10)
+  return day === today || day === before || day === after
+}
+
+export function countToday(files: readonly DiaryFile[], today: string, timeZone: string): Today {
+  const t: Today = { skills: 0, nudges: 0, writes: 0, refusals: 0 }
+  for (const f of files) {
+    for (const r of records(f.text)) {
+      if (typeof r !== 'object' || r === null) continue
+      const at: unknown = Reflect.get(r, 'at')
+      if (typeof at !== 'string' || !Number.isFinite(Date.parse(at)) || localDay(Date.parse(at), timeZone) !== today) continue
+      const event: unknown = Reflect.get(r, 'event')
+      if (f.mod === 'skill-loader' && event === 'loaded') t.skills += 1
+      else if (f.mod === 'loop-breaker' && event === 'nudge') t.nudges += 1
+      else if (f.mod === 'audit' && typeof Reflect.get(r, 'action') === 'string') t.writes += 1
+      else if (f.mod === 'usage-limit' && event === 'tool-refused') t.refusals += 1
+      else if (f.mod === 'memory-guard' && event === 'refused') t.refusals += 1
+    }
+  }
+  return t
+}
+
+export type Rating = { score: number; at: string }
+
+export function parseRatings(text: string): Rating[] {
+  const out: Rating[] = []
+  for (const r of records(text)) {
+    if (typeof r !== 'object' || r === null) continue
+    const score: unknown = Reflect.get(r, 'score')
+    const at: unknown = Reflect.get(r, 'at')
+    if (typeof score === 'number' && Number.isFinite(score) && typeof at === 'string') out.push({ score, at })
+  }
+  return out
+}
+
+export type Ratings = { last: number | null; todayAverage: number | null; todayCount: number }
+
+export function summarizeRatings(list: readonly Rating[], today: string, timeZone: string): Ratings {
+  const sorted = [...list].sort((a, b) => a.at.localeCompare(b.at))
+  const own = sorted.filter((r) => Number.isFinite(Date.parse(r.at)) && localDay(Date.parse(r.at), timeZone) === today)
+  const sum = own.reduce((n, r) => n + r.score, 0)
+  return { last: sorted.at(-1)?.score ?? null, todayAverage: own.length === 0 ? null : sum / own.length, todayCount: own.length }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The /hud pane
+// ---------------------------------------------------------------------------------------------
+
+export type PaneData = {
+  snapshot: Snapshot
+  activity: Activity | null
+  today: Today | null
+  ratings: Ratings | null
+}
+
+export type Section = { label: string; segs: Seg[] }
+
+const DOT: Seg = { text: ' · ', dim: true }
+
+function joined(parts: readonly Seg[][]): Seg[] {
+  return parts.filter((p) => p.length > 0).flatMap((p, i) => (i === 0 ? p : [DOT, ...p]))
+}
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+export function paneSections(d: PaneData): Section[] {
+  const s = d.snapshot
+  const out: Section[] = []
+
+  const session: Seg[][] = [identity(s, ' · ', true, true)]
+  if (s.startedAt !== null) session.push([{ text: age(s.now - s.startedAt) }])
+  session.push([{ text: plural(s.calls, 'call') }])
+  if (s.context !== null) session.push([{ text: 'ctx ', dim: true }, { text: pct(s.context), tone: contextTone(s.context) }])
+  out.push({ label: 'SESSION', segs: joined(session) })
+
+  const limits: Seg[][] = []
+  for (const [kind, label] of [
+    ['five_hour', '5h'],
+    ['seven_day', '7d'],
+  ] as const) {
+    const w = windowOf(s, kind)
+    if (w === null) continue
+    const reset = w.resetsAt === undefined ? null : resetLabel(w.resetsAt, s.now, s.timeZone)
+    limits.push([{ text: `${label} `, dim: true }, { text: pct(w.percentUsed), tone: limitTone(w.percentUsed) }, ...(reset === null ? [] : [{ text: ` ↻${reset}`, dim: true }])])
+  }
+  if (limits.length > 0) out.push({ label: 'LIMITS', segs: joined(limits) })
+
+  const m = s.memory
+  if (m !== null) {
+    const parts: Seg[][] = []
+    if (m.session !== null && m.bound?.name !== 'session') parts.push([{ text: 'session ', dim: true }, { text: bytes(m.session) }])
+    if (m.bound !== null) parts.push([{ text: `${m.bound.name} `, dim: true }, { text: ratio(m.bound.used, m.bound.limit) }])
+    if (m.machine !== null) parts.push([{ text: 'machine ', dim: true }, { text: ratio(m.machine.total - m.machine.available, m.machine.total) }])
+    parts.push([{ text: bytes(m.headroom), tone: memoryTone(m.headroom) }, { text: ' fits', dim: true }])
+    out.push({ label: 'MEMORY', segs: joined(parts) })
+  }
+
+  const a = d.activity
+  if (a !== null) {
+    const now: Seg[][] = []
+    if (a.tool !== null) now.push([{ text: a.tool.name, bold: true }, ...(a.tool.detail === '' ? [] : [{ text: ` ${cut(a.tool.detail, 40)}` }]), { text: ` ${clock(a.now - a.tool.startedAt)}`, dim: true }])
+    else now.push([{ text: 'thinking', dim: true }, { text: ` ${clock(a.now - a.turnStartedAt)}`, dim: true }])
+    if (a.agents.length > 0) now.push([{ text: plural(a.agents.length, 'subagent') }])
+    out.push({ label: 'NOW', segs: joined(now) })
+  } else {
+    out.push({ label: 'NOW', segs: [{ text: 'idle', dim: true }] })
+  }
+
+  const t = d.today
+  if (t !== null) {
+    const item = (n: number, one: string, many?: string): Seg[] => [{ text: plural(n, one, many), ...(n === 0 ? { dim: true } : {}) }]
+    out.push({ label: 'TODAY', segs: joined([item(t.skills, 'skill'), item(t.nudges, 'loop nudge'), item(t.writes, 'MCP write'), item(t.refusals, 'refusal')]) })
+  }
+
+  const r = d.ratings
+  if (r !== null && r.last !== null) {
+    const parts: Seg[][] = [[{ text: 'last ', dim: true }, { text: `${r.last}/5` }]]
+    if (r.todayAverage !== null) parts.push([{ text: 'today ', dim: true }, { text: (Math.round(r.todayAverage * 10) / 10).toFixed(1) }, { text: ` (${r.todayCount} rated)`, dim: true }])
+    out.push({ label: 'RATINGS', segs: joined(parts) })
+  }
+  return out
+}
+
+export const LABEL_WIDTH = 10
+
+// The pane as plain lines, for Remote Control.
+export function paneText(sections: readonly Section[]): string {
+  return sections.map((x) => `${x.label.padEnd(LABEL_WIDTH)}${rowText(x.segs)}`).join('\n')
+}

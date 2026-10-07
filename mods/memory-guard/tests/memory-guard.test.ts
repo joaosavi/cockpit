@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { groups, headroom, heavy, inactiveFile, reduced, withMeasurement, workingSet } from '../hooks/rules.ts'
+import { groups, headroom, heavy, inactiveFile, reduced, refusalText, statusText, withMeasurement, workingSet } from '../hooks/rules.ts'
 
 const MB = 1024 * 1024
 const GB = 1024 * MB
@@ -45,7 +45,7 @@ test('the headroom is that of the tightest group, and without a group the machin
   expect(headroom([], { available: 8 * GB, total: 16 * GB }, 2)).toBe(8 * GB - 16 * GB * 0.02)
   // The max, where the kernel kills, wins over the high mark, where the group only slows down.
   expect(headroom([{ group: '/a', used: 3 * GB, inactiveFile: 0, high: 3 * GB, max: 3.5 * GB }], null, 0)).toBe(0.5 * GB)
-  expect(groups('0::/agentes.slice/getdemo-rc.service\n')).toEqual(['/agentes.slice/getdemo-rc.service', '/agentes.slice'])
+  expect(groups('0::/agents.slice/demo.service\n')).toEqual(['/agents.slice/demo.service', '/agents.slice'])
 })
 
 type Scenario = {
@@ -79,14 +79,14 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
   on('session.end', () => ({ sessionId: 'abcdef123456' }))
   on('fs.read', ($, e) => {
     const p = e.path
-    if (p.endsWith('/proc/self/cgroup')) return { value: '0::/agentes.slice/getdemo-rc.service\n' }
-    if (p.endsWith('getdemo-rc.service/memory.current')) return { value: String(c.used[0]) }
-    if (p.endsWith('getdemo-rc.service/memory.high')) return { value: String(c.high ?? HIGH) }
-    if (p.endsWith('getdemo-rc.service/memory.max')) return { value: String(c.max ?? MAX) }
-    if (p.endsWith('getdemo-rc.service/memory.stat')) return { value: `anon 1000\ninactive_file ${c.inactive ?? 0}\nactive_file 2000\n` }
+    if (p.endsWith('/proc/self/cgroup')) return { value: '0::/agents.slice/demo.service\n' }
+    if (p.endsWith('demo.service/memory.current')) return { value: String(c.used[0]) }
+    if (p.endsWith('demo.service/memory.high')) return { value: String(c.high ?? HIGH) }
+    if (p.endsWith('demo.service/memory.max')) return { value: String(c.max ?? MAX) }
+    if (p.endsWith('demo.service/memory.stat')) return { value: `anon 1000\ninactive_file ${c.inactive ?? 0}\nactive_file 2000\n` }
     if (p.endsWith('memory.max')) return { value: 'max' }
-    if (p.endsWith('agentes.slice/memory.current')) return { value: String(c.used[0]) }
-    if (p.endsWith('agentes.slice/memory.high')) return { value: 'max' }
+    if (p.endsWith('agents.slice/memory.current')) return { value: String(c.used[0]) }
+    if (p.endsWith('agents.slice/memory.high')) return { value: 'max' }
     return { deny: 'no file' }
   })
   on('process.run', async ($, e) => {
@@ -151,7 +151,7 @@ test('if memory does not drop in time, refuses and shows the groups', async ($, 
   await $.session.start(start)
   const r = await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
   expect(c.commands).toEqual([])
-  expect(r).toMatchObject({ deny: expect.stringContaining('/agentes.slice/getdemo-rc.service: uses') })
+  expect(r).toMatchObject({ deny: expect.stringContaining('/agents.slice/demo.service: ') })
 })
 
 test('a command that died with 137 runs again with a single process', async ($, on) => {
@@ -196,13 +196,16 @@ test('a 1 GB command fits when the group holds 1 GB of inactive file cache', asy
   expect(c.commands).toEqual(['npx tsc --noEmit'])
 })
 
-test('/ram shows the inactive_file behind the headroom', async ($, on) => {
+test('/ram leads with the headroom and shows the file cache behind it', async ($, on) => {
   const c = { used: [3.86 * GB], commands: [], responses: [], inactive: GB, high: 4.5 * GB, max: 'max' as const }
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'ram', args: '' })
-  expect(r.text).toContain('minus 1024 MB inactive_file')
-  expect(r.text).toContain('uses 2929 MB')
+  expect(r.text).toBe(
+    'Headroom: 1587 MB, after the 2% margin\n' +
+      '/agents.slice/demo.service: 2929 MB in use, 1024 MB file cache, high 4608 MB\n' +
+      '/agents.slice: 3953 MB in use, no limit',
+  )
 })
 
 const PANE = {
@@ -213,7 +216,7 @@ const PANE = {
   props: { title: 'Memory', isFocused: true, bodyColumns: 60, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} },
 } as const
 
-test('/ram opens the Memory pane with a block per group, the inactive_file and the headroom', async ($, on) => {
+test('/ram opens the Memory pane with the headroom, a legend, a block per group and the key hint', async ($, on) => {
   const opened: string[] = []
   // memory.current is 3 GB, 1 GB of it inactive file cache.
   const c = { used: [3 * GB], commands: [], responses: [], inactive: GB, peaks: { 'npx tsc': [300 * MB] }, surfaces: ['terminal'], opened }
@@ -221,17 +224,19 @@ test('/ram opens the Memory pane with a block per group, the inactive_file and t
   await $.session.start(start)
   const r = await $.command.run({ command: 'ram', args: '' })
   // The text reply stays the same, for Remote Control.
-  expect(r.text).toContain('minus 1024 MB inactive_file')
+  expect(r.text).toContain('2048 MB in use, 1024 MB file cache, high 3072 MB, max 3584 MB')
   expect(opened).toEqual(['ram'])
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: '/agentes.slice/getdemo-rc.service' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'uses 2048 MB · inactive_file 1024 MB · limit 3584 MB (max)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '/agents.slice/demo.service' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2048 MB in use · 1024 MB cache · high 3072 MB · max 3584 MB' })).toBeDefined()
   // 2 GB of 3.43 GB usable is 58%: green. The high mark at 3 GB of 3.5 GB is drawn.
   expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'success' } })
   expect(await ui.find({ type: 'Text', text: /^▒+$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '│' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /still fits, after the 2% margin/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'measured peaks of npx tsc: 300 MB' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Headroom: 1464 MB, after the 2% margin' })).toMatchObject({ props: { bold: true } })
+  expect(await ui.find({ type: 'Text', text: '█ in use  ▒ file cache  ░ free  │ high mark' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Measured peak of npx tsc: 300 MB' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'updates every 2s · esc closes' })).toBeDefined()
 })
 
 test('pressing refresh in the Memory pane reads the groups again', async ($, on) => {
@@ -240,10 +245,10 @@ test('pressing refresh in the Memory pane reads the groups again', async ($, on)
   await $.session.start(start)
   await $.command.run({ command: 'ram', args: '' })
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: /^uses 2048 MB/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^2048 MB in use/ })).toBeDefined()
   c.used[0] = 3.3 * GB
   await ui.press({ key: 'refresh' })
-  expect(await ui.find({ type: 'Text', text: /^uses 3379 MB/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^3379 MB in use/ })).toBeDefined()
   // 3.3 GB of 3.43 GB usable: red.
   expect(await ui.find({ type: 'Text', text: /^█+$/ })).toMatchObject({ props: { color: 'error' } })
 })
@@ -256,7 +261,7 @@ test('the Memory pane refreshes every 2 seconds while open', async ($, on) => {
   const ui = await $.ui.mount(PANE)
   c.used[0] = 2.5 * GB
   await clock.advance(2000)
-  expect(await ui.find({ type: 'Text', text: /^uses 2560 MB/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^2560 MB in use/ })).toBeDefined()
 })
 
 test('/ram without a surface that draws answers with text only', async ($, on) => {
@@ -265,7 +270,7 @@ test('/ram without a surface that draws answers with text only', async ($, on) =
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'ram', args: '' })
-  expect(r.text).toContain('uses 2048 MB')
+  expect(r.text).toContain('/agents.slice/demo.service: 2048 MB in use, high 3072 MB, max 3584 MB')
   expect(opened).toEqual([])
 })
 
@@ -294,4 +299,17 @@ test('the session ends with one summary line: calls, actions, time held waiting 
     maxHookMs: 0,
   })
   expect(written.filter((l) => l.includes('session-summary')).length).toBe(1)
+})
+
+test('the status line shows only when the headroom is under 500 MB, and the agent texts name the mod', () => {
+  expect(statusText(null)).toBeUndefined()
+  expect(statusText(600 * MB)).toBeUndefined()
+  expect(statusText(420 * MB)).toBe('Memory headroom: 420 MB')
+  expect(statusText(-5 * MB)).toBe('Memory headroom: 0 MB')
+  const h = { kind: 'typecheck', key: 'npx tsc' } as const
+  expect(refusalText(h, 120, 'Headroom: 10 MB, after the 2% margin')).toBe(
+    "The memory-guard mod held this command (npx tsc) for 120s, and the group's memory did not drop enough. " +
+      'Another session or process is using the memory:\nHeadroom: 10 MB, after the 2% margin\n' +
+      'Do not retry now. Tell the user, or continue with work that does not need this command.',
+  )
 })

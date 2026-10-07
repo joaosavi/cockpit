@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { signature } from '../hooks/rules.ts'
+import { nudgeText, signature } from '../hooks/rules.ts'
 
 test('the same error gets the same signature across runs', () => {
   const a = 'FAIL src/a.test.ts > soma\nAssertionError: expected 3 to be 4 at /w/src/a.test.ts:12:5\nTests 1 failed (1) 2.31s'
@@ -152,4 +152,13 @@ test('the session ends with one summary line: calls seen and nudges by kind', as
     hookMs: 0,
     maxHookMs: 0,
   })
+})
+
+test('each nudge names what repeated and tells the agent how to change approach', () => {
+  const tail =
+    'Stop before the next attempt. Write in up to 3 lines what you tried and why it did not work. Then change the approach: ' +
+    're-read the code around the failure, form a new hypothesis and test it, or ask the user if you are blocked.'
+  expect(nudgeText({ kind: 'edits', file: '/w/a.ts', count: 5 })).toBe(`Loop check from the loop-breaker mod: you have edited /w/a.ts 5 times after failed commands in this turn. ${tail}`)
+  expect(nudgeText({ kind: 'error', count: 3 })).toBe(`Loop check from the loop-breaker mod: the same error came back 3 times in this turn. ${tail}`)
+  expect(nudgeText({ kind: 'repeat', tool: 'Bash', count: 3 })).toBe(`Loop check from the loop-breaker mod: you called Bash with the same arguments 3 times in a row. ${tail}`)
 })

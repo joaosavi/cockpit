@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { byCommand, byTool, looksLikeError } from '../hooks/rules.ts'
+import { byCommand, byTool, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
 
 test('each file calls for the right skill', () => {
   expect(byTool('Read', '/w/src/a.ts')?.skill).toBe('typescript-best-practices')
@@ -163,4 +163,13 @@ test('the session ends with one summary line: loads by skill, refusals and calls
     hookMs: 0,
     maxHookMs: 0,
   })
+})
+
+test('the agent texts say what the mod did and what to do next', () => {
+  // The rating mod reads the skill name from a note that starts with `The skill <name>`.
+  expect(loadedText('domain-modeling', 'BODY')).toBe('The skill domain-modeling comes in full below, loaded by the skill-loader mod. Follow it from here on.\n\nBODY')
+  expect(refusalText('technical-writing', '/w/README.md', 'BODY')).toBe(
+    'The skill-loader mod held this call so you follow the technical-writing skill, which applies to /w/README.md. ' +
+      'The skill comes in full below. Read it, then make the same call again, following it.\n\nBODY',
+  )
 })

@@ -1,5 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { expired, isWrite, line, mcpTool, parse, report, summarize, DEFAULTS } from '../hooks/rules.ts'
+import { expired, formatTime, isWrite, line, mcpTool, options, parse, report, summarize, DEFAULTS } from '../hooks/rules.ts'
+
+// The expected times are written in one fixed zone, so the tests pass on any machine.
+const SAO_PAULO = { options: { timeZone: 'America/Sao_Paulo' } }
+const O = { ...DEFAULTS, timeZone: 'America/Sao_Paulo' }
 
 test('reads the server and the action from an MCP tool name', () => {
   expect(mcpTool('mcp__claude_ai_Slack__slack_send_message')).toEqual({ server: 'claude_ai_Slack', action: 'slack_send_message' })
@@ -43,11 +47,11 @@ test('/audit lists the last entries and filters by server or action', () => {
   ].join('\n')
   const entries = parse(text)
   expect(entries.length).toBe(2)
-  const all = report(entries, '', DEFAULTS)
-  expect(all).toContain('Oct 7, 10:00 · claude_ai_Slack · slack_send_message · ok')
+  const all = report(entries, '', O)
+  expect(all).toBe('Last 2 write calls, newest first:\nOct 7, 11:00 · Gmail · create_draft · error: quota\n  to=a@b\nOct 7, 10:00 · Slack · slack_send_message · ok\n  channel=C1')
   expect(all).toContain('create_draft · error: quota')
-  expect(report(entries, 'gmail', DEFAULTS)).not.toContain('slack_send_message')
-  expect(report(entries, '1', DEFAULTS)).not.toContain('slack_send_message')
+  expect(report(entries, 'gmail', O)).not.toContain('slack_send_message')
+  expect(report(entries, '1', O)).not.toContain('slack_send_message')
 })
 
 type Scene = {
@@ -97,7 +101,7 @@ test('records an MCP write and lets it run unchanged', async ($, on) => {
   const r = await $.tool.call({ tool: 'mcp__claude_ai_Slack__slack_send_message', channel_id: 'C1', message: 'oi' })
   expect(r).toMatchObject({ text: 'ok' })
   expect(s.appended.length).toBe(1)
-  expect(JSON.parse(s.appended[0] ?? '{}')).toMatchObject({ session: 'abcdef12', server: 'claude_ai_Slack', action: 'slack_send_message', outcome: 'ok', input: { channel_id: 'C1', message: 'oi' } })
+  expect(JSON.parse(s.appended[0] ?? '{}')).toMatchObject({ event: 'write-call', session: 'abcdef12', server: 'claude_ai_Slack', action: 'slack_send_message', outcome: 'ok', input: { channel_id: 'C1', message: 'oi' } })
 })
 
 test('does not record reads or built-in tools', async ($, on) => {
@@ -154,23 +158,24 @@ function dayFile(): string {
   }).join('\n')
 }
 
-test('/audit opens the Audit pane with one row per entry, colored by outcome', async ($, on) => {
+test('/audit opens the Audit pane with one row per entry, colored by outcome', SAO_PAULO, async ($, on) => {
   const opened: string[] = []
   const s = { appended: [], calls: [], files: { '2026-10-07.jsonl': dayFile() }, surfaces: ['terminal'], opened }
   prepare(on, s)
   await $.session.start(start)
   const r = await $.command.run({ command: 'audit', args: '' })
   // The text reply stays the same, for Remote Control.
-  expect(r.text).toContain('Last 20 write call(s):')
+  expect(r.text).toContain('Last 20 write calls, newest first:\nOct 7, 09:29 · Slack · slack_send_message · denied: blocked by a hook\n')
   expect(opened).toEqual(['audit'])
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: 'Last 20 write calls' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Oct 7, 09:29 · claude_ai_Slack · slack_send_message · ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Last 20 write calls' })).toMatchObject({ props: { bold: true } })
+  expect(await ui.find({ type: 'Text', text: 'esc closes' })).toMatchObject({ props: { dimColor: true } })
+  expect(await ui.find({ type: 'Text', text: 'Oct 7, 09:29 · Slack · slack_send_message · ' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'denied: blocked by a hook' })).toMatchObject({ props: { color: 'warning' } })
   expect(await ui.find({ type: 'Text', text: 'error: quota' })).toMatchObject({ props: { color: 'error' } })
   expect(await ui.find({ type: 'Text', text: /^ok$/ })).toMatchObject({ props: { color: 'success' } })
   // The arguments row is cut to the 60 columns of the pane.
-  const args = await ui.find({ type: 'Text', text: /^ {4}channel_id=C29, / })
+  const args = await ui.find({ type: 'Text', text: /^ {2}channel_id=C29, / })
   expect(args).toMatchObject({ props: { dimColor: true } })
   expect(args?.text.length).toBe(60)
 })
@@ -194,13 +199,13 @@ test('More in the Audit pane shows 20 entries more, and Refresh keeps the filter
   expect(await ui.find({ type: 'Text', text: /slack_send_message/ })).toBeUndefined()
 })
 
-test('/audit without a surface that draws answers with text only', async ($, on) => {
+test('/audit without a surface that draws answers with text only', SAO_PAULO, async ($, on) => {
   const opened: string[] = []
   const s = { appended: [], calls: [], files: { '2026-10-07.jsonl': dayFile() }, opened }
   prepare(on, s)
   await $.session.start(start)
   const r = await $.command.run({ command: 'audit', args: '' })
-  expect(r.text).toContain('Last 20 write call(s):')
+  expect(r.text).toContain('Last 20 write calls, newest first:\nOct 7, 09:29 · Slack · slack_send_message · denied: blocked by a hook\n')
   expect(opened).toEqual([])
 })
 
@@ -224,4 +229,14 @@ test('the session ends with one summary line in the day file, which /audit skips
     maxHookMs: 0,
   })
   expect(parse(s.appended.join('')).length).toBe(1)
+})
+
+test('an empty or unknown time zone falls back to the system time zone', () => {
+  expect(options({}).timeZone).toBe('')
+  expect(options({ timeZone: 'Nowhere/Invented' }).timeZone).toBe('')
+  expect(options({ timeZone: ' America/New_York ' }).timeZone).toBe('America/New_York')
+  const iso = '2026-10-06T22:30:00.000Z'
+  const local = new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  expect(formatTime(iso, '')).toBe(local)
+  expect(formatTime(iso, 'America/New_York')).toBe('Oct 6, 18:30')
 })

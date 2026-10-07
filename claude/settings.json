@@ -96,7 +96,8 @@
     "pipefail@agent": true,
     "mod-report@agent": true,
     "rating@agent": true,
-    "wtf@agent": true
+    "wtf@agent": true,
+    "hud@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -120,6 +121,48 @@
     }
   },
   "effortLevel": "xhigh",
+  "pluginConfigs": {
+    "wtf@agent": {
+      "options": {
+        "language": "Portuguese"
+      }
+    },
+    "secret-guard@agent": {
+      "options": {
+        "envRoot": "~/getdemo"
+      }
+    },
+    "usage-limit@agent": {
+      "options": {
+        "timeZone": "America/Sao_Paulo"
+      }
+    },
+    "audit@agent": {
+      "options": {
+        "timeZone": "America/Sao_Paulo"
+      }
+    },
+    "hud@agent": {
+      "options": {
+        "timeZone": "America/Sao_Paulo",
+        "band": "panel",
+        "activity": true
+      }
+    },
+    "pipefail@agent": {
+      "options": {
+        "extraRunners": [
+          "verificar",
+          "regras"
+        ]
+      }
+    },
+    "rating@agent": {
+      "options": {
+        "configRepo": "~/claude-devcontainer"
+      }
+    }
+  },
   "autoUpdatesChannel": "latest",
   "tui": "default",
   "skipDangerousModePermissionPrompt": true,

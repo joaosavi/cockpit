@@ -15,15 +15,17 @@ import {
   DEFAULTS,
   emptyText,
   type Entry,
+  entryTitle,
   expired,
   fileName,
-  formatTime,
+  headerText,
   isWrite,
   line,
   matching,
   mcpTool,
   type Options,
   options,
+  outcomeText,
   parse,
   report,
   request,
@@ -44,7 +46,6 @@ let view: View = { entries: [], count: 0, filter: '' }
 
 let o: Options = DEFAULTS
 let folder = ''
-let session = ''
 let cwd = ''
 let tally = newTally()
 
@@ -121,26 +122,25 @@ const OUTCOME_COLOR = { ok: 'success', error: 'error', denied: 'warning' } as co
 
 // One entry: time · server · action and the colored outcome, then the arguments, dim, cut to the pane.
 function entryRows(ui: Ui, e: Entry, columns: number): RenderElement {
-  const who = e.agentId === undefined ? '' : ' (subagent)'
-  const status = e.outcome === 'ok' || e.error === undefined ? e.outcome : `${e.outcome}: ${cut(e.error, 60)}`
   return ui.Box({
     flexDirection: 'column',
     children: [
       ui.Box({
         flexDirection: 'row',
         children: [
-          ui.Text({ wrap: 'truncate', children: [`${formatTime(e.at, o.timeZone)} · ${e.server} · ${e.action}${who} · `] }),
-          ui.Text({ color: OUTCOME_COLOR[e.outcome], wrap: 'truncate', children: [status] }),
+          ui.Text({ wrap: 'truncate', children: [`${entryTitle(e, o.timeZone)} · `] }),
+          ui.Text({ color: OUTCOME_COLOR[e.outcome], wrap: 'truncate', children: [outcomeText(e, 60)] }),
         ],
       }),
-      ui.Text({ dimColor: true, children: [`    ${cut(argsText(e.input), columns - 4)}`] }),
+      ui.Text({ dimColor: true, children: [`  ${cut(argsText(e.input), columns - 2)}`] }),
     ],
   })
 }
 
+// The /audit pane: a bold header, the entries newest first, then the key hints.
 function auditPane(ui: Ui, v: View, columns: number, more: () => Promise<void>, refresh: () => Promise<void>): RenderElement {
   const n = v.entries.length
-  const header = n === 0 ? emptyText(v.filter) : `Last ${n} write calls${v.filter === '' ? '' : ` matching "${v.filter}"`}`
+  const header = n === 0 ? emptyText(v.filter) : headerText(n, v.filter)
   // Newest first, so the latest calls show without scrolling.
   const rows = [...v.entries].reverse().map((e) => entryRows(ui, e, columns))
   return ui.Box({
@@ -155,6 +155,7 @@ function auditPane(ui: Ui, v: View, columns: number, more: () => Promise<void>, 
         children: [
           ui.Button({ key: 'more', label: 'More', hotkey: 'm', plain: true, onPress: more }),
           ui.Button({ key: 'refresh', label: 'Refresh', hotkey: 'r', plain: true, onPress: refresh }),
+          ui.Text({ dimColor: true, wrap: 'truncate', children: ['esc closes'] }),
         ],
       }),
     ],
@@ -166,7 +167,6 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     const home = await $.env.get('HOME')
-    session = (await $.session.id()).slice(0, 8)
     cwd = await $.session.cwd()
     if (home !== undefined) {
       folder = `${home}/.local/state/mods/audit`
@@ -178,7 +178,7 @@ export function register(on: On, values: PluginOptions) {
       }
     }
     try {
-      await $.command.register({ name: 'audit', description: 'Shows the last MCP write calls: /audit [count] [filter]', argumentHint: '[count] [filter]', immediate: true })
+      await $.command.register({ name: 'audit', description: 'Show the last MCP calls that wrote: /audit [count] [filter]', argumentHint: '[count] [filter]', immediate: true })
     } catch {
       // a taken name leaves the mod recording without the command
     }
@@ -187,7 +187,7 @@ export function register(on: On, values: PluginOptions) {
 
   // The text reply stays for Remote Control, which draws no pane.
   on('command.run', { command: 'audit' }, async ($, e) => {
-    if (folder === '') return { text: 'The audit mod has no folder to read: HOME is not set.' }
+    if (folder === '') return { text: 'The audit mod has no folder to read, because HOME is not set.' }
     const { count, filter } = request(e.args, o)
     const text = report(await loadView($, count, filter), e.args, o)
     if ((await $.session.surfaces()).length > 0) await $.ui.open({ id: PANE, title: 'Audit', focus: true, closeOnEscape: true })
@@ -220,7 +220,9 @@ export function register(on: On, values: PluginOptions) {
       countAction(tally, 'recorded')
       await append($, {
         at: new Date(start).toISOString(),
-        session,
+        event: 'write-call',
+        // Read on each call, because `/clear` and `/resume` change the session id without reloading the mod.
+        session: (await $.session.id()).slice(0, 8),
         cwd,
         ...(e.agentId === undefined ? {} : { agentId: e.agentId }),
         server: t.server,

@@ -25,7 +25,7 @@ export type Options = {
   bandFrom: number
 }
 
-export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: 'America/Sao_Paulo', resumeOnError: true, bandFrom: 75 }
+export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: '', resumeOnError: true, bandFrom: 75 }
 
 // Margin after the reset time, because the server can release the limit a few seconds late.
 export const MARGIN_MS = 2 * 60_000
@@ -41,7 +41,7 @@ export function options(values: unknown): Options {
   return {
     reserve: number('reserve', DEFAULTS.reserve),
     alert: number('alert', DEFAULTS.alert),
-    timeZone: typeof timeZone === 'string' && timeZone !== '' ? timeZone : DEFAULTS.timeZone,
+    timeZone: typeof timeZone === 'string' ? validTimeZone(timeZone.trim()) : DEFAULTS.timeZone,
     resumeOnError: typeof resume === 'boolean' ? resume : DEFAULTS.resumeOnError,
     bandFrom: number('bandFrom', DEFAULTS.bandFrom),
   }
@@ -62,12 +62,30 @@ export function classify(windows: readonly Window[], o: Pick<Options, 'reserve' 
 
 const NAMES: Record<string, string> = { five_hour: '5-hour window', seven_day: '7-day window' }
 
+// An unknown kind, such as a per-model weekly window, reads as its words: `seven_day_opus` → `seven day opus window`.
 export function windowName(kind: string): string {
-  return NAMES[kind] ?? kind
+  return NAMES[kind] ?? `${kind.replace(/_/g, ' ')} window`
+}
+
+// A time zone the runtime knows, or empty for the system's own. An unknown name falls back to empty
+// instead of throwing on every time shown.
+function validTimeZone(tz: string): string {
+  if (tz === '') return ''
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+    return tz
+  } catch {
+    return ''
+  }
+}
+
+// The `timeZone` field of a date format: absent when empty, so the system time zone applies.
+export function zone(timeZone: string): { timeZone?: string } {
+  return timeZone === '' ? {} : { timeZone }
 }
 
 export function formatTime(iso: string, timeZone: string): string {
-  return new Date(iso).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  return new Date(iso).toLocaleString('en-US', { ...zone(timeZone), month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
 export function msUntilReset(window: Window, now: number): number | null {
@@ -79,41 +97,84 @@ export function pauseText(window: Window, o: Options): string {
   const back = window.resetsAt === undefined ? 'when the limit resets' : `at ${formatTime(window.resetsAt, o.timeZone)}`
   return (
     `Paused by the usage-limit mod: the account's ${windowName(window.kind)} is at ${window.percentUsed}%, ` +
-    `and the last ${o.reserve}% are kept in reserve for the user. Do not call any more tools. ` +
+    `and the last ${o.reserve}% is kept in reserve for the user. Do not call any more tools. ` +
     `Write in up to 3 lines where you stopped and what is left. The session resumes on its own ${back}.`
   )
 }
 
 export function reserveTurnText(window: Window): string {
   return (
-    `The account usage limit is at ${window.percentUsed}% (${windowName(window.kind)}), ` +
-    "and this turn spends the user's reserve. Answer directly, without subagents, and read only the part you need."
+    `The account's usage limit is at ${window.percentUsed}% (${windowName(window.kind)}), and this turn spends the user's reserve. ` +
+    'Answer the user directly, without subagents, and read only the part of each file you need.'
   )
+}
+
+export function reserveSubagentText(): string {
+  return 'The usage-limit mod refused this subagent: the account is in its reserve, where no subagent runs. Do the task directly, reading only the part you need.'
+}
+
+export function throttledSubagentText(window: Window, o: Pick<Options, 'alert'>): string {
+  return (
+    `The usage-limit mod refused this subagent: the account's usage limit is at ${window.percentUsed}%, and above ${o.alert}% only one subagent runs at a time. ` +
+    'Wait for the running one to finish, or do the task directly.'
+  )
+}
+
+export function heldText(window: Window, o: Pick<Options, 'timeZone'>): string {
+  const back = window.resetsAt === undefined ? 'when the limit resets' : `at ${formatTime(window.resetsAt, o.timeZone)}`
+  return `Held by the usage-limit mod: the account is in its reserve. This message is delivered when the session resumes, ${back}.`
 }
 
 export function resumeText(window: Window, queue: readonly string[]): string {
   const base =
-    `This session paused when the usage limit's ${windowName(window.kind)} reached ` +
-    `${window.percentUsed}%, to keep the user's reserve. The limit has reset. Continue where you left off, ` +
-    'with at most one subagent at a time, reading excerpts instead of whole files.'
+    `This session paused when the account's ${windowName(window.kind)} reached ${window.percentUsed}%, to keep the user's reserve. ` +
+    'The limit has reset. Continue where you left off, with at most one subagent at a time, reading excerpts instead of whole files.'
   if (queue.length === 0) return base
   const received = queue.map((t, i) => `${i + 1}. ${t}`).join('\n')
-  return `${base}\n\nThese messages arrived during the pause and were held:\n${received}`
+  return `${base}\n\nThese messages arrived during the pause and were held for you:\n${received}`
 }
 
-export function summary(windows: readonly Window[], zone: Zone, o: Options): string {
-  if (windows.length === 0) return 'no reading yet. The first model response carries the percentage.'
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+// The state in plain words, after `Usage limit: ` in /limit and in the status line.
+export function stateText(zone: Zone, o: Options): string {
+  switch (zone.kind) {
+    case 'paused': {
+      const at = zone.window.resetsAt
+      const back = at === undefined ? 'no reset time known' : `resumes ${formatTime(at, o.timeZone)}`
+      return `paused at ${zone.window.percentUsed}% to keep the ${o.reserve}% reserve, ${back}`
+    }
+    case 'throttled':
+      return `throttled at ${zone.window.percentUsed}%, one subagent at a time above ${o.alert}%`
+    case 'free':
+      return `normal (one subagent at a time from ${o.alert}%, pause at ${100 - o.reserve}%)`
+    default: {
+      const exhaustive: never = zone
+      return exhaustive
+    }
+  }
+}
+
+// The status line under the prompt, shown only while the mod holds something back.
+export function statusText(zone: Zone, o: Options): string | undefined {
+  return zone.kind === 'free' ? undefined : `Usage limit: ${stateText(zone, o)}`
+}
+
+// What the mod is holding for the resume, as /limit reports it.
+export type Pending = { isResumeScheduled: boolean; held: number }
+
+// The /limit reply: plain lines, so it reads the same in Remote Control.
+export function limitReport(windows: readonly Window[], zone: Zone, o: Options, pending: Pending): string {
+  if (windows.length === 0) return 'Usage limit: no reading yet. The first model response in this session reports it.'
   const lines = windows.map((w) => {
     const back = w.resetsAt === undefined ? '' : `, resets ${formatTime(w.resetsAt, o.timeZone)}`
     return `${windowName(w.kind)}: ${w.percentUsed}%${back}`
   })
-  const state =
-    zone.kind === 'paused'
-      ? `paused at ${100 - o.reserve}%`
-      : zone.kind === 'throttled'
-        ? `throttled above ${o.alert}%, one subagent at a time`
-        : 'free'
-  return [state, ...lines].join('\n')
+  if (pending.isResumeScheduled) lines.push('Resume scheduled for when the window resets.')
+  if (pending.held > 0) lines.push(`${plural(pending.held, 'message')} held for the resume.`)
+  return [`Usage limit: ${stateText(zone, o)}`, ...lines].join('\n')
 }
 
 // What arrives without anyone typing: routine, task notification, another session, MCP channel,
@@ -231,6 +292,7 @@ export function bandRows(windows: readonly Window[], columns: number, o: Options
   }))
 }
 
+// The band's last row while paused.
 export function pausedText(zone: Zone, o: Pick<Options, 'timeZone'>): string | null {
   if (zone.kind !== 'paused') return null
   const at = zone.window.resetsAt

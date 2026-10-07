@@ -1,23 +1,37 @@
 {
   "name": "memory-guard",
-  "version": "1.2.0",
-  "description": "Keeps typecheck, build, test and Playwright below the group memory max: runs them with a single process, waits or refuses, and retries a command that died with exit 137",
+  "version": "1.3.1",
+  "description": "Keeps typecheck, build, test and Playwright runs under the session's cgroup memory limit, so the kernel does not kill them: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137.",
   "author": {
-    "name": "João Savi"
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
   },
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/memory-guard",
+  "repository": "https://github.com/joaosavi/claude-devcontainer",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "cgroup",
+    "oom",
+    "typecheck",
+    "build",
+    "test",
+    "playwright",
+    "mod"
+  ],
   "userConfig": {
     "margin": {
       "type": "number",
-      "title": "Margin",
-      "description": "Percentage of each group's memory max that stays free. The high mark counts only for a group with no max",
+      "title": "Margin (%)",
+      "description": "Share of each cgroup's memory max kept free. The high mark counts only for a cgroup with no max.",
       "default": 2,
       "min": 0,
       "max": 30
     },
     "waitSeconds": {
       "type": "number",
-      "title": "Wait",
-      "description": "Seconds a heavy command waits for memory to drop before it is refused",
+      "title": "Wait for memory (seconds)",
+      "description": "How long a heavy command waits for memory to free up before it is refused.",
       "default": 120,
       "min": 0,
       "max": 600

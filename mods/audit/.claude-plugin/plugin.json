@@ -1,11 +1,43 @@
 {
   "name": "audit",
-  "version": "1.2.0",
-  "description": "Records every MCP call that writes (Slack, Gmail, HubSpot, Notion, Calendar, Drive...) in one file per day, without refusing anything. /audit shows the last ones",
-  "author": { "name": "João Savi" },
+  "version": "1.4.0",
+  "description": "Records every MCP call that writes (Slack, Gmail, HubSpot, Notion, Calendar, Drive and others) in a daily file, so you can see what the agent sent on your behalf; refuses nothing, and /audit lists the latest.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/audit",
+  "repository": "https://github.com/joaosavi/claude-devcontainer",
+  "license": "MIT",
+  "keywords": [
+    "audit",
+    "mcp",
+    "log",
+    "compliance",
+    "mod"
+  ],
   "userConfig": {
-    "retentionDays": { "type": "number", "title": "Retention", "description": "Days of audit files to keep", "default": 30, "min": 1, "max": 365 },
-    "showCount": { "type": "number", "title": "Entries shown", "description": "How many entries /audit shows when no number is given", "default": 20, "min": 1, "max": 500 },
-    "timeZone": { "type": "string", "title": "Time zone", "description": "Time zone of the times /audit shows", "default": "America/Sao_Paulo" }
+    "retentionDays": {
+      "type": "number",
+      "title": "Retention (days)",
+      "description": "Days of audit files to keep. Older files are removed when a session starts.",
+      "default": 30,
+      "min": 1,
+      "max": 365
+    },
+    "showCount": {
+      "type": "number",
+      "title": "Entries shown",
+      "description": "How many entries /audit shows when you give no number.",
+      "default": 20,
+      "min": 1,
+      "max": 500
+    },
+    "timeZone": {
+      "type": "string",
+      "title": "Time zone",
+      "description": "IANA time zone for the times shown, such as America/New_York. Empty uses the system time zone.",
+      "default": ""
+    }
   }
 }

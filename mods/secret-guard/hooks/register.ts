@@ -1,6 +1,6 @@
 // Keeps the value of a secret out of every tool result, built-in tools, MCP tools and subagents alike.
 //
-// Ported from hooks/segredo.pl. Nothing is refused: the value becomes `<hidden:NAME>` before it reaches
+// Ported from an earlier Perl hook. Nothing is refused: the value becomes `<hidden:NAME>` before it reaches
 // the transcript, and the agent keeps reading, editing and using `.env` files. When the agent writes a
 // placeholder back in an edit of a secret file, the real value goes to the file in its place.
 //
@@ -69,16 +69,19 @@ let built: Built | null = null
 // Parallel tool calls share one rebuild.
 let building: Promise<Built> | null = null
 
+// One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
+// on each write, because `/clear` and `/resume` change it without reloading the mod.
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
   try {
     before = await $.fs.read(diary)
   } catch {
-    // first entry of the session
+    // the diary's first line
   }
-  const line = JSON.stringify({ at: new Date(await $.clock.now()).toISOString(), ...entry })
-  await $.fs.write(diary, before + line + '\n')
+  const at = new Date(await $.clock.now()).toISOString()
+  const session = (await $.session.id()).slice(0, 8)
+  await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
 async function paths($: Api): Promise<Paths> {
@@ -102,7 +105,7 @@ async function isFile($: Api, path: string): Promise<boolean> {
   }
 }
 
-// The `.env*` files under `dir`, and the folders whose mtime is watched, as segredo.pl's `varre`.
+// The `.env*` files under `dir`, and the folders whose mtime is watched, as the Perl hook's folder scan found them.
 async function scan($: Api, dir: string, depth: number, files: string[], watched: string[]) {
   let entries
   try {
@@ -132,7 +135,9 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
   if (s === null) {
     const found: string[] = []
     const dirs: string[] = []
-    await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
+    // An empty env root turns the folder scan off: the list then holds the secrets file, the
+    // environment and URL passwords, and the known token formats still apply.
+    if (p.envRoot !== '') await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
     s = { envFiles: found.sort(), dirs, at: builtAt }
   }
   const files = s.envFiles
@@ -187,12 +192,13 @@ async function dirsChanged($: Api, b: Built): Promise<boolean> {
   return checks.some((changed) => changed)
 }
 
-// The source files are checked on every call, which is a handful of stats. The folders, about 140 of
-// them under ~/getdemo, are checked at most every 60 s, or right away when the call touched a secret file.
+// The source files are checked on every call, which is a handful of stats. The folders, which can be
+// over a hundred under a root holding many repos, are checked at most every 60 s, or right away when
+// the call touched a secret file. With no env root there are no folders to check.
 async function isFresh($: Api, b: Built, rescan: Rescan): Promise<{ isFresh: boolean; prior: Scan | null }> {
   const now = await $.clock.now()
   if (now - b.builtAt >= MAX_AGE_MS || rescan === 'force') return { isFresh: false, prior: null }
-  if (rescan === 'check' || now - b.dirsCheckedAt >= DIRS_CHECK_MS) {
+  if (b.scan.dirs.length > 0 && (rescan === 'check' || now - b.dirsCheckedAt >= DIRS_CHECK_MS)) {
     b.dirsCheckedAt = now
     if (await dirsChanged($, b)) return { isFresh: false, prior: null }
   }
@@ -307,11 +313,23 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
+    // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     const home = await $.env.get('HOME')
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/secret-guard/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
+    // Build the list in the background now, so the session's first tool call does not wait for it
+    // (it took up to half a second on a machine with seven .env files). A call that comes first
+    // joins the same build.
+    $.clock.after(0, async () => {
+      try {
+        await currentTable($)
+      } catch {
+        // the first tool call builds it again and reports
+      }
+    })
     return next(e)
   })
 
@@ -329,7 +347,7 @@ export function register(on: On, values: PluginOptions) {
       const out = redactResult(r, t, found, restored === null ? [] : [RESTORED_NOTICE])
       if (found.size > 0) {
         countAction(tally, 'redacted')
-        await log($, { event: 'redacted', tool: e.tool, agent: e.agentId ?? null, names: sortedNames(found), count: total(found), isError: r.isError === true })
+        await log($, { event: 'redacted', tool: e.tool, agentId: e.agentId, names: sortedNames(found), count: total(found), isError: r.isError === true })
       }
       return out
     }),

@@ -5,17 +5,22 @@ export type Options = {
   datasetDir: string
   // Draw the rating row above the prompt after each answer.
   band: boolean
+  // Git repo whose short HEAD commit each turn records as `configVersion`, such as the repo that holds
+  // your Claude Code settings. Empty records none.
+  configRepo: string
 }
 
-export const DEFAULTS: Options = { datasetDir: '~/datasets/agent-ratings', band: true }
+export const DEFAULTS: Options = { datasetDir: '~/datasets/agent-ratings', band: true, configRepo: '' }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
   const dir: unknown = Reflect.get(values, 'datasetDir')
   const band: unknown = Reflect.get(values, 'band')
+  const repo: unknown = Reflect.get(values, 'configRepo')
   return {
     datasetDir: typeof dir === 'string' && dir.trim() !== '' ? dir.trim() : DEFAULTS.datasetDir,
     band: typeof band === 'boolean' ? band : DEFAULTS.band,
+    configRepo: typeof repo === 'string' ? repo.trim() : DEFAULTS.configRepo,
   }
 }
 
@@ -150,7 +155,7 @@ export function isNudged(r: CallResult): boolean {
 }
 
 // Skills that reached the agent: the Skill tool's own argument, and the blocks the skill-loader mod
-// appends, which start with `The skill <name>` (or the older Portuguese `A skill <name> vem completa`).
+// appends, which start with `The skill <name>`.
 export function skillsOf(tool: string, input: Readonly<Record<string, unknown>>, r: CallResult): string[] {
   const found: string[] = []
   if (tool === 'Skill') {
@@ -158,8 +163,7 @@ export function skillsOf(tool: string, input: Readonly<Record<string, unknown>>,
     if (typeof s === 'string' && s !== '') found.push(s)
   }
   for (const c of r.context ?? []) {
-    const m = /^(?:A skill (\S+) vem completa|The skill (\S+))/.exec(c)
-    const name = m?.[1] ?? m?.[2]
+    const name = /^The skill (\S+)/.exec(c)?.[1]
     if (name !== undefined) found.push(name)
   }
   return found
@@ -336,8 +340,8 @@ export function rateText(id: string, score: number, prompt: string): string {
 
 export function showText(id: string, prompt: string, user: number | null, implicit: number | null): string {
   const u = user === null ? 'not rated' : `${user}/5`
-  const i = implicit === null ? 'pending (written at the next prompt)' : `${implicit}`
-  return `Last turn ${id} "${excerpt(prompt)}"\nuser score: ${u} · implicit score: ${i}\n${RATE_USAGE}`
+  const i = implicit === null ? 'pending, written at your next prompt' : `${implicit}`
+  return `Last turn ${id} "${excerpt(prompt)}"\nYour score: ${u} · implicit score: ${i}\n${RATE_USAGE}`
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -403,7 +407,7 @@ function bucket(): Bucket {
 }
 
 function avg(xs: readonly number[]): string {
-  if (xs.length === 0) return '-'
+  if (xs.length === 0) return 'none'
   return (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2)
 }
 
@@ -411,22 +415,56 @@ function pct(part: number, whole: number): string {
   return whole === 0 ? '0%' : `${Math.round((part / whole) * 100)}%`
 }
 
-function table(title: string, rows: ReadonlyMap<string, Bucket>): string[] {
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+// `2026-10-01` → `Oct 1`, the date format the other mods use.
+export function shortDate(isoDay: string): string {
+  return new Date(`${isoDay}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
+}
+
+// One line of the report with its tone: the text reply joins them, the pane colors them.
+export type ReportLine = { text: string; tone: 'title' | 'heading' | 'plain' | 'dim' }
+
+// The user's part reads "not rated yet" instead of a "none (0 rated)" that repeats on every line.
+function yours(scores: readonly number[]): string {
+  return scores.length === 0 ? 'not rated yet' : `you ${avg(scores)} over ${plural(scores.length, 'rating')}`
+}
+
+function bucketText(name: string, b: Bucket): string {
+  const implicit = b.implicit.length === 0 ? '' : `, implicit ${avg(b.implicit)}`
+  return `  ${name}: ${plural(b.turns, 'turn')}, ${yours(b.user)}${implicit}`
+}
+
+function section(title: string, rows: ReadonlyMap<string, Bucket>): ReportLine[] {
   if (rows.size === 0) return []
-  const sorted = [...rows.entries()].sort((a, b) => b[1].turns - a[1].turns)
-  return [
-    '',
-    title,
-    ...sorted.map(([name, b]) => `  ${name.padEnd(28)} turns ${String(b.turns).padStart(4)} · user ${avg(b.user).padStart(4)} (${b.user.length}) · implicit ${avg(b.implicit).padStart(4)}`),
-  ]
+  const sorted = [...rows.entries()].sort((a, b) => b[1].turns - a[1].turns || a[0].localeCompare(b[0]))
+  return [{ text: title, tone: 'heading' }, ...sorted.map(([name, b]): ReportLine => ({ text: bucketText(name, b), tone: 'plain' }))]
 }
 
-function compare(label: string, withIt: readonly number[], without: readonly number[]): string {
-  return `  ${label.padEnd(16)} avg user score with ${avg(withIt)} (${withIt.length}) · without ${avg(without)} (${without.length})`
+function compare(label: string, withIt: readonly number[], without: readonly number[]): ReportLine | null {
+  // With no rating on either side there is nothing to compare yet.
+  if (withIt.length === 0 && without.length === 0) return null
+  return { text: `  ${label}: you ${avg(withIt)} with (${plural(withIt.length, 'turn')}), ${avg(without)} without (${plural(without.length, 'turn')})`, tone: 'plain' }
 }
 
-export function report(turns: readonly TurnRecord[], ratings: readonly RatingRecord[], signals: readonly SignalRecord[], days: number): string {
-  if (turns.length === 0) return `No turns recorded in the last ${days} day(s).`
+// The effect of signals needs ratings from the user; the section shows once there is one to compare.
+function signalsSection(lines: ReadonlyArray<ReportLine | null>): ReportLine[] {
+  const shown = lines.filter((l): l is ReportLine => l !== null)
+  return shown.length === 0 ? [] : [{ text: 'Effect of signals', tone: 'heading' }, ...shown]
+}
+
+function span(today: string, days: number): string {
+  if (days === 1) return `today (${shortDate(today)})`
+  const from = new Date(Date.parse(today) - (days - 1) * 86_400_000).toISOString().slice(0, 10)
+  return `last ${days} days (${shortDate(from)} to ${shortDate(today)})`
+}
+
+// The /ratings report: plain lines without column padding, so it reads the same in Remote Control.
+export function report(turns: readonly TurnRecord[], ratings: readonly RatingRecord[], signals: readonly SignalRecord[], days: number, today: string): ReportLine[] {
+  const title: ReportLine = { text: `Ratings, ${span(today, days)}`, tone: 'title' }
+  if (turns.length === 0) return [title, { text: 'No turns recorded in this window.', tone: 'dim' }]
   const user = latest(ratings)
   const implicit = latest(signals)
   const total = bucket()
@@ -462,22 +500,30 @@ export function report(turns: readonly TurnRecord[], ratings: readonly RatingRec
   }
   const lowest = [...rated].sort((a, b) => a.score - b.score || b.t.at.localeCompare(a.t.at)).slice(0, 5)
   return [
-    `Ratings, last ${days} day(s)`,
-    `turns recorded ${total.turns} · rated by you ${total.user.length} (${pct(total.user.length, total.turns)})`,
-    `average user score ${avg(total.user)} · average implicit score ${avg(total.implicit)} (${total.implicit.length} with signals)`,
-    ...table('Per project', byProject),
-    ...table('Per skill used', bySkill),
-    '',
-    'Effect of signals',
-    compare('loop nudges', nudge.with, nudge.without),
-    compare('refusals', refusal.with, refusal.without),
-    '',
-    'Lowest rated',
-    ...(lowest.length === 0 ? ['  none rated yet'] : lowest.map((r) => `  ${r.score}/5 ${r.t.id} "${excerpt(r.t.prompt)}"`)),
-  ].join('\n')
+    title,
+    { text: `${plural(total.turns, 'turn')} recorded, ${total.user.length} rated by you (${pct(total.user.length, total.turns)})`, tone: 'plain' },
+    { text: `Average score: ${total.user.length === 0 ? 'not rated by you yet' : `${avg(total.user)} from you`}, ${avg(total.implicit)} implicit (${total.implicit.length} with signals)`, tone: 'plain' },
+    ...section('Per project', byProject),
+    ...section('Per skill used', bySkill),
+    ...signalsSection([compare('loop nudges', nudge.with, nudge.without), compare('refusals', refusal.with, refusal.without)]),
+    { text: 'Lowest rated', tone: 'heading' },
+    ...(lowest.length === 0
+      ? [{ text: '  none rated yet', tone: 'dim' } satisfies ReportLine]
+      : lowest.map((r): ReportLine => ({ text: `  ${r.score}/5 ${r.t.id} "${excerpt(r.t.prompt)}"`, tone: 'plain' }))),
+  ]
 }
 
 // ---------------------------------------------------------------------------------------------
 // The band
 
 export const BAND_LABELS = ['bad', 'weak', 'ok', 'good', 'great'] as const
+
+// What the rating row holds at a width. The five buttons (`1: bad` to `5: great`) take 33 columns; the
+// label and the hint come and go so the row never wraps, down to 50 columns.
+export type BandLayout = { label: string; gap: number; hint: string | null }
+
+export function bandLayout(columns: number): BandLayout {
+  if (columns >= 90) return { label: 'Rate the last answer:', gap: 2, hint: '/rate N tags -- comment' }
+  if (columns >= 66) return { label: 'Rate the last answer:', gap: 2, hint: null }
+  return { label: 'Rate:', gap: 1, hint: null }
+}

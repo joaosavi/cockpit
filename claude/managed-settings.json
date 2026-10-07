@@ -1,9 +1,24 @@
 {
   "extraKnownMarketplaces": {
     "agent": {
-      "source": { "source": "directory", "path": "/home/sv/claude-devcontainer" }
+      "source": {
+        "source": "directory",
+        "path": "/home/sv/claude-devcontainer"
+      }
     }
   },
-  "enabledPlugins": { "global-memory@agent": true },
-  "prependPlugins": ["global-memory@agent", "sec-default@builtin"]
+  "enabledPlugins": {
+    "global-memory@agent": true
+  },
+  "prependPlugins": [
+    "global-memory@agent",
+    "sec-default@builtin"
+  ],
+  "pluginConfigs": {
+    "global-memory@agent": {
+      "options": {
+        "globalDir": "~/claude-devcontainer/memorias/vps"
+      }
+    }
+  }
 }

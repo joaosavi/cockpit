@@ -3,7 +3,7 @@ import { expandHome, indexContent, parseSection, rewriteSection, withGlobalIndex
 import { coreSection } from './core-section.ts'
 
 const PROJECT = '/home/u/.claude/projects/-home-u-work/memory/'
-const GLOBAL = '/home/u/claude-devcontainer/memorias/vps'
+const GLOBAL = '/home/u/.claude/global-memory'
 const GLOBAL_INDEX = `${GLOBAL}/MEMORY.md`
 const PROJECT_INDEX = `${PROJECT}MEMORY.md`
 
@@ -23,7 +23,7 @@ test('reads the project folder and the mode from the opening sentence', () => {
 })
 
 test('expands ~ with HOME and refuses ~ without it', () => {
-  expect(expandHome('~/claude-devcontainer/memorias/vps', '/home/u')).toBe(GLOBAL)
+  expect(expandHome('~/.claude/global-memory', '/home/u')).toBe(GLOBAL)
   expect(expandHome('/srv/memory', undefined)).toBe('/srv/memory')
   expect(expandHome('~/x', undefined)).toBeNull()
 })
@@ -32,10 +32,10 @@ test('the rewritten section keeps the project folder and adds the global one wit
   const r = rewriteSection(coreSection(PROJECT), GLOBAL)
   expect(r?.mode).toBe('writable')
   const text = r?.text ?? ''
-  expect(text).toContain(`a project directory at \`${PROJECT}\` and a VPS-wide global directory at \`${GLOBAL}/\`. Both directories already exist`)
+  expect(text).toContain(`a project directory at \`${PROJECT}\` and a machine-wide global directory at \`${GLOBAL}/\`. Both directories already exist`)
   expect(text).toContain('## Memory scope')
   expect(text).toContain('- `user` and `feedback`: default to global.')
-  expect(text).toContain('- `reference`: global when it is about the VPS, its tools, access or services')
+  expect(text).toContain('- `reference`: global when it is about the machine, its tools, access or services')
   expect(text).toContain('- `project`: always the project directory.')
   expect(text).toContain('Each directory has its own `MEMORY.md` index.')
   expect(text).toContain('check both directories for an existing memory')
@@ -59,7 +59,7 @@ test('a read-only section stays read-only and the global folder comes in read-on
   const r = rewriteSection(coreSection(PROJECT, true), GLOBAL)
   expect(r?.mode).toBe('read-only')
   const text = r?.text ?? ''
-  expect(text).toContain(`VPS-wide global directory at \`${GLOBAL}/\`. This memory is read-only this session — you cannot save new memories to either directory.`)
+  expect(text).toContain(`machine-wide global directory at \`${GLOBAL}/\`. This memory is read-only this session — you cannot save new memories to either directory.`)
   expect(text).toContain('There are two scope levels, both read-only this session:')
   expect(text).not.toContain('already exist')
   expect(text).not.toContain('Choose the directory by type')
@@ -101,7 +101,7 @@ function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
     return { deny: 'no such file' }
   })
   on('fs.read', ($, e) => {
-    if (e.path === GLOBAL_INDEX && s.globalExists && s.indexExists !== false) return { value: '- [VPS fact](vps-fact.md) — invented\n' }
+    if (e.path === GLOBAL_INDEX && s.globalExists && s.indexExists !== false) return { value: '- [Machine fact](machine-fact.md) — invented\n' }
     const text = s.written.get(e.path)
     return text === undefined ? { deny: 'no file' } : { value: text }
   })
@@ -130,7 +130,7 @@ test('rewrites the memory section and leaves other sections alone', async ($, on
   on('prompt.section', ($, e) => ({ text: e.name === 'memory' ? coreSection(PROJECT) : 'core text' }))
   await $.session.start(start)
   const memory = await $.prompt.section({ name: 'memory', text: coreSection(PROJECT) })
-  expect(memory.text).toContain(`VPS-wide global directory at \`${GLOBAL}/\``)
+  expect(memory.text).toContain(`machine-wide global directory at \`${GLOBAL}/\``)
   expect(memory.text).toContain(`a project directory at \`${PROJECT}\``)
   const other = await $.prompt.section({ name: 'env_info_simple', text: 'core text' })
   expect(other.text).toBe('core text')
@@ -173,7 +173,7 @@ test('the context gets the global MEMORY.md as a memory instruction file after t
   on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: FILES }))
   await $.session.start(start)
   const r = await $.prompt.context({ blocks: [{ name: 'claudeMd', text: 'core' }], instructionFiles: FILES })
-  expect(r.instructionFiles).toEqual([...FILES, { path: GLOBAL_INDEX, kind: 'memory', content: '- [VPS fact](vps-fact.md) — invented' }])
+  expect(r.instructionFiles).toEqual([...FILES, { path: GLOBAL_INDEX, kind: 'memory', content: '- [Machine fact](machine-fact.md) — invented' }])
 })
 
 test('without the global MEMORY.md, the context stays as core sent it', async ($, on) => {
@@ -203,8 +203,8 @@ test('the session ends with one summary line counting what the mod did', async (
   await $.prompt.context({ blocks: [], instructionFiles: FILES })
   await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
   const all = lines(s)
-  expect(all[0]).toEqual({ at: '2026-10-07T13:00:00.000Z', event: 'section-rewritten' })
-  expect(all[1]).toEqual({ at: '2026-10-07T13:00:00.000Z', event: 'context-injected' })
+  expect(all[0]).toEqual({ at: '2026-10-07T13:00:00.000Z', session: 'abcdef12', event: 'section-rewritten' })
+  expect(all[1]).toEqual({ at: '2026-10-07T13:00:00.000Z', session: 'abcdef12', event: 'context-injected' })
   expect(all[2]).toEqual({
     at: '2026-10-07T13:00:00.000Z',
     event: 'session-summary',
@@ -225,5 +225,5 @@ test('the context gets the global index even before the memory section and with 
   on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: files }))
   await $.session.start(start)
   const r = await $.prompt.context({ blocks: [{ name: 'claudeMd', text: 'core' }], instructionFiles: files })
-  expect(r.instructionFiles).toEqual([...files, { path: GLOBAL_INDEX, kind: 'memory', content: '- [VPS fact](vps-fact.md) — invented' }])
+  expect(r.instructionFiles).toEqual([...files, { path: GLOBAL_INDEX, kind: 'memory', content: '- [Machine fact](machine-fact.md) — invented' }])
 })

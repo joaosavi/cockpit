@@ -9,7 +9,7 @@ export type Options = {
   timeZone: string
 }
 
-export const DEFAULTS: Options = { retentionDays: 30, showCount: 20, timeZone: 'America/Sao_Paulo' }
+export const DEFAULTS: Options = { retentionDays: 30, showCount: 20, timeZone: '' }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -21,7 +21,7 @@ export function options(values: unknown): Options {
   return {
     retentionDays: num('retentionDays', DEFAULTS.retentionDays),
     showCount: num('showCount', DEFAULTS.showCount),
-    timeZone: typeof tz === 'string' && tz !== '' ? tz : DEFAULTS.timeZone,
+    timeZone: typeof tz === 'string' ? validTimeZone(tz.trim()) : DEFAULTS.timeZone,
   }
 }
 
@@ -67,6 +67,8 @@ export function summarize(input: Readonly<Record<string, unknown>>): Record<stri
 
 export type Entry = {
   at: string
+  // Absent in lines written before version 1.3.0.
+  event?: 'write-call'
   session: string
   cwd: string
   agentId?: string
@@ -118,8 +120,25 @@ export function parse(text: string): Entry[] {
   return entries
 }
 
+// A time zone the runtime knows, or empty for the system's own. An unknown name falls back to empty
+// instead of throwing on every time shown.
+function validTimeZone(tz: string): string {
+  if (tz === '') return ''
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+    return tz
+  } catch {
+    return ''
+  }
+}
+
+// The `timeZone` field of a date format: absent when empty, so the system time zone applies.
+export function zone(timeZone: string): { timeZone?: string } {
+  return timeZone === '' ? {} : { timeZone }
+}
+
 export function formatTime(iso: string, timeZone: string): string {
-  return new Date(iso).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  return new Date(iso).toLocaleString('en-US', { ...zone(timeZone), month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
 // `/audit 50 slack` → the last 50 entries whose server or action mentions `slack`.
@@ -140,7 +159,28 @@ export function matching(entries: readonly Entry[], filter: string): Entry[] {
 }
 
 export function emptyText(filter: string): string {
-  return filter === '' ? 'No write calls recorded in the audit window.' : `No write calls match "${filter}".`
+  return filter === '' ? 'No write calls recorded yet.' : `No write calls match "${filter}".`
+}
+
+// The header of /audit and of its pane: `Last 3 write calls matching "gmail"`.
+export function headerText(n: number, filter: string): string {
+  const calls = n === 1 ? 'write call' : 'write calls'
+  return `Last ${n} ${calls}${filter === '' ? '' : ` matching "${filter}"`}`
+}
+
+// The server as people name it: `claude_ai_Google_Calendar` → `Google Calendar`. The file keeps the raw name.
+export function serverLabel(server: string): string {
+  return server.replace(/^claude_ai_/, '').replace(/_/g, ' ')
+}
+
+// The first row of an entry, without its outcome: time · server · action, and who made the call.
+export function entryTitle(e: Entry, timeZone: string): string {
+  const who = e.agentId === undefined ? '' : ' (subagent)'
+  return `${formatTime(e.at, timeZone)} · ${serverLabel(e.server)} · ${e.action}${who}`
+}
+
+export function outcomeText(e: Entry, limit: number): string {
+  return e.outcome === 'ok' || e.error === undefined ? e.outcome : `${e.outcome}: ${cut(e.error, limit)}`
 }
 
 // The arguments as `key=value`, each value cut at 80 characters.
@@ -154,15 +194,11 @@ export function cut(text: string, width: number): string {
   return width <= 1 ? '…' : `${text.slice(0, width - 1)}…`
 }
 
+// The /audit reply, newest first like the pane: plain lines, so it reads the same in Remote Control.
 export function report(entries: readonly Entry[], args: string, o: Options): string {
   const { count, filter } = request(args, o)
-  const last = matching(entries, filter).slice(-count)
+  const last = matching(entries, filter).slice(-count).reverse()
   if (last.length === 0) return emptyText(filter)
-  const lines = last.map((e) => {
-    const args = argsText(e.input)
-    const status = e.outcome === 'ok' ? 'ok' : `${e.outcome}${e.error === undefined ? '' : ': ' + e.error.slice(0, 120)}`
-    const who = e.agentId === undefined ? '' : ' (subagent)'
-    return `${formatTime(e.at, o.timeZone)} · ${e.server} · ${e.action}${who} · ${status}\n    ${args}`
-  })
-  return [`Last ${last.length} write call(s)${filter === '' ? '' : ` matching "${filter}"`}:`, ...lines].join('\n')
+  const lines = last.map((e) => `${entryTitle(e, o.timeZone)} · ${outcomeText(e, 120)}\n  ${argsText(e.input)}`)
+  return [`${headerText(last.length, filter)}, newest first:`, ...lines].join('\n')
 }

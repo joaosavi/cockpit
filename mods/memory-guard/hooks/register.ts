@@ -21,9 +21,11 @@ import {
   headroom,
   headroomLine,
   inactiveFile,
+  LEGEND,
   type Level,
   levelLine,
   type Machine,
+  machineLine,
   mb,
   meminfo,
   numberOrMax,
@@ -32,7 +34,11 @@ import {
   peakKey,
   peakLines,
   reduced,
+  reducedNotice,
+  refusalText,
   report,
+  retriedNotice,
+  statusText,
   tone,
   withMeasurement,
   workingSet,
@@ -61,16 +67,19 @@ let tally = newTally()
 // Time commands were held waiting for memory, in this session.
 let waitedMs = 0
 
+// One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
+// on each write, because `/clear` and `/resume` change it without reloading the mod.
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
   try {
     before = await $.fs.read(diary)
   } catch {
-    // first entry of the session
+    // the diary's first line
   }
-  const line = JSON.stringify({ at: new Date(await $.clock.now()).toISOString(), ...entry })
-  await $.fs.write(diary, before + line + '\n')
+  const at = new Date(await $.clock.now()).toISOString()
+  const session = (await $.session.id()).slice(0, 8)
+  await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
 async function readLevels($: Api): Promise<Level[]> {
@@ -144,10 +153,7 @@ async function groupUsage($: Api): Promise<number | null> {
 }
 
 async function updateStatus($: Api) {
-  const h = await headroomNow($)
-  // Shows up only when memory is tight, so the line with the ⚠ does not become background noise.
-  if (h === null || h > 500 * 1024 * 1024) $.ui.status(undefined)
-  else $.ui.status(`${mb(Math.max(0, h))} fits before the memory max`)
+  $.ui.status(statusText(await headroomNow($)))
 }
 
 async function refreshRam($: Api) {
@@ -180,16 +186,28 @@ function levelBlock(ui: Ui, l: Level, columns: number): RenderElement {
   })
 }
 
+// The /ram pane: headroom first, then one block per group from the session's own up, the measured
+// peaks, and the key hint.
 function ramPane(ui: Ui, r: Reading, columns: number, refresh: () => Promise<void>): RenderElement {
-  const blocks = r.levels.map((l) => levelBlock(ui, l, columns))
-  if (r.levels.length === 0) {
-    const machine = r.machine === null ? 'no memory reading on this machine' : `machine: ${mb(r.machine.available)} available of ${mb(r.machine.total)}`
-    blocks.push(ui.Text({ dimColor: true, children: [machine] }))
-  }
+  const blocks: RenderElement[] = []
   const h = headroomLine(r.levels, r.machine, o.margin)
-  if (h !== null) blocks.push(ui.Text({ bold: true, children: [h] }))
+  blocks.push(ui.Text({ bold: true, wrap: 'truncate', children: [h ?? 'No memory reading on this machine'] }))
+  if (r.levels.length > 0) blocks.push(ui.Text({ dimColor: true, wrap: 'truncate', children: [LEGEND] }))
+  blocks.push(ui.Text({ children: [' '] }))
+  for (const l of r.levels) blocks.push(levelBlock(ui, l, columns))
+  if (r.levels.length === 0 && r.machine !== null) blocks.push(ui.Text({ dimColor: true, children: [machineLine(r.machine)] }))
   for (const line of peakLines(r.peaks)) blocks.push(ui.Text({ dimColor: true, wrap: 'truncate', children: [line] }))
-  blocks.push(ui.Box({ marginTop: 1, children: [ui.Button({ key: 'refresh', label: 'Refresh', hotkey: 'r', plain: true, onPress: refresh })] }))
+  blocks.push(
+    ui.Box({
+      flexDirection: 'row',
+      columnGap: 2,
+      marginTop: 1,
+      children: [
+        ui.Button({ key: 'refresh', label: 'Refresh', hotkey: 'r', plain: true, onPress: refresh }),
+        ui.Text({ dimColor: true, wrap: 'truncate', children: [`updates every ${PANE_REFRESH_MS / 1000}s · esc closes`] }),
+      ],
+    }),
+  )
   return ui.Box({ flexDirection: 'column', children: blocks })
 }
 
@@ -255,18 +273,18 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
+    // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     const home = await $.env.get('HOME')
     if (home !== undefined) {
-      const dir = `${home}/.local/state/mods/memory-guard`
-      await $.process.run(['mkdir', '-p', dir])
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
-      diary = `${dir}/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
+      diary = `${home}/.local/state/mods/memory-guard/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
     $.clock.every(60_000, async () => {
       await updateStatus($)
     })
     try {
-      await $.command.register({ name: 'ram', description: 'Shows the memory of each group and how much still fits', immediate: true })
+      await $.command.register({ name: 'ram', description: 'Show the memory of each group and the headroom for heavy commands', immediate: true })
     } catch (err) {
       await log($, { event: 'command-refused', error: String(err) })
     }
@@ -306,15 +324,10 @@ export function register(on: On, values: PluginOptions) {
       if (h === null) return pass(e)
       const plan = await fit($, e.command, h, held)
       if (plan === null) {
-        return {
-          deny:
-            `The memory-guard mod held this command (${h.key}) for ${o.waitSeconds} s and the group's memory did not drop enough. ` +
-            `Another session or process is taking the memory:\n${report(await readLevels($), await readMachine($), o.margin)}\n` +
-            'Do not try again now. Tell the user, or continue with work that does not need this command.',
-        }
+        return { deny: refusalText(h, o.waitSeconds, report(await readLevels($), await readMachine($), o.margin)) }
       }
       const notice: string[] = []
-      if (plan.isReduced) notice.push(`The memory-guard mod ran the command with a single process, because the whole command did not fit in the group's memory: ${plan.command}`)
+      if (plan.isReduced) notice.push(reducedNotice(plan.command))
 
       // Measures the peak while the command runs. A background command returns right away and gives no measurement.
       const base = await groupUsage($)
@@ -332,7 +345,7 @@ export function register(on: On, values: PluginOptions) {
         countAction(tally, 'retried-after-137')
         await log($, { event: 'retried-after-137', key: h.key })
         r = await pass({ ...e, command: smaller })
-        notice.push(`The first attempt died for lack of memory, and the memory-guard mod reran it with a single process: ${smaller}`)
+        notice.push(retriedNotice(smaller))
       }
       await updateStatus($)
       if (notice.length === 0 || 'deny' in r) return r

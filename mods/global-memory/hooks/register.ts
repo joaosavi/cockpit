@@ -1,4 +1,4 @@
-// A VPS-wide memory folder beside Claude Code's per-project auto memory. The memory section of the
+// A machine-wide memory folder beside Claude Code's per-project auto memory. The memory section of the
 // system prompt is rewritten to describe both folders and where each type of memory goes, and the
 // global MEMORY.md joins the instruction files, so its index reaches every session from any folder,
 // the way the project index does.
@@ -22,16 +22,19 @@ let tally = newTally()
 // What the memory section said last: off when core sent none, the mode when the mod rewrote it.
 let memory: 'unknown' | 'off' | Mode = 'unknown'
 
+// One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
+// on each write, because `/clear` and `/resume` change it without reloading the mod.
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
   try {
     before = await $.fs.read(diary)
   } catch {
-    // first entry of the session
+    // the diary's first line
   }
-  const line = JSON.stringify({ at: new Date(await $.clock.now()).toISOString(), ...entry })
-  await $.fs.write(diary, before + line + '\n')
+  const at = new Date(await $.clock.now()).toISOString()
+  const session = (await $.session.id()).slice(0, 8)
+  await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
 async function act($: Api, action: string) {
@@ -64,8 +67,9 @@ export function register(on: On, options: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
+    // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     const home = await $.env.get('HOME')
-    // `$.fs.write` creates the folder with the first line.
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/global-memory/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
@@ -92,7 +96,7 @@ export function register(on: On, options: PluginOptions) {
     }
     memory = out.mode
     // Read-only keeps core's mode: the global folder is added without the save rules.
-    await act($, out.mode === 'read-only' ? 'skipped-readonly' : 'section-rewritten')
+    await act($, out.mode === 'read-only' ? 'section-rewritten-read-only' : 'section-rewritten')
     return { text: out.text }
   })
 

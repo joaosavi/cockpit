@@ -89,23 +89,23 @@ test('/mods sums each mod over the window and flags what gets in the way', async
   const text = r.text ?? ''
   const lines = text.split('\n')
   expect(lines.length <= 40).toBe(true)
-  expect(lines[0]).toBe('Mods, last 7 day(s): 2026-10-01 to 2026-10-07')
+  expect(lines[0]).toBe('Mod report, last 7 days (Oct 1 to Oct 7)')
   // The September file is out; the open session is counted apart.
-  expect(text).toContain('usage-limit · 2 session(s) (+1 open or without summary) · 150 tool call(s) · 0.5 ms/call, max 4 ms')
-  expect(text).toContain('  pauses 1 · resumes 1 · tool-refused 2 · resume-scheduled 1')
-  expect(text).toContain('memory-guard · 1 session(s) · 10 tool call(s) · 3 ms/call, max 8 ms')
-  expect(text).toContain('  held 2m 10s over 2 command(s) · refused 1 · reduced 1')
+  expect(text).toContain('usage-limit: 2 sessions, 1 still open, 150 tool calls, 0.5 ms per call (max 4 ms)')
+  expect(text).toContain('  1 pause · 1 resume · tool-refused 2 · resume-scheduled 1')
+  expect(text).toContain('memory-guard: 1 session, 10 tool calls, 3 ms per call (max 8 ms)')
+  expect(text).toContain('  held 2m 10s over 2 commands · refused 1 · reduced 1')
   expect(text).toContain('  loaded: typescript-best-practices 2, writing-for-agents 1 · refused 1')
-  expect(text).toContain('  writes: claude_ai_Slack 2, claude_ai_Gmail 1 · 1 failed or denied')
-  expect(text).toContain('secret-guard · 1 session(s) · 100 tool call(s) · 35 ms/call, max 120 ms')
+  expect(text).toContain('  writes: Slack 2, Gmail 1 · 1 failed or denied')
+  expect(text).toContain('secret-guard: 1 session, 100 tool calls, 35 ms per call (max 120 ms)')
   expect(text).toContain('  rewritten 2')
   expect(text).not.toContain('999')
-  const flags = text.slice(text.indexOf('Attention'))
+  const flags = text.slice(text.indexOf('Needs attention'))
   expect(flags).toContain('secret-guard adds 35 ms per tool call, above 20 ms')
-  expect(flags).toContain('memory-guard refused 1 command(s), after holding them 2m 10s in all')
-  expect(flags).toContain('skill-loader refused 1 write(s) to deliver a skill')
-  expect(flags).toContain('loop-breaker nudged 3 time(s): repeat 2, error 1')
-  expect(flags).toContain('usage-limit paused 1 time(s), resumed 1')
+  expect(flags).toContain('memory-guard refused 1 command, after holding them 2m 10s in all')
+  expect(flags).toContain('skill-loader held 1 write to deliver a skill, and the agent had to redo it')
+  expect(flags).toContain('loop-breaker nudged the agent 3 times: repeat 2, error 1')
+  expect(flags).toContain('usage-limit paused 1 time and resumed 1')
   expect(flags).not.toContain('pipefail')
 })
 
@@ -114,7 +114,7 @@ test('/mods 1 keeps only today, and nothing to flag says so', async ($, on) => {
   prepare(on, s)
   await $.session.start(start)
   const r = await $.command.run({ command: 'mods', args: '1' })
-  expect(r.text).toBe(['Mods, last 1 day(s): 2026-10-07 to 2026-10-07', 'pipefail · 1 session(s) · 20 tool call(s) · 0.1 ms/call, max 1 ms', '  rewritten 2', 'Attention', '  nothing to flag'].join('\n'))
+  expect(r.text).toBe(['Mod report, today (Oct 7)', 'pipefail: 1 session, 20 tool calls, 0.1 ms per call (max 1 ms)', '  rewritten 2', 'Needs attention', '  nothing to flag'].join('\n'))
 })
 
 test('/mods without any diary says so', async ($, on) => {
@@ -122,7 +122,7 @@ test('/mods without any diary says so', async ($, on) => {
   prepare(on, s)
   await $.session.start(start)
   const r = await $.command.run({ command: 'mods', args: '' })
-  expect(r.text).toBe('Mods, last 7 day(s): 2026-10-01 to 2026-10-07\nNo mod diaries in this window.')
+  expect(r.text).toBe('Mod report, last 7 days (Oct 1 to Oct 7)\nNo mod diaries in this window.')
 })
 
 const PANE = {
@@ -141,9 +141,24 @@ test('/mods opens the Mods pane with the same rows, the flags in the warning col
   await $.command.run({ command: 'mods', args: '' })
   expect(opened).toEqual(['mods'])
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: 'Mods, last 7 day(s): 2026-10-01 to 2026-10-07' })).toMatchObject({ props: { bold: true } })
+  expect(await ui.find({ type: 'Text', text: 'Mod report, last 7 days (Oct 1 to Oct 7)' })).toMatchObject({ props: { bold: true } })
   expect(await ui.find({ type: 'Text', text: '  secret-guard adds 35 ms per tool call, above 20 ms' })).toMatchObject({ props: { color: 'warning' } })
   expect(await ui.find({ type: 'Text', text: '  rewritten 2' })).toMatchObject({ props: { dimColor: true } })
+  expect(await ui.find({ type: 'Text', text: '/mods N for another window · esc closes' })).toMatchObject({ props: { dimColor: true } })
+})
+
+test('a mod without a tool.call hook reports its sessions without a per-call cost, after the guards', async ($, on) => {
+  const files = {
+    'global-memory': { '2026-10-07-aaaa1111.jsonl': summary('aaaa1111', 0, { 'section-rewritten': 1 }, 0, 0) },
+    pipefail: { '2026-10-07-aaaa1111.jsonl': summary('aaaa1111', 20, { rewritten: 2 }, 2, 1) },
+  }
+  const s: Scene = { files }
+  prepare(on, s)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'mods', args: '1' })
+  expect(r.text).toBe(
+    ['Mod report, today (Oct 7)', 'pipefail: 1 session, 20 tool calls, 0.1 ms per call (max 1 ms)', '  rewritten 2', 'global-memory: 1 session', '  section-rewritten 1', 'Needs attention', '  nothing to flag'].join('\n'),
+  )
 })
 
 test('/mods without a surface that draws answers with text only', async ($, on) => {
@@ -152,6 +167,6 @@ test('/mods without a surface that draws answers with text only', async ($, on) 
   prepare(on, s)
   await $.session.start(start)
   const r = await $.command.run({ command: 'mods', args: '' })
-  expect(r.text).toContain('Attention')
+  expect(r.text).toContain('Needs attention')
   expect(opened).toEqual([])
 })

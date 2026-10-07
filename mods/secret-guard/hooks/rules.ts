@@ -1,20 +1,20 @@
 // The rules of the secret-guard mod, without the mods API, so the tests can run them directly.
 //
-// Ported from hooks/segredo.pl. The values come from the secrets file, from the `.env*` files under the
-// env root, from the environment variables with a secret-looking name, and from the password of every
-// `scheme://user:password@` URL. A value is replaced by `<hidden:NAME>` in every tool result.
+// Ported from an earlier Perl hook. The values come from the secrets file, from the `.env*` files under
+// the env root when one is set, from the environment variables with a secret-looking name, and from
+// the password of every `scheme://user:password@` URL. A value is replaced by `<hidden:NAME>` in every tool result.
 
 export type Options = {
   // A KEY=value file whose every value is a secret, whatever the name.
   secretsFile: string
-  // The folder searched for `.env*` files.
+  // The folder searched for `.env*` files. Empty searches none.
   envRoot: string
   // Shorter values are common words or local database passwords, and replacing `postgres` in every
   // output would break more than it protects.
   minLength: number
 }
 
-export const DEFAULTS: Options = { secretsFile: '~/.secrets', envRoot: '~/getdemo', minLength: 12 }
+export const DEFAULTS: Options = { secretsFile: '~/.secrets', envRoot: '', minLength: 12 }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -251,8 +251,8 @@ export function redactDeep(data: unknown, t: Table, found: Found): unknown {
   return data
 }
 
-// Puts the real value back where the agent wrote a placeholder. The Perl hook still writes `<oculto:NAME>`
-// while both run, so both spellings are restored.
+// Puts the real value back where the agent wrote a placeholder. The earlier Perl hook, which may still
+// run beside this mod, writes `<oculto:NAME>` (Portuguese for hidden), so both spellings are restored.
 export function restoreText(text: string, valueOf: ReadonlyMap<string, string>, restored: Set<string>): string {
   return text.replace(/<(?:hidden|oculto):([A-Za-z0-9_]+)>/g, (whole, name: string) => {
     const v = valueOf.get(name)
@@ -289,11 +289,12 @@ export function total(found: Found): number {
 export function redactedNotice(names: readonly string[]): string {
   const list = names.join(', ')
   return (
-    `This tool's output had the value of ${list}, and the secret-guard mod replaced it with <hidden:...> before it reached you. ` +
-    `If you still see the value, tell the user that ${list} leaked into the transcript and must be rotated.`
+    `This tool's output contained the value of ${list}, and the secret-guard mod replaced it with <hidden:NAME> before it reached you. ` +
+    'Use the placeholder as is: written into a .env or secrets file, it becomes the real value again. ' +
+    `If you see the value itself anywhere, tell the user that ${list} leaked into the transcript and must be rotated.`
   )
 }
 
 export const RESTORED_NOTICE =
   'The secret-guard mod wrote the real value in place of each <hidden:NAME> before the file was changed. ' +
-  'The file has the value, and the output keeps showing the placeholder.'
+  'The file holds the real value, and tool output keeps showing the placeholder.'

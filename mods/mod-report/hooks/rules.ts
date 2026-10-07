@@ -7,7 +7,7 @@ export const MAX_DAYS = 365
 export const SLOW_MS = 20
 
 // The mods in the order the report lists them. A folder of another mod comes after, by name.
-const ORDER = ['usage-limit', 'memory-guard', 'skill-loader', 'audit', 'loop-breaker', 'secret-guard', 'pipefail']
+const ORDER = ['usage-limit', 'memory-guard', 'skill-loader', 'audit', 'loop-breaker', 'secret-guard', 'pipefail', 'rating', 'global-memory', 'wtf']
 
 // `/mods 30` → 30 days. Anything else → the default.
 export function parseDays(args: string): number {
@@ -186,25 +186,39 @@ function total(actions: Readonly<Record<string, number>>, prefix: string): numbe
   return Object.entries(actions).reduce((sum, [k, n]) => (k.startsWith(prefix) ? sum + n : sum), 0)
 }
 
+export function plural(n: number, word: string, many = `${word}s`): string {
+  return `${n} ${n === 1 ? word : many}`
+}
+
+// `2026-10-01` → `Oct 1`, the date format the other mods use.
+export function shortDate(isoDay: string): string {
+  return new Date(`${isoDay}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
+}
+
 // The second row of a mod: what it did, with the figures its own question needs first.
 function detail(s: ModStats): string {
   switch (s.mod) {
     case 'usage-limit': {
       const rest = actionsText(s.actions, ['paused', 'resumed'])
-      return [`pauses ${count(s, 'paused')} · resumes ${count(s, 'resumed')}`, rest].filter((p) => p !== '').join(' · ')
+      return [`${plural(count(s, 'paused'), 'pause')} · ${plural(count(s, 'resumed'), 'resume')}`, rest].filter((p) => p !== '').join(' · ')
     }
     case 'memory-guard': {
-      const held = `held ${duration(s.waitedMs)} over ${count(s, 'waited')} command(s) · refused ${count(s, 'refused')}`
+      const held = `held ${duration(s.waitedMs)} over ${plural(count(s, 'waited'), 'command')} · refused ${count(s, 'refused')}`
       return [held, actionsText(s.actions, ['waited', 'refused'])].filter((p) => p !== '').join(' · ')
     }
     case 'audit': {
       const servers = Object.entries(s.writes).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      const writes = servers.length === 0 ? 'no write calls' : `writes: ${servers.map(([k, n]) => `${k} ${n}`).join(', ')}`
+      const writes = servers.length === 0 ? 'no write calls' : `writes: ${servers.map(([k, n]) => `${serverLabel(k)} ${n}`).join(', ')}`
       return s.failedWrites === 0 ? writes : `${writes} · ${s.failedWrites} failed or denied`
     }
     default:
       return actionsText(s.actions) || 'no actions'
   }
+}
+
+// `claude_ai_Google_Calendar` → `Google Calendar`, as the audit mod shows it.
+function serverLabel(server: string): string {
+  return server.replace(/^claude_ai_/, '').replace(/_/g, ' ')
 }
 
 export type ReportLine = { text: string; tone: 'title' | 'plain' | 'dim' | 'warn' }
@@ -218,33 +232,41 @@ export function attention(stats: readonly ModStats[]): string[] {
   }
   const get = (mod: string) => stats.find((s) => s.mod === mod)
   const memory = get('memory-guard')
-  if (memory !== undefined && count(memory, 'refused') > 0) out.push(`memory-guard refused ${count(memory, 'refused')} command(s), after holding them ${duration(memory.waitedMs)} in all`)
+  if (memory !== undefined && count(memory, 'refused') > 0) {
+    out.push(`memory-guard refused ${plural(count(memory, 'refused'), 'command')}, after holding them ${duration(memory.waitedMs)} in all`)
+  }
   const skills = get('skill-loader')
-  if (skills !== undefined && count(skills, 'refused') > 0) out.push(`skill-loader refused ${count(skills, 'refused')} write(s) to deliver a skill, and the agent had to redo them`)
+  if (skills !== undefined && count(skills, 'refused') > 0) {
+    const n = count(skills, 'refused')
+    out.push(`skill-loader held ${plural(n, 'write')} to deliver a skill, and the agent had to redo ${n === 1 ? 'it' : 'them'}`)
+  }
   const loops = get('loop-breaker')
   const nudges = loops === undefined ? 0 : total(loops.actions, 'nudge')
-  if (loops !== undefined && nudges > 0) out.push(`loop-breaker nudged ${nudges} time(s): ${actionsText(loops.actions).replace(/^nudge: /, '')}`)
+  if (loops !== undefined && nudges > 0) out.push(`loop-breaker nudged the agent ${plural(nudges, 'time')}: ${actionsText(loops.actions).replace(/^nudge: /, '')}`)
   const usage = get('usage-limit')
-  if (usage !== undefined && count(usage, 'paused') > 0) out.push(`usage-limit paused ${count(usage, 'paused')} time(s), resumed ${count(usage, 'resumed')}`)
+  if (usage !== undefined && count(usage, 'paused') > 0) out.push(`usage-limit paused ${plural(count(usage, 'paused'), 'time')} and resumed ${count(usage, 'resumed')}`)
   return out
 }
 
+// The report as lines with a tone each: the text reply joins them, the pane colors them.
 export function render(stats: readonly ModStats[], today: string, days: number): ReportLine[] {
-  const lines: ReportLine[] = [{ text: `Mods, last ${days} day(s): ${firstDay(today, days)} to ${today}`, tone: 'title' }]
+  const span = days === 1 ? `today (${shortDate(today)})` : `last ${days} days (${shortDate(firstDay(today, days))} to ${shortDate(today)})`
+  const lines: ReportLine[] = [{ text: `Mod report, ${span}`, tone: 'title' }]
   if (stats.length === 0) return [...lines, { text: 'No mod diaries in this window.', tone: 'dim' }]
   for (const s of stats) {
-    const open = s.openDiaries === 0 ? '' : ` (+${s.openDiaries} open or without summary)`
+    const open = s.openDiaries === 0 ? '' : `, ${s.openDiaries} still open`
     if (s.sessions === 0 && s.mod !== 'audit') {
-      lines.push({ text: `${s.mod} · no session summary yet${open}`, tone: 'plain' })
+      lines.push({ text: `${s.mod}: no finished session yet${open}`, tone: 'plain' })
       continue
     }
     const avg = perCall(s)
-    const cost = avg === null ? '' : ` · ${ms(avg)}/call, max ${ms(s.maxHookMs)}`
-    lines.push({ text: `${s.mod} · ${s.sessions} session(s)${open} · ${s.toolCalls} tool call(s)${cost}`, tone: 'plain' })
+    const calls = s.toolCalls === 0 ? '' : `, ${plural(s.toolCalls, 'tool call')}`
+    const cost = avg === null ? '' : `, ${ms(avg)} per call (max ${ms(s.maxHookMs)})`
+    lines.push({ text: `${s.mod}: ${plural(s.sessions, 'session')}${open}${calls}${cost}`, tone: 'plain' })
     lines.push({ text: `  ${detail(s)}`, tone: 'dim' })
   }
   const flags = attention(stats)
-  lines.push({ text: 'Attention', tone: 'title' })
+  lines.push({ text: 'Needs attention', tone: 'title' })
   if (flags.length === 0) lines.push({ text: '  nothing to flag', tone: 'dim' })
   for (const f of flags) lines.push({ text: `  ${f}`, tone: 'warn' })
   return lines

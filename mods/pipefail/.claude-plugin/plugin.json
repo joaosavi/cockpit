@@ -1,6 +1,28 @@
 {
   "name": "pipefail",
-  "version": "1.1.0",
-  "description": "Puts set -o pipefail in front of a command that pipes a test, type check or lint runner into tail, head or grep, so a failing test does not exit 0",
-  "author": { "name": "João Savi" }
+  "version": "1.2.0",
+  "description": "Adds set -o pipefail to a command that pipes a test, typecheck or lint run into tail, head or grep, so a failing run cannot exit 0 and read as a pass.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/pipefail",
+  "repository": "https://github.com/joaosavi/claude-devcontainer",
+  "license": "MIT",
+  "keywords": [
+    "bash",
+    "pipefail",
+    "tests",
+    "exit-code",
+    "mod"
+  ],
+  "userConfig": {
+    "extraRunners": {
+      "type": "string",
+      "multiple": true,
+      "title": "Extra runners",
+      "description": "Script names that also count as runners when called through a package manager (yarn <name>, npm run <name>, pnpm <name>, bun run <name>), such as a repo's own check script.",
+      "default": []
+    }
+  }
 }

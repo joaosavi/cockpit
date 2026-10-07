@@ -8,62 +8,67 @@
     {
       "name": "agent",
       "source": "./mods/agent",
-      "description": "The bundle with all of the agent's mods. Installing this plugin installs each mod as a dependency"
+      "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings and /wtf."
     },
     {
       "name": "usage-limit",
       "source": "./mods/usage-limit",
-      "description": "Guards the account usage limit: one subagent at a time above 90%, a pause with a reserve at 98%, and an automatic resume when the window resets"
+      "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a pause that keeps the last 2% for you, and an automatic resume when the window resets."
     },
     {
       "name": "memory-guard",
       "source": "./mods/memory-guard",
-      "description": "Keeps typecheck, build, test and Playwright below the memory high mark: runs them with a single process, waits or refuses, and retries a command that died with exit 137"
+      "description": "Keeps typecheck, build, test and Playwright runs under the session's cgroup memory limit, so the kernel does not kill them: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137."
     },
     {
       "name": "skill-loader",
       "source": "./mods/skill-loader",
-      "description": "Loads the right skill at the right time: typescript-best-practices when reading .ts, writing-for-agents on SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling on CONTEXT.md and ADRs, technical-writing on README, commits and PRs"
+      "description": "Loads the right skill at the right moment, so CLAUDE.md needs no load-this-skill rules: typescript-best-practices for .ts, writing-for-agents for SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling for CONTEXT.md and ADRs, technical-writing for READMEs, commits and PRs, and a diagnosing-bugs reminder when you paste an error."
     },
     {
       "name": "audit",
       "source": "./mods/audit",
-      "description": "Records every MCP call that writes in one file per day, without refusing anything. /audit shows the last ones"
+      "description": "Records every MCP call that writes (Slack, Gmail, HubSpot, Notion, Calendar, Drive and others) in a daily file, so you can see what the agent sent on your behalf; refuses nothing, and /audit lists the latest."
     },
     {
       "name": "loop-breaker",
       "source": "./mods/loop-breaker",
-      "description": "Notices when the agent goes in circles and tells it to stop and change approach. Refuses nothing"
+      "description": "Notices when the agent goes in circles (repeated fix attempts on one file, the same error coming back, the same call repeated) and tells it to stop and change approach; refuses nothing."
     },
     {
       "name": "secret-guard",
       "source": "./mods/secret-guard",
-      "description": "Replaces every secret value in tool output with <hidden:NAME> before the agent reads it, and puts the real value back when the agent writes the placeholder into a secret file"
+      "description": "Hides every secret value in tool output as <hidden:NAME> before the agent reads it, MCP and subagent output included, and writes the real value back when the agent puts the placeholder into a .env or secrets file."
     },
     {
       "name": "pipefail",
       "source": "./mods/pipefail",
-      "description": "Puts set -o pipefail in front of a command that pipes a test runner into tail, head or grep, so a failing test does not exit 0"
+      "description": "Adds set -o pipefail to a command that pipes a test, typecheck or lint run into tail, head or grep, so a failing run cannot exit 0 and read as a pass."
     },
     {
       "name": "mod-report",
       "source": "./mods/mod-report",
-      "description": "/mods [days] reports, per mod, how often it acted, what it did, and what it cost per tool call, and flags the mods that get in the way"
+      "description": "/mods [days] reports what each mod did and what it cost per tool call, read from the mods' diaries, and flags the ones that get in the way."
     },
     {
       "name": "rating",
       "source": "./mods/rating",
-      "description": "Records every agent turn as a dataset with your 1-5 ratings and automatic weak labels, for analysis and fine-tuning. /rate, /ratings and a rating band above the prompt"
+      "description": "Records every agent turn as a dataset with your 1-5 ratings and automatic weak labels, for analysis and fine-tuning: rate with /rate or the band above the prompt, review with /ratings."
     },
     {
       "name": "global-memory",
       "source": "./mods/global-memory",
-      "description": "A VPS-wide memory folder next to the per-project auto memory: rewrites the memory section for both folders and loads the global MEMORY.md. On Team and Enterprise plans it must be an organization mod (prependPlugins in managed settings)"
+      "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md."
     },
     {
       "name": "wtf",
       "source": "./mods/wtf",
-      "description": "/wtf has Haiku read a short digest of this session and explain in a few plain lines where it is and what it needs from you, without interrupting the agent"
+      "description": "/wtf sums up where this session stands and what the agent needs from you, in a few plain lines from Haiku, so you can return to a session without rereading it. The agent keeps working"
+    },
+    {
+      "name": "hud",
+      "source": "./mods/hud",
+      "description": "A heads-up display above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view"
     }
   ]
 }

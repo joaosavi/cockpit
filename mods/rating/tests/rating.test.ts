@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { approves, implicitScore, isRetry, mentions, CORRECTION_PHRASES, APPROVAL_PHRASES, parseRate, signalsFor } from '../hooks/rules.ts'
+import { approves, bandLayout, implicitScore, isRetry, mentions, CORRECTION_PHRASES, APPROVAL_PHRASES, parseRate, signalsFor } from '../hooks/rules.ts'
 
 // Invented data only.
 const NOW = Date.parse('2026-10-07T13:00:00Z')
@@ -13,6 +13,8 @@ type Scene = {
   files?: Record<string, string>
   surfaces?: string[]
   opened?: string[]
+  // The argv of each git call.
+  gits?: (readonly string[])[]
 }
 
 function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
@@ -39,6 +41,7 @@ function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
   })
   on('process.run', ($, e) => {
     if (e.init?.stdin !== undefined) s.appends.push({ argv: e.argv, stdin: e.init.stdin })
+    if (e.argv[0] === 'git') s.gits?.push(e.argv)
     const stdout = e.argv[0] === 'git' ? 'a1b2c3d\n' : ''
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -70,9 +73,10 @@ function lines(s: Scene, kind: string): Record<string, unknown>[] {
   return s.appends.filter((a) => (a.argv.at(-1) ?? '').includes(`/${kind}/`)).map((a) => JSON.parse(a.stdin))
 }
 
-test('a turn is recorded with prompt, tools cut to size, answer, skills and the config version', async ($, on) => {
+test('a turn is recorded with prompt, tools cut to size, answer, skills and the config version', { options: { configRepo: '~/dotfiles' } }, async ($, on) => {
   const s: Scene = {
     appends: [],
+    gits: [],
     results: [{ result: 'x'.repeat(5000) }, { result: 'skill text' }, { result: 'read ok', context: ['The skill typescript-best-practices comes in full below, already loaded by the skill-loader mod.\n\n...'] }],
   }
   prepare(on, s)
@@ -110,6 +114,16 @@ test('a turn is recorded with prompt, tools cut to size, answer, skills and the 
   const bash = Array.isArray(tools) ? tools[0] : null
   expect(Reflect.get(Reflect.get(bash, 'input'), 'command').length).toBe(1001)
   expect(Reflect.get(bash, 'output').length).toBe(2001)
+  expect(s.gits).toEqual([['git', '-C', '/home/u/dotfiles', 'rev-parse', '--short', 'HEAD']])
+})
+
+test('without configRepo, no git runs and the turn records configVersion null', async ($, on) => {
+  const s: Scene = { appends: [], gits: [] }
+  prepare(on, s)
+  await $.session.start(start)
+  await turn($, 't1', 'hello', 'Hi.')
+  expect(lines(s, 'turns')[0]).toMatchObject({ configVersion: null })
+  expect(s.gits).toEqual([])
 })
 
 test("subagent tool calls go into the parent turn with their agentId, and the subagent's turn.complete writes nothing", async ($, on) => {
@@ -136,8 +150,7 @@ test('/rate 4 verbose -- too long writes the rating for the last turn', async ($
   expect(r.text).toBe('Rated 4/5: abcdef12:t1 "summarize the quarterly report for the board meeting next we…"')
   expect(lines(s, 'ratings')).toEqual([{ v: 1, turn: 'abcdef12:t1', score: 4, tags: ['verbose'], comment: 'too long', at: '2026-10-07T13:00:00.000Z', source: 'user' }])
   const shown = await $.command.run({ command: 'rate', args: '' })
-  expect(shown.text).toContain('user score: 4/5')
-  expect(shown.text).toContain('implicit score: pending')
+  expect(shown.text).toContain('Your score: 4/5 · implicit score: pending, written at your next prompt')
 })
 
 test('/rate before any turn, and an invalid /rate 9', async ($, on) => {
@@ -326,13 +339,24 @@ test('/ratings aggregates per project, per skill and per signal, lists the lowes
   on('ui.render', () => OTHER_MODS)
   await $.session.start(start)
   const r = await $.command.run({ command: 'ratings', args: '' })
-  expect(r.text).toContain('turns recorded 3 · rated by you 2 (67%)')
-  expect(r.text).toContain('average user score 3.00 · average implicit score 3.25')
-  expect(r.text).toMatch(/acme +turns +2 · user 2\.00 \(1\) · implicit 3\.25/)
-  expect(r.text).toMatch(/billing +turns +1 · user 4\.00 \(1\)/)
-  expect(r.text).toMatch(/diagnosing-bugs +turns +1/)
-  expect(r.text).toContain('loop nudges      avg user score with 2.00 (1) · without 4.00 (1)')
-  expect(r.text).toContain('2/5 s:1 "fix the login bug"')
+  expect(r.text).toBe(
+    [
+      'Ratings, last 7 days (Oct 1 to Oct 7)',
+      '3 turns recorded, 2 rated by you (67%)',
+      'Average score: 3.00 from you, 3.25 implicit (2 with signals)',
+      'Per project',
+      '  acme: 2 turns, you 2.00 over 1 rating, implicit 3.25',
+      '  billing: 1 turn, you 4.00 over 1 rating',
+      'Per skill used',
+      '  diagnosing-bugs: 1 turn, you 2.00 over 1 rating, implicit 2.00',
+      'Effect of signals',
+      '  loop nudges: you 2.00 with (1 turn), 4.00 without (1 turn)',
+      '  refusals: you none with (0 turns), 3.00 without (2 turns)',
+      'Lowest rated',
+      '  2/5 s:1 "fix the login bug"',
+      '  4/5 s:3 "reconcile the october totals"',
+    ].join('\n'),
+  )
   expect(r.text.indexOf('2/5 s:1') < r.text.indexOf('4/5 s:3')).toBe(true)
   expect(r.text).not.toContain('outside the window')
   expect(s.opened).toEqual(['ratings'])
@@ -366,4 +390,22 @@ test('boa and show count as approval only in a short message', () => {
   expect(approves('boa tarde, me manda o relatório de outubro')).toBe(false)
   expect(approves('show me the file you changed')).toBe(false)
   expect(approves('perfeito, era isso que eu queria')).toBe(true)
+})
+
+test('the band drops its hint, then shortens its label, so the row fits down to 50 columns', async ($, on) => {
+  const s: Scene = { appends: [], surfaces: ['terminal'] }
+  prepare(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start(start)
+  await turn($, 't1', 'rename the column', 'Renamed.')
+  const wide = await $.ui.mount(BAND)
+  expect(await wide.find({ type: 'Text', text: '/rate N tags -- comment' })).toMatchObject({ props: { dimColor: true } })
+  await wide.unmount()
+  const narrow = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 50 } })
+  expect(await narrow.find({ type: 'Text', text: 'Rate:' })).toBeDefined()
+  expect(await narrow.find({ type: 'Text', text: '/rate N tags -- comment' })).toBeUndefined()
+  expect(await narrow.find({ key: 'rate-5' })).toBeDefined()
+  // Five plain buttons take 33 columns: the narrow row is 5 + 33 + 5 gaps.
+  expect(bandLayout(50)).toEqual({ label: 'Rate:', gap: 1, hint: null })
+  expect(bandLayout(70)).toEqual({ label: 'Rate the last answer:', gap: 2, hint: null })
 })

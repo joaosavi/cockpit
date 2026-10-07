@@ -14,9 +14,10 @@
 //
 // At the end of each session, one summary line goes to ~/.local/state/mods/rating, for `/mods`.
 
-import type { Hook, On, PluginOptions } from 'claude-code'
+import type { Elements, Hook, On, PluginOptions, RenderElement } from 'claude-code'
 import {
   BAND_LABELS,
+  bandLayout,
   type CallResult,
   DEFAULTS,
   day,
@@ -41,6 +42,7 @@ import {
   type RatingRecord,
   rateText,
   report,
+  type ReportLine,
   showText,
   type SignalRecord,
   signalsFor,
@@ -54,6 +56,7 @@ import {
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text'>
 
 const PANE = 'ratings'
 const KINDS = ['turns', 'ratings', 'signals'] as const
@@ -88,7 +91,7 @@ let last: Done | null = null
 const userScores = new Map<string, number>()
 // The turn the band offers to rate, or null when the band is hidden.
 let bandFor: string | null = null
-let shown = ''
+let shown: ReportLine[] = []
 let tally = newTally()
 
 async function nowIso($: Api): Promise<string> {
@@ -170,6 +173,29 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
   }
 }
 
+function reportLine(ui: Ui, l: ReportLine): RenderElement {
+  switch (l.tone) {
+    case 'title':
+      return ui.Text({ bold: true, wrap: 'truncate', children: [l.text] })
+    case 'heading':
+      return ui.Box({ marginTop: 1, children: [ui.Text({ bold: true, wrap: 'truncate', children: [l.text] })] })
+    case 'dim':
+      return ui.Text({ dimColor: true, wrap: 'truncate', children: [l.text] })
+    case 'plain':
+      return ui.Text({ wrap: 'truncate', children: [l.text] })
+    default: {
+      const exhaustive: never = l.tone
+      return exhaustive
+    }
+  }
+}
+
+// The Ratings pane: the same lines as the text reply, with the sections spaced out, then the key hint.
+function ratingsPane(ui: Ui, lines: readonly ReportLine[]): RenderElement {
+  const hint = ui.Box({ marginTop: 1, children: [ui.Text({ dimColor: true, wrap: 'truncate', children: ['/ratings N for another window · esc closes'] })] })
+  return ui.Box({ flexDirection: 'column', children: [...lines.map((l) => reportLine(ui, l)), hint] })
+}
+
 export function register(on: On, values: PluginOptions) {
   o = options(values)
 
@@ -186,13 +212,16 @@ export function register(on: On, values: PluginOptions) {
       const state = `${home}/.local/state/mods/rating`
       await $.process.run(['mkdir', '-p', state])
       diary = state
-      const git = await $.process.run(['git', '-C', `${home}/claude-devcontainer`, 'rev-parse', '--short', 'HEAD'])
+    }
+    const repo = o.configRepo === '' ? null : expandHome(o.configRepo, home)
+    if (repo !== null) {
+      const git = await $.process.run(['git', '-C', repo, 'rev-parse', '--short', 'HEAD'])
       const head = git.stdout.trim()
       configVersion = git.exitCode === 0 && head !== '' ? head : null
     }
     try {
-      await $.command.register({ name: 'rate', description: 'Rates the last answer: /rate <1-5> [tags...] [-- comment]', argumentHint: '<1-5> [tags...] [-- comment]', immediate: true })
-      await $.command.register({ name: 'ratings', description: 'Reports the rated dataset: /ratings [days]', argumentHint: '[days]', immediate: true })
+      await $.command.register({ name: 'rate', description: 'Rate the last answer: /rate <1-5> [tags...] [-- comment]', argumentHint: '<1-5> [tags...] [-- comment]', immediate: true })
+      await $.command.register({ name: 'ratings', description: 'Report the ratings dataset: /ratings [days], 7 by default', argumentHint: '[days]', immediate: true })
     } catch {
       // a taken name leaves the mod recording without the command
     }
@@ -312,24 +341,23 @@ export function register(on: On, values: PluginOptions) {
   })
 
   on('command.run', { command: 'ratings' }, async ($, e) => {
-    if (dir === '') return { text: 'The rating mod has no dataset folder: HOME is not set.' }
+    if (dir === '') return { text: 'The rating mod has no dataset folder, because HOME is not set.' }
     const days = parseDays(e.args)
     const today = day(await nowIso($))
     const turns = await readKind($, 'turns', today, days, isTurn)
     const ratings = await readKind($, 'ratings', today, days, isRating)
     const signals = await readKind($, 'signals', today, days, isSignal)
-    shown = report(turns, ratings, signals, days)
+    shown = report(turns, ratings, signals, days, today)
     if ((await $.session.surfaces()).length > 0) {
       $.ui.invalidate('ui.render')
       await $.ui.open({ id: PANE, title: 'Ratings', focus: true, closeOnEscape: true })
     }
-    return { text: shown }
+    return { text: shown.map((l) => l.text).join('\n') }
   })
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE) return next(e)
-    const ui = $.ui.resolve(e)
-    return ui.Box({ flexDirection: 'column', children: shown.split('\n').map((l, i) => ui.Text({ bold: i === 0, wrap: 'truncate', children: [l === '' ? ' ' : l] })) })
+    return ratingsPane($.ui.resolve(e), shown)
   })
 
   // The rating row above the prompt, shared with other mods: their content stays under it.
@@ -337,6 +365,7 @@ export function register(on: On, values: PluginOptions) {
     const target = bandFor
     if (target === null || !o.band || e.props.hasSurvey || e.props.isWorking) return next(e)
     const ui = $.ui.resolve(e)
+    const layout = bandLayout(e.props.bodyColumns)
     const buttons = BAND_LABELS.map((label, i) =>
       ui.Button({
         key: `rate-${i + 1}`,
@@ -348,11 +377,8 @@ export function register(on: On, values: PluginOptions) {
         },
       }),
     )
-    const row = ui.Box({
-      flexDirection: 'row',
-      columnGap: 2,
-      children: [ui.Text({ children: ['Rate the last answer:'] }), ...buttons, ui.Text({ dimColor: true, wrap: 'truncate', children: ['/rate N tags -- comment'] })],
-    })
+    const hint = layout.hint === null ? [] : [ui.Text({ dimColor: true, wrap: 'truncate', children: [layout.hint] })]
+    const row = ui.Box({ flexDirection: 'row', columnGap: layout.gap, children: [ui.Text({ children: [layout.label] }), ...buttons, ...hint] })
     return ui.Box({ flexDirection: 'column', children: [row, await next(e)] })
   })
 

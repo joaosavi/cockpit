@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { accepts, buildTable, candidates, expandHome, options } from '../hooks/rules.ts'
+import { accepts, buildTable, candidates, expandHome, options, redactedNotice } from '../hooks/rules.ts'
 
 // Every secret here is fake and assembled at run time, so no file of the mod holds a string that looks
 // like a real token, and the tests never touch the real filesystem or environment.
@@ -21,7 +21,9 @@ const SHORT = 'short-pw'
 
 const HOME = '/home/u'
 const SECRETS = `${HOME}/.secrets`
-const ROOT = `${HOME}/getdemo`
+const ROOT = `${HOME}/repos`
+// The env root is off by default; most cases set it to the folder holding the repos.
+const REPOS = { options: { envRoot: '~/repos' } }
 const ENV_BI = `${ROOT}/bi/apps/bi/.env`
 const EXAMPLE = `${ROOT}/bi/.env.example`
 const NOTES = `${ROOT}/bi/notes.md`
@@ -151,9 +153,9 @@ function dump(r: unknown): string {
   return JSON.stringify(r)
 }
 
-// --- the cases of segredo.pl --teste --------------------------------------------------------------
+// --- the cases of the Perl hook's self-test --------------------------------------------------------------
 
-test('env output hides the environment token', async ($, on) => {
+test('env output hides the environment token', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`HOME=${HOME}\nGITHUB_TOKEN=${FAKE_GH}\nLANG=C.UTF-8\n`))
   setup(on, w)
@@ -162,7 +164,7 @@ test('env output hides the environment token', async ($, on) => {
   expect(stdoutOf(r)).toMatch(/^GITHUB_TOKEN=<hidden:GITHUB_TOKEN>$/m)
 })
 
-test('printenv output hides the environment token', async ($, on) => {
+test('printenv output hides the environment token', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`GITHUB_TOKEN=${FAKE_GH}\n`))
   setup(on, w)
@@ -170,7 +172,7 @@ test('printenv output hides the environment token', async ($, on) => {
   expect(stdoutOf(r)).toBe('GITHUB_TOKEN=<hidden:GITHUB_TOKEN>\n')
 })
 
-test('cat of a .env hides the secret and the URL password', async ($, on) => {
+test('cat of a .env hides the secret and the URL password', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(envBi()))
   setup(on, w)
@@ -180,7 +182,7 @@ test('cat of a .env hides the secret and the URL password', async ($, on) => {
   expect(s).toMatch(/^DATABASE_URL=postgres:\/\/bi:<hidden:DATABASE_URL>@127\.0\.0\.1/m)
 })
 
-test('cat of a .env leaves what is not a secret, and the value published in .env.example', async ($, on) => {
+test('cat of a .env leaves what is not a secret, and the value published in .env.example', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(envBi()))
   setup(on, w)
@@ -190,7 +192,7 @@ test('cat of a .env leaves what is not a secret, and the value published in .env
   expect(s).toContain(PUBLISHED)
 })
 
-test('reading the secrets file hides every value, whatever its name', async ($, on) => {
+test('reading the secrets file hides every value, whatever its name', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(w.files.get(SECRETS)?.text ?? ''))
   setup(on, w)
@@ -200,14 +202,14 @@ test('reading the secrets file hides every value, whatever its name', async ($, 
   expect(s).toContain('postgres://mcp:<hidden:BI_MCP_PG_URL>@db')
 })
 
-test('echo of the token prints only the placeholder', async ($, on) => {
+test('echo of the token prints only the placeholder', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(FAKE_GH + '\n'))
   setup(on, w)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'echo $GITHUB_TOKEN' }))).toBe('<hidden:GITHUB_TOKEN>\n')
 })
 
-test('the env | grep GIT of a subagent on 2026-10-02 is hidden too', async ($, on) => {
+test('the env | grep GIT of a subagent on 2026-10-02 is hidden too', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`GITHUB_TOKEN=${FAKE_GH}\n`))
   setup(on, w)
@@ -216,7 +218,7 @@ test('the env | grep GIT of a subagent on 2026-10-02 is hidden too', async ($, o
   expect(stdoutOf(r)).toBe('GITHUB_TOKEN=<hidden:GITHUB_TOKEN>\n')
 })
 
-test('the Read of a .env keeps the result shape and names what it hid', async ($, on) => {
+test('the Read of a .env keeps the result shape and names what it hid', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push({ result: { type: 'text', file: { filePath: ENV_BI, content: `BETTER_AUTH_SECRET=${FAKE_AUTH}\n`, numLines: 1 } } })
   setup(on, w)
@@ -228,7 +230,7 @@ test('the Read of a .env keeps the result shape and names what it hid', async ($
   expect(Reflect.get(r, 'ref')).toBeUndefined()
 })
 
-test('a failed command loading the .env does not leak the token piece in its error', async ($, on) => {
+test('a failed command loading the .env does not leak the token piece in its error', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push({ isError: true, result: `zsh: command not found: ${FAKE_API}`, text: `Exit code 127\nzsh: command not found: ${FAKE_API}` })
   setup(on, w)
@@ -238,21 +240,21 @@ test('a failed command loading the .env does not leak the token piece in its err
   expect(r).toMatchObject({ deny: expect.stringContaining('Exit code 127') })
 })
 
-test('the piece of the token after the | is hidden', async ($, on) => {
+test('the piece of the token after the | is hidden', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(FAKE_API + '\n'))
   setup(on, w)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: `grep PANEL ${ENV_BI} | cut -d'|' -f2` }))).toBe('<hidden:PANEL_TOKEN>\n')
 })
 
-test('a known token format is hidden even when it is in no list', async ($, on) => {
+test('a known token format is hidden even when it is in no list', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`${OTHER_GH} ${FAKE_ANTHROPIC} ${FAKE_AWS} ${FAKE_SLACK}\n`))
   setup(on, w)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'echo tokens' }))).toBe('<hidden:github> <hidden:anthropic> <hidden:aws> <hidden:slack>\n')
 })
 
-test('an output without a secret passes as it came, the same object', async ($, on) => {
+test('an output without a secret passes as it came, the same object', REPOS, async ($, on) => {
   const w = freshWorld()
   const answer = { result: { type: 'text', file: { content: 'PORT=3000' } }, text: 'PORT=3000' }
   w.answers.push(answer)
@@ -262,7 +264,7 @@ test('an output without a secret passes as it came, the same object', async ($, 
   expect(Reflect.get(r, 'context')).toBeUndefined()
 })
 
-test('in an MCP result the list of blocks keeps its shape', async ($, on) => {
+test('in an MCP result the list of blocks keeps its shape', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push({ result: [{ type: 'text', text: `url ${FAKE_GH}` }] })
   setup(on, w)
@@ -270,7 +272,7 @@ test('in an MCP result the list of blocks keeps its shape', async ($, on) => {
   expect(r).toMatchObject({ result: [{ type: 'text', text: 'url <hidden:GITHUB_TOKEN>' }] })
 })
 
-test('an Edit of a .env gets back the hidden value, in both placeholder spellings', async ($, on) => {
+test('an Edit of a .env gets back the hidden value, in both placeholder spellings', REPOS, async ($, on) => {
   const w = freshWorld()
   setup(on, w)
   const r = await $.tool.call({
@@ -287,14 +289,14 @@ test('an Edit of a .env gets back the hidden value, in both placeholder spelling
   expect(r).toMatchObject({ context: [expect.stringContaining('real value')] })
 })
 
-test('a Write of a .env restores the whole token and the URL password as written', async ($, on) => {
+test('a Write of a .env restores the whole token and the URL password as written', REPOS, async ($, on) => {
   const w = freshWorld()
   setup(on, w)
   await $.tool.call({ tool: 'Write', file_path: ENV_BI, content: 'PANEL_TOKEN=<hidden:PANEL_TOKEN>\nDATABASE_URL=postgres://bi:<hidden:DATABASE_URL>@h/bi\nGH=<hidden:GITHUB_TOKEN>' })
   expect(w.calls[0]).toMatchObject({ content: `PANEL_TOKEN=7|${FAKE_API}\nDATABASE_URL=postgres://bi:${FAKE_BI}@h/bi\nGH=${FAKE_GH}` })
 })
 
-test('an Edit of a normal file restores nothing', async ($, on) => {
+test('an Edit of a normal file restores nothing', REPOS, async ($, on) => {
   const w = freshWorld()
   setup(on, w)
   const r = await $.tool.call({ tool: 'Edit', file_path: NOTES, old_string: '# notes', new_string: 'COPY=<hidden:BETTER_AUTH_SECRET>' })
@@ -302,7 +304,7 @@ test('an Edit of a normal file restores nothing', async ($, on) => {
   expect(Reflect.get(r, 'context')).toBeUndefined()
 })
 
-test('the list is rebuilt when a .env changes', async ($, on) => {
+test('the list is rebuilt when a .env changes', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash('first'), bash(envBi(`NEW_TOKEN=${FAKE_NEW}`)))
   const clock = setup(on, w)
@@ -314,9 +316,9 @@ test('the list is rebuilt when a .env changes', async ($, on) => {
   expect(s).toContain('<hidden:NEW_TOKEN>')
 })
 
-// --- beyond segredo.pl --teste -------------------------------------------------------------------
+// --- beyond the Perl hook's self-test --------------------------------------------------------------
 
-test('a value the tool itself just wrote to a .env is hidden in that same result', async ($, on) => {
+test('a value the tool itself just wrote to a .env is hidden in that same result', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash('warm-up'), bash(`NEW_TOKEN=${FAKE_NEW}\n`))
   const clock = setup(on, w)
@@ -328,7 +330,7 @@ test('a value the tool itself just wrote to a .env is hidden in that same result
   expect(s).toBe('NEW_TOKEN=<hidden:NEW_TOKEN>\n')
 })
 
-test('the list is rebuilt after 10 minutes even when no watched source changed', async ($, on) => {
+test('the list is rebuilt after 10 minutes even when no watched source changed', REPOS, async ($, on) => {
   const w = freshWorld()
   const deep = `${ROOT}/a/b/c/d/e/.env`
   w.answers.push(bash('first'), bash(`DEEP_TOKEN=${'d'.repeat(20)}\n`), bash(`DEEP_TOKEN=${'d'.repeat(20)}\n`))
@@ -342,28 +344,28 @@ test('the list is rebuilt after 10 minutes even when no watched source changed',
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: `cat ${deep}` }))).toBe('DEEP_TOKEN=<hidden:DEEP_TOKEN>\n')
 })
 
-test('the URL password is hidden as written and URL-decoded', async ($, on) => {
+test('the URL password is hidden as written and URL-decoded', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`raw ${FAKE_ENCODED}\ndecoded ${FAKE_DECODED}\n`))
   setup(on, w)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe('raw <hidden:ENCODED_URL>\ndecoded <hidden:ENCODED_URL>\n')
 })
 
-test('a value shorter than the minimum length is left alone', async ($, on) => {
+test('a value shorter than the minimum length is left alone', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`SHORT_TOKEN=${SHORT}\n`))
   setup(on, w)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe(`SHORT_TOKEN=${SHORT}\n`)
 })
 
-test('a .env under node_modules is not read', async ($, on) => {
+test('a .env under node_modules is not read', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash('n'.repeat(30)))
   setup(on, w)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe('n'.repeat(30))
 })
 
-test('secrets nested deep in an MCP result are hidden, and other fields kept', async ($, on) => {
+test('secrets nested deep in an MCP result are hidden, and other fields kept', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push({ result: { rows: [{ id: 1, conf: { url: `postgres://bi:${FAKE_BI}@h/bi`, tags: ['a', FAKE_AUTH] }, ok: true }], count: 1 } })
   setup(on, w)
@@ -373,7 +375,7 @@ test('secrets nested deep in an MCP result are hidden, and other fields kept', a
   })
 })
 
-test('the result of a subagent call itself is hidden', async ($, on) => {
+test('the result of a subagent call itself is hidden', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push({ result: { content: [{ type: 'text', text: `found ${FAKE_GH}` }] } })
   setup(on, w)
@@ -382,7 +384,7 @@ test('the result of a subagent call itself is hidden', async ($, on) => {
   expect(dump(r)).toContain('found <hidden:GITHUB_TOKEN>')
 })
 
-test('the diary records names and counts, never a value', async ($, on) => {
+test('the diary records names and counts, never a value', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash(`${FAKE_GH} ${FAKE_GH} ${FAKE_AUTH}`))
   setup(on, w)
@@ -392,7 +394,7 @@ test('the diary records names and counts, never a value', async ($, on) => {
   expect(diary?.[0]).toMatch(/\/home\/u\/\.local\/state\/mods\/secret-guard\/\d{4}-\d\d-\d\d-abcdef12\.jsonl$/)
   const text = diary?.[1] ?? ''
   expect(leaks(text)).toEqual([])
-  expect(text).toContain('"event":"redacted","tool":"Bash","agent":null,"names":["BETTER_AUTH_SECRET","GITHUB_TOKEN"],"count":3')
+  expect(text).toContain('"event":"redacted","tool":"Bash","names":["BETTER_AUTH_SECRET","GITHUB_TOKEN"],"count":3')
 })
 
 test('the rules: candidates, accepts, options', () => {
@@ -405,13 +407,14 @@ test('the rules: candidates, accepts, options', () => {
   expect(accepts('<oculto:GITHUB_TOKEN>', 12)).toBe(false)
   expect(accepts('<hidden:GITHUB_TOKEN>', 12)).toBe(false)
   expect(accepts('long-enough-value', 12)).toBe(true)
-  expect(options({ minLength: 8, secretsFile: '~/s' })).toEqual({ secretsFile: '~/s', envRoot: '~/getdemo', minLength: 8 })
-  expect(expandHome('~/getdemo', HOME)).toBe(`${HOME}/getdemo`)
+  expect(options({ minLength: 8, secretsFile: '~/s' })).toEqual({ secretsFile: '~/s', envRoot: '', minLength: 8 })
+  expect(options({ envRoot: ' ~/repos ' }).envRoot).toBe('~/repos')
+  expect(expandHome('~/repos', HOME)).toBe(`${HOME}/repos`)
   const t = buildTable({ secrets: null, envFiles: [], environ: [['SEGREDO_CACHE_TOKEN', 'ignored-perl-test-var'], ['API_KEY', 'env-api-key-value-fake']], minLength: 12 })
   expect([...t.nameOf]).toEqual([['env-api-key-value-fake', 'API_KEY']])
 })
 
-test('the session ends with one summary line: redactions, restores, and the time spent on stats', async ($, on) => {
+test('the session ends with one summary line: redactions, restores, and the time spent on stats', REPOS, async ($, on) => {
   const w = freshWorld()
   w.statMs = 2
   w.answers.push(bash(`GITHUB_TOKEN=${FAKE_GH}\n`), bash('nothing secret\n'))
@@ -436,7 +439,7 @@ test('the session ends with one summary line: redactions, restores, and the time
 
 // --- the cost of the freshness check ---------------------------------------------------------------
 
-test('a call with no source change lists no folder, and stats only the known source files', async ($, on) => {
+test('a call with no source change lists no folder, and stats only the known source files', REPOS, async ($, on) => {
   const w = freshWorld()
   const clock = setup(on, w)
   await $.tool.call({ tool: 'Bash', command: 'true' })
@@ -448,7 +451,7 @@ test('a call with no source change lists no folder, and stats only the known sou
   expect(w.stats - stats).toBe(3)
 })
 
-test('a changed known file rebuilds the list on the next call, without a folder scan', async ($, on) => {
+test('a changed known file rebuilds the list on the next call, without a folder scan', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash('first'), bash(`NEW_TOKEN=${FAKE_NEW}\n`))
   const clock = setup(on, w)
@@ -468,7 +471,7 @@ function createNewEnv(w: World, at: number) {
   w.dirMtimes.set(`${ROOT}/bi/apps`, at)
 }
 
-test('a new .env is found by the folder check after 60 s, and not before', async ($, on) => {
+test('a new .env is found by the folder check after 60 s, and not before', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash('first'), bash(FAKE_NEW), bash(FAKE_NEW))
   const clock = setup(on, w)
@@ -481,7 +484,7 @@ test('a new .env is found by the folder check after 60 s, and not before', async
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe('<hidden:LOCAL_TOKEN>')
 })
 
-test('a Write to a new .env path is scanned right away, and its value hidden in that same result', async ($, on) => {
+test('a Write to a new .env path is scanned right away, and its value hidden in that same result', REPOS, async ($, on) => {
   const w = freshWorld()
   const clock = setup(on, w)
   w.answers.push(bash('first'), { result: { type: 'create', filePath: NEW_ENV, content: `LOCAL_TOKEN=${FAKE_NEW}\n` } })
@@ -492,7 +495,7 @@ test('a Write to a new .env path is scanned right away, and its value hidden in 
   expect(r).toMatchObject({ result: { content: 'LOCAL_TOKEN=<hidden:LOCAL_TOKEN>\n' } })
 })
 
-test('a Bash command that mentions .env checks the folders right away', async ($, on) => {
+test('a Bash command that mentions .env checks the folders right away', REPOS, async ($, on) => {
   const w = freshWorld()
   w.answers.push(bash('first'), bash(`LOCAL_TOKEN=${FAKE_NEW}\n`))
   const clock = setup(on, w)
@@ -501,4 +504,43 @@ test('a Bash command that mentions .env checks the folders right away', async ($
   createNewEnv(w, clock.now())
   await clock.advance(1000)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'cat bi/apps/.env.local' }))).toBe('LOCAL_TOKEN=<hidden:LOCAL_TOKEN>\n')
+})
+
+test('the redaction note names the secrets and tells the agent how to use the placeholder', () => {
+  expect(redactedNotice(['API_KEY', 'DB_PASSWORD'])).toBe(
+    "This tool's output contained the value of API_KEY, DB_PASSWORD, and the secret-guard mod replaced it with <hidden:NAME> before it reached you. " +
+      'Use the placeholder as is: written into a .env or secrets file, it becomes the real value again. ' +
+      'If you see the value itself anywhere, tell the user that API_KEY, DB_PASSWORD leaked into the transcript and must be rotated.',
+  )
+})
+
+// --- without an env root ---
+
+test('without an env root, no folder is listed and .env values stay visible, while the other sources are hidden', async ($, on) => {
+  const w = freshWorld()
+  const clock = setup(on, w)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  w.answers.push(bash(`${envBi()}\nGITHUB_TOKEN=${FAKE_GH}\nBI_MCP_PG_URL=postgres://mcp:${FAKE_PG}@db:5432/x\n${FAKE_SLACK}`))
+  const r = await $.tool.call({ tool: 'Bash', command: `cat ${ENV_BI}; env` })
+  const out = stdoutOf(r)
+  expect(out).toContain(FAKE_AUTH)
+  expect(out).toContain(FAKE_BI)
+  expect(out).not.toContain(FAKE_GH)
+  expect(out).not.toContain(FAKE_PG)
+  expect(out).not.toContain(FAKE_SLACK)
+  await clock.advance(61_000)
+  await $.tool.call({ tool: 'Bash', command: 'cat .env' })
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/new/.env`, content: 'A=1' })
+  expect(w.lists).toBe(0)
+})
+
+test('the list is built in the background when the session starts, before any tool call', REPOS, async ($, on) => {
+  const w = freshWorld()
+  const clock = setup(on, w)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(w.lists).toBe(0)
+  await clock.advance(1)
+  // The build scanned the repos folder for .env files with no tool call yet.
+  expect(w.lists > 0).toBe(true)
+  expect(w.calls.length).toBe(0)
 })

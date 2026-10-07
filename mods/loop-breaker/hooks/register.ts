@@ -20,16 +20,19 @@ let diary = ''
 let cwd = ''
 let tally = newTally()
 
-async function note($: Api, record: Record<string, unknown>) {
+// One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
+// on each write, because `/clear` and `/resume` change it without reloading the mod.
+async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
   try {
     before = await $.fs.read(diary)
   } catch {
-    // first record of the session
+    // the diary's first line
   }
-  const row = JSON.stringify({ at: new Date(await $.clock.now()).toISOString(), ...record })
-  await $.fs.write(diary, before + row + '\n')
+  const at = new Date(await $.clock.now()).toISOString()
+  const session = (await $.session.id()).slice(0, 8)
+  await $.fs.write(diary, before + JSON.stringify({ at, session, ...entry }) + '\n')
 }
 
 function trackOf(agentId: string | undefined): Track {
@@ -70,12 +73,12 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
+    // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     const home = await $.env.get('HOME')
     if (home !== undefined) {
-      const folder = `${home}/.local/state/mods/loop-breaker`
-      await $.process.run(['mkdir', '-p', folder])
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
-      diary = `${folder}/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
+      diary = `${home}/.local/state/mods/loop-breaker/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
     return next(e)
   })
@@ -124,9 +127,8 @@ export function register(on: On, values: PluginOptions) {
       }
       if (nudge === null) return r
       countAction(tally, `nudge:${nudge.kind}`)
-      await note($, { event: 'nudge', agentId: e.agentId, ...nudge })
+      await log($, { event: 'nudge', agentId: e.agentId, ...nudge })
       return { ...r, context: [...(r.context ?? []), nudgeText(nudge)] }
-
     }),
   )
 
@@ -141,7 +143,7 @@ export function register(on: On, values: PluginOptions) {
     const t = tally
     tally = newTally()
     try {
-      await note($, sessionSummary(t, e.sessionId, cwd))
+      await log($, sessionSummary(t, e.sessionId, cwd))
     } catch {
       // a summary that cannot be written does not hold up the end of the session
     }

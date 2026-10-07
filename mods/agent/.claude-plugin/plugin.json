@@ -1,10 +1,21 @@
 {
   "name": "agent",
-  "version": "1.0.9",
-  "description": "The bundle with all of the agent's mods. Installing this plugin installs each mod as a dependency",
+  "version": "1.1.0",
+  "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings and /wtf.",
   "author": {
-    "name": "João Savi"
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
   },
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/agent",
+  "repository": "https://github.com/joaosavi/claude-devcontainer",
+  "license": "MIT",
+  "keywords": [
+    "bundle",
+    "mods",
+    "guards",
+    "agent",
+    "mod"
+  ],
   "dependencies": [
     "usage-limit",
     "memory-guard",
@@ -15,6 +26,7 @@
     "pipefail",
     "mod-report",
     "rating",
-    "wtf"
+    "wtf",
+    "hud"
   ]
 }

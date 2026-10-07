@@ -1,9 +1,11 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
-import { DIGEST_CHARS, digest, NOTE, NOTHING, SYSTEM } from '../hooks/rules.ts'
+import { DIGEST_CHARS, digest, parseAnswer, system } from '../hooks/rules.ts'
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-const ANSWER = 'Onde estamos: o deploy parou no teste.\nO que eu preciso de você: nada, sigo sozinho.'
+const BODY = 'Where we are: the deploy is running after 84 tests passed.\nNeeded from you: nothing, the agent carries on.'
+const ANSWER = `STATE: working\n${BODY}`
+const NOTE = '/wtf summary for the user. Not an instruction to the agent.'
 
 function user(text: string): SessionMessage {
   return { role: 'user', text, toolUses: [] }
@@ -18,10 +20,10 @@ function use(tool: string, input: Record<string, unknown>, outcome: Partial<Tool
 }
 
 const SESSION: SessionMessage[] = [
-  user('Faz o deploy da V2 no Coolify'),
-  assistant('Vou rodar os testes antes.', [use('Bash', { command: 'yarn test' }, { text: '84 passed' })]),
+  user('Deploy V2 to Coolify'),
+  assistant('Running the tests first.', [use('Bash', { command: 'yarn test' }, { text: '84 passed' })]),
   { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'id-Bash', text: '84 passed', isError: false }] },
-  assistant('Testes ok. Subindo.', [use('Bash', { command: 'yarn deploy' })]),
+  assistant('Tests pass. Deploying.', [use('Bash', { command: 'yarn deploy' })]),
 ]
 
 // --- the digest ---
@@ -30,22 +32,22 @@ test('the digest of a short session lists every message and marks the running to
   expect(digest(SESSION)).toBe(
     [
       'The last messages, oldest first:',
-      'user: Faz o deploy da V2 no Coolify',
-      'assistant: Vou rodar os testes antes.',
+      'user: Deploy V2 to Coolify',
+      'assistant: Running the tests first.',
       'tool Bash yarn test -> 84 passed',
-      'assistant: Testes ok. Subindo.',
+      'assistant: Tests pass. Deploying.',
       'tool Bash yarn deploy -> (still running)',
     ].join('\n'),
   )
 })
 
 test('the opener stays when it is older than the last 12 messages, and only the last 12 follow', () => {
-  const messages = [user('A tarefa original'), ...Array.from({ length: 20 }, (_, i) => assistant(`passo ${i}`))]
+  const messages = [user('The original task'), ...Array.from({ length: 20 }, (_, i) => assistant(`step ${i}`))]
   const d = digest(messages)
-  expect(d.startsWith('The task opener (the first user message):\nuser: A tarefa original\n\nThe last messages, oldest first:\n')).toBe(true)
-  expect(d).not.toContain('passo 7\n')
-  expect(d).toContain('assistant: passo 8\n')
-  expect(d.endsWith('assistant: passo 19')).toBe(true)
+  expect(d.startsWith('The task opener (the first user message):\nuser: The original task\n\nThe last messages, oldest first:\n')).toBe(true)
+  expect(d).not.toContain('step 7\n')
+  expect(d).toContain('assistant: step 8\n')
+  expect(d.endsWith('assistant: step 19')).toBe(true)
   expect(d.match(/^assistant: /gm)).toHaveLength(12)
 })
 
@@ -76,12 +78,55 @@ test('a tool call shows an error, its file or its description, and turns its res
 
 test('over 12,000 characters, the oldest of the last messages go first', () => {
   const big = (i: number) => assistant(`${i} ${'x'.repeat(498)}`, Array.from({ length: 6 }, () => use('Bash', { command: 'y'.repeat(200) }, { text: 'z'.repeat(300) })))
-  const messages = [user('abre'), ...Array.from({ length: 14 }, (_, i) => big(i))]
+  const messages = [user('open'), ...Array.from({ length: 14 }, (_, i) => big(i))]
   const d = digest(messages)
   expect(d.length).toBeLessThanOrEqual(DIGEST_CHARS)
-  expect(d).toContain('user: abre')
+  expect(d).toContain('user: open')
   expect(d).toContain('assistant: 13 ')
   expect(d).not.toContain('assistant: 2 ')
+})
+
+// --- the system prompt ---
+
+test('in English the system prompt has the English labels, no translation order and no Portuguese', () => {
+  const s = system('English')
+  expect(s).toContain('Answer in English, in exactly this shape:\n\nSTATE: <key>\nWhere we are: ')
+  expect(s).toContain('Needed from you: the one concrete action')
+  expect(s).toContain('1. <option> (recommended): <its cost>')
+  expect(s).toContain('say so plainly instead of guessing')
+  expect(s).not.toContain('Translate the labels')
+  for (const word of ['Onde', 'você', 'Precisa', 'nada', 'recomendado', 'Portuguese', 'Trabalhando']) expect(s).not.toContain(word)
+})
+
+test('in Portuguese the system prompt gives the Portuguese labels verbatim', () => {
+  const s = system('Portuguese')
+  expect(s).toContain('Answer in Brazilian Portuguese, in exactly this shape:\n\nSTATE: <key>\nOnde estamos: ')
+  expect(s).toContain('Precisa de você: the one concrete action the agent expects from the user, or "nada, o agente segue sozinho".')
+  expect(s).toContain('1. <option> (recomendado): <its cost>')
+  expect(s).not.toContain('Translate the labels')
+})
+
+test('in a language without a table the model translates the labels and the state word', () => {
+  const s = system('Spanish')
+  expect(s).toContain('Answer in Spanish, in exactly this shape:\n\nSTATE: <key> (<that state in Spanish, two or three words>)\nWhere we are: ')
+  expect(s).toContain('Translate the labels "Where we are", "Needed from you", "(recommended)" and the words "nothing, the agent carries on" into Spanish.')
+})
+
+// --- parsing the answer ---
+
+test('the state line gives the state and the table word, and the lines under it are the body', () => {
+  expect(parseAnswer(ANSWER, 'English')).toEqual({ state: 'working', label: 'Working', body: BODY })
+  expect(parseAnswer('**STATE: Waiting**\nOnde estamos: x', 'pt-BR')).toEqual({ state: 'waiting', label: 'Esperando você', body: 'Onde estamos: x' })
+})
+
+test('without a table, the state word is the model translation, else the English word', () => {
+  expect(parseAnswer('STATE: blocked (Bloqueado)\nDónde estamos: x', 'Spanish')).toEqual({ state: 'blocked', label: 'Bloqueado', body: 'Dónde estamos: x' })
+  expect(parseAnswer('STATE: done\nDónde estamos: x', 'Spanish')).toEqual({ state: 'done', label: 'Done', body: 'Dónde estamos: x' })
+})
+
+test('an answer that drifts from the shape is shown whole, with no state', () => {
+  expect(parseAnswer('The agent is deploying.', 'English')).toEqual({ state: null, label: '', body: 'The agent is deploying.' })
+  expect(parseAnswer('STATE: confused\nx', 'English')).toEqual({ state: null, label: '', body: 'STATE: confused\nx' })
 })
 
 // --- the command ---
@@ -92,6 +137,10 @@ type Scenario = {
   complete: Complete
   messages: SessionMessage[]
   surfaces?: string[]
+  // How long the model takes, in mock-clock milliseconds; 0 answers at once.
+  modelMs?: number
+  // The session id `$.session.id()` returns; `/clear` changes it without reloading the mod.
+  sessionId?: string
   // What the mod sent to the model, the panes it opened and the lines it wrote to its diary.
   calls: { model: string; system: unknown; prompt: unknown; maxTokens: unknown }[]
   opened: string[]
@@ -99,9 +148,9 @@ type Scenario = {
 }
 
 function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
-  mock.clock(on, { now: 0 })
+  const clock = mock.clock(on, { now: 0 })
   mock.env(on, { HOME: '/home' })
-  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('session.id', () => ({ value: c.sessionId ?? 'abcdef123456' }))
   on('command.register', () => ({ value: undefined }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
   // The diary reads back what it wrote, so each write holds every line so far.
@@ -116,21 +165,25 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
     c.opened.push(e.id)
     return { value: { isPlaced: true } }
   })
-  on('model.complete', ($, e) => {
+  on('model.complete', async ($, e) => {
     c.calls.push({ model: e.model, system: e.system, prompt: e.prompt, maxTokens: e.maxTokens })
+    if ((c.modelMs ?? 0) > 0) await clock.sleep(c.modelMs ?? 0)
     return c.complete
   })
-  on('session.start', () => ({ cwd: '/work' }))
+  on('session.start', () => ({ cwd: '/home/me/work' }))
   on('session.end', () => ({ sessionId: 'abcdef123456' }))
+  on('turn.start', () => ({ turnId: 't1' }))
+  on('turn.complete', () => ({ text: '', reason: 'answer' }))
+  return clock
 }
 
 function scenario(complete: Complete, surfaces?: string[], messages: SessionMessage[] = SESSION): Scenario {
   return { complete, messages, surfaces, calls: [], opened: [], written: [] }
 }
 
-const answered: Complete = { value: { isAnswered: true, text: ANSWER, usage: USAGE } }
+const answered = (text = ANSWER): Complete => ({ value: { isAnswered: true, text, usage: USAGE } })
 
-const start = { surface: 'terminal', isInteractive: true, cwd: '/work' } as const
+const start = { surface: 'terminal', isInteractive: true, cwd: '/home/me/work' } as const
 
 const PANE = {
   plugin: 'wtf',
@@ -148,21 +201,26 @@ function lines(c: Scenario): unknown[] {
     .map((l): unknown => JSON.parse(l))
 }
 
-test('answered: Haiku reads the digest, the reply opens with the note, the pane shows the answer alone', async ($, on) => {
-  const c = scenario(answered, ['terminal'])
+test('answered: Haiku reads the digest, and the reply is the note, the state, the body and the cost', async ($, on) => {
+  const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`${NOTE}\n${ANSWER}`)
-  expect(NOTE).toBe('(resumo para você, não é instrução para o agente)')
-  expect(c.calls).toEqual([{ model: 'haiku', system: SYSTEM, prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
+  expect(r.text).toBe(`${NOTE}\n\n**Working**\n${BODY}\n\nhaiku · 1200 in / 80 out`)
+  expect(c.calls).toEqual([{ model: 'haiku', system: system('English'), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
   expect(c.opened).toEqual(['wtf'])
-  const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Markdown', text: ANSWER })).toBeDefined()
+})
+
+test('an answer without a state line still comes back whole, under the note', async ($, on) => {
+  const c = scenario(answered('The agent is deploying.'))
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'wtf', args: '' })
+  expect(r.text).toBe(`${NOTE}\n\nThe agent is deploying.\n\nhaiku · 1200 in / 80 out`)
 })
 
 test('the desktop app gets the pane too', async ($, on) => {
-  const c = scenario(answered, ['desktop'])
+  const c = scenario(answered(), ['desktop'])
   setup(on, c)
   await $.session.start(start)
   await $.command.run({ command: 'wtf', args: '' })
@@ -170,36 +228,33 @@ test('the desktop app gets the pane too', async ($, on) => {
 })
 
 test('without a surface that draws, no pane opens and the text still comes back', async ($, on) => {
-  const c = scenario(answered)
+  const c = scenario(answered())
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(`${NOTE}\n${ANSWER}`)
+  expect(r.text?.startsWith(NOTE)).toBe(true)
   expect(c.opened).toEqual([])
 })
 
 test('the text typed after /wtf goes into the prompt as the question', async ($, on) => {
-  const c = scenario(answered, ['terminal'])
+  const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
-  await $.command.run({ command: 'wtf', args: '  por que parou no deploy?  ' })
+  await $.command.run({ command: 'wtf', args: '  why did the deploy stop?  ' })
   expect(c.calls).toHaveLength(1)
-  expect(c.calls[0]?.prompt).toBe(`<session>\n${digest(SESSION)}\n</session>\n\nThe user asks this specifically. Answer it in the same format:\n<question>\npor que parou no deploy?\n</question>`)
-  const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: '> por que parou no deploy?' })).toBeDefined()
+  expect(c.calls[0]?.prompt).toBe(`<session>\n${digest(SESSION)}\n</session>\n\nThe user asks this specifically. Answer it in the same shape:\n<question>\nwhy did the deploy stop?\n</question>`)
 })
 
-test('no messages gives the exact message without calling the model', async ($, on) => {
-  const c = scenario(answered, ['terminal'], [])
+test('no messages gives one line without calling the model', async ($, on) => {
+  const c = scenario(answered(), ['terminal'], [])
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe(NOTHING)
-  expect(r.text).toBe('Ainda não tem nada nesta sessão para resumir.')
+  expect(r.text).toBe('/wtf has nothing to summarize yet: the session has no messages.')
   expect(c.calls).toEqual([])
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: NOTHING })).toBeDefined()
-  expect(lines(c).at(-1)).toMatchObject({ event: 'asked', hasQuestion: false, outcome: 'no-messages', usage: null })
+  expect(await ui.find({ type: 'Text', text: '/wtf has nothing to summarize yet' })).toBeDefined()
+  expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'command', hasQuestion: false, outcome: 'no-messages', state: null, usage: null })
 })
 
 test('an API error gives one line with the status and the kind', async ($, on) => {
@@ -207,7 +262,7 @@ test('an API error gives one line with the status and the kind', async ($, on) =
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('Não consegui resumir: a API respondeu com erro (status 529, overloaded).')
+  expect(r.text).toBe('/wtf could not summarize: the API answered with an error (status 529, overloaded).')
 })
 
 test('an API error with no response says so', async ($, on) => {
@@ -215,7 +270,7 @@ test('an API error with no response says so', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('Não consegui resumir: a API respondeu com erro (sem resposta, unknown).')
+  expect(r.text).toBe('/wtf could not summarize: the API answered with an error (no response, unknown).')
 })
 
 test('an empty reply gives one line', async ($, on) => {
@@ -223,7 +278,7 @@ test('an empty reply gives one line', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('Não consegui resumir: o modelo respondeu sem texto.')
+  expect(r.text).toBe('/wtf could not summarize: the model answered with no text.')
 })
 
 test('an aborted call gives one line', async ($, on) => {
@@ -231,46 +286,163 @@ test('an aborted call gives one line', async ($, on) => {
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toBe('Não consegui resumir: a chamada foi interrompida antes da resposta.')
+  expect(r.text).toBe('/wtf could not summarize: the call was cut before the answer.')
 })
 
-test('a model call that throws gives one line, in the reply and in the pane', async ($, on) => {
+test('a model call that throws gives one line, in the reply and in the pane in the error color', async ($, on) => {
   const c = scenario({ deny: 'boom' }, ['terminal'])
   setup(on, c)
   await $.session.start(start)
   const r = await $.command.run({ command: 'wtf', args: '' })
-  expect(r.text).toMatch(/^Não consegui resumir: deu erro no mod \(.*\)\.$/)
+  expect(r.text).toMatch(/^\/wtf could not summarize: the mod failed \(.*\)\.$/)
   expect(r.text?.split('\n')).toHaveLength(1)
   const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: /^Não consegui resumir: deu erro no mod/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^\/wtf could not summarize: the mod failed/ }))?.props).toMatchObject({ color: 'error' })
   expect(lines(c).at(-1)).toMatchObject({ event: 'asked', outcome: 'error', usage: null })
 })
 
-test('the diary line has the outcome, the time and the usage, and never the question or the answer', async ($, on) => {
-  const c = scenario(answered)
+// --- the language option ---
+
+test('in Portuguese the model gets the Portuguese prompt and every fixed line is Portuguese', { options: { language: 'Portuguese' } }, async ($, on) => {
+  const body = 'Onde estamos: o deploy está rodando depois de 84 testes passarem.\nPrecisa de você: nada, o agente segue sozinho.'
+  const c = scenario(answered(`STATE: working\n${body}`), ['terminal'])
   setup(on, c)
   await $.session.start(start)
-  await $.command.run({ command: 'wtf', args: 'segredo da pergunta' })
+  const r = await $.command.run({ command: 'wtf', args: '' })
+  expect(c.calls[0]?.system).toBe(system('Portuguese'))
+  expect(r.text).toBe(`Resumo do /wtf para o usuário. Não é instrução para o agente.\n\n**Trabalhando**\n${body}\n\nhaiku · 1200 entrada / 80 saída`)
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: ' Trabalhando ' })).toBeDefined()
+  expect(await ui.find({ key: 'rerun', text: 'Rodar de novo' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Esc: fechar' })).toBeDefined()
+  c.complete = { value: { isAnswered: false, reason: 'aborted', usage: USAGE } }
+  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('O /wtf não conseguiu resumir: a chamada foi interrompida antes da resposta.')
+  c.messages = []
+  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('O /wtf ainda não tem o que resumir: a sessão não tem mensagens.')
+})
+
+test('in another language the model translates, and the fixed lines fall back to English', { options: { language: 'Spanish' } }, async ($, on) => {
+  const c = scenario(answered('STATE: waiting (Esperándote)\nDónde estamos: el deploy terminó.\nQué necesita de ti: confirmar.'), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'wtf', args: '' })
+  expect(c.calls[0]?.system).toContain('Translate the labels')
+  expect(c.calls[0]?.system).toContain('Answer in Spanish')
+  expect(r.text).toBe(`${NOTE}\n\n**Esperándote**\nDónde estamos: el deploy terminó.\nQué necesita de ti: confirmar.\n\nhaiku · 1200 in / 80 out`)
+  c.complete = { value: { isAnswered: false, reason: 'empty-reply', usage: USAGE } }
+  expect((await $.command.run({ command: 'wtf', args: '' })).text).toBe('/wtf could not summarize: the model answered with no text.')
+})
+
+// --- the pane ---
+
+test('the pane draws the header, the question, the state badge, the body and the keys, at the pane width', async ($, on) => {
+  const c = scenario(answered(), ['terminal'])
+  const clock = setup(on, c)
+  await $.session.start(start)
+  await $.turn.start({ text: 'deploy', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  await clock.advance(4 * 60_000)
+  await $.command.run({ command: 'wtf', args: 'why did it stop?' })
+  const ui = await $.ui.mount(PANE)
+  const root = await ui.drawn()
+  expect(root.props).toMatchObject({ flexDirection: 'column', width: 60 })
+  expect(await ui.find({ type: 'Text', text: 'WTF' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  work · idle 4m · haiku · 1200 in / 80 out' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: '> why did it stop?' }))?.props).toMatchObject({ dimColor: true })
+  expect((await ui.find({ type: 'Text', text: ' Working ' }))?.props).toMatchObject({ backgroundColor: 'suggestion', color: 'inverseText', bold: true })
+  expect(await ui.find({ type: 'Markdown', text: BODY })).toBeDefined()
+  expect(await ui.find({ key: 'rerun', text: 'Re-run' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Esc: close' })).toBeDefined()
+})
+
+test('each state has its theme color', async ($, on) => {
+  const c = scenario(answered(), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  for (const [key, label, color] of [
+    ['waiting', 'Waiting for you', 'warning'],
+    ['blocked', 'Blocked', 'error'],
+    ['done', 'Done', 'success'],
+  ] as const) {
+    c.complete = answered(`STATE: ${key}\n${BODY}`)
+    await $.command.run({ command: 'wtf', args: '' })
+    const ui = await $.ui.mount(PANE)
+    expect((await ui.find({ type: 'Text', text: ` ${label} ` }))?.props).toMatchObject({ backgroundColor: color })
+    await ui.unmount()
+  }
+})
+
+test('while the model answers the pane says it is reading, shows a running turn and hides the re-run key', async ($, on) => {
+  const c = { ...scenario(answered(), ['terminal']), modelMs: 1000 }
+  const clock = setup(on, c)
+  await $.session.start(start)
+  await $.turn.start({ text: 'deploy', turnId: 't1' })
+  const pending = $.command.run({ command: 'wtf', args: '' })
+  await clock.advance(10)
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: 'Reading the session…' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  work · turn running · haiku' })).toBeDefined()
+  expect(await ui.find({ key: 'rerun' })).toBeUndefined()
+  await clock.advance(1000)
+  expect((await pending).text?.startsWith(NOTE)).toBe(true)
+})
+
+test('the re-run key asks the model again, with the same question, and logs it as a re-run', async ($, on) => {
+  const c = scenario(answered(), ['terminal'])
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'wtf', args: 'and now?' })
+  c.complete = answered(`STATE: done\n${BODY}`)
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'rerun' })
+  expect(c.calls).toHaveLength(2)
+  expect(c.calls[1]?.prompt).toContain('<question>\nand now?\n</question>')
+  expect(c.opened).toEqual(['wtf'])
+  expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'rerun', hasQuestion: true, outcome: 'answered', state: 'done' })
+  expect(await ui.find({ type: 'Text', text: ' Done ' })).toBeDefined()
+})
+
+// --- the diary ---
+
+test('the diary line has the outcome, the state, the time and the usage, and never the question or the answer', async ($, on) => {
+  const c = scenario(answered())
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'wtf', args: 'secret question' })
   expect(lines(c).at(-1)).toMatchObject({
+    at: '1970-01-01T00:00:00.000Z',
+    session: 'abcdef12',
     event: 'asked',
+    trigger: 'command',
     hasQuestion: true,
     outcome: 'answered',
+    state: 'working',
     ms: 0,
     usage: { input: 1200, output: 80, cacheRead: 0, cacheCreation: 0 },
     digestChars: digest(SESSION).length,
   })
   const all = c.written.join('\n')
-  expect(all).not.toContain('segredo da pergunta')
-  expect(all).not.toContain('deploy parou')
+  expect(all).not.toContain('secret question')
+  expect(all).not.toContain('deploy is running')
   expect(all).not.toContain('Coolify')
 })
 
-test('the session ends with one summary line: uses by outcome and their tokens', async ($, on) => {
-  const c = scenario(answered)
+test('each diary line carries the session id of the moment it is written, so /clear shows up', async ($, on) => {
+  const c = scenario(answered())
   setup(on, c)
   await $.session.start(start)
   await $.command.run({ command: 'wtf', args: '' })
-  await $.command.run({ command: 'wtf', args: 'e agora?' })
+  c.sessionId = '99887766aabb'
+  await $.command.run({ command: 'wtf', args: '' })
+  expect(lines(c).map((l) => Reflect.get(Object(l), 'session'))).toEqual(['abcdef12', '99887766'])
+})
+
+test('the session ends with one summary line: uses by outcome and their tokens', async ($, on) => {
+  const c = scenario(answered())
+  setup(on, c)
+  await $.session.start(start)
+  await $.command.run({ command: 'wtf', args: '' })
+  await $.command.run({ command: 'wtf', args: 'and now?' })
   c.complete = { value: { isAnswered: false, reason: 'empty-reply', usage: USAGE } }
   await $.command.run({ command: 'wtf', args: '' })
   await $.session.end({ reason: 'other', sessionId: 'abcdef123456', resume: { id: 'abcdef123456' } })
@@ -278,7 +450,7 @@ test('the session ends with one summary line: uses by outcome and their tokens',
   expect(all.at(-1)).toMatchObject({
     event: 'session-summary',
     session: 'abcdef12',
-    cwd: '/work',
+    cwd: '/home/me/work',
     toolCalls: 0,
     actions: { answered: 2, 'empty-reply': 1 },
     asked: 3,

@@ -1,8 +1,12 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { bandRows, DEFAULTS } from '../hooks/rules.ts'
+import { bandRows, DEFAULTS, formatTime, limitReport, options, statusText, windowName } from '../hooks/rules.ts'
 
 const NOW = Date.parse('2026-10-06T20:00:00Z')
 const RESET = '2026-10-06T22:30:00.000Z'
+
+// The expected times are written in one fixed zone, so the tests pass on any machine.
+const SAO_PAULO = { options: { timeZone: 'America/Sao_Paulo' } }
+const O = { ...DEFAULTS, timeZone: 'America/Sao_Paulo' }
 
 type Stubs = { submitted: string[]; running: number; initialUsage: number | null; stored?: Record<string, unknown>; written?: string[] }
 
@@ -61,7 +65,7 @@ test('above the alert, only one subagent runs at a time', async ($, on) => {
   expect(refusal).toMatchObject({ deny: expect.stringContaining('only one subagent') })
 })
 
-test('in the reserve, refuses tools and resumes when the window resets', async ($, on) => {
+test('in the reserve, refuses tools and resumes when the window resets', SAO_PAULO, async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 97 }
   const clock = setup(on, s)
   await $.session.start(start)
@@ -97,25 +101,45 @@ test("in the reserve, the user's prompt gets one turn without subagents", async 
   expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining('Paused') })
 })
 
-test('in the reserve, an automatic prompt is held and goes into the resume', async ($, on) => {
+test('in the reserve, an automatic prompt is held and goes into the resume', SAO_PAULO, async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 99 }
   const clock = setup(on, s)
   await $.session.start(start)
   const held = await $.prompt.submit({ text: 'routine: daily report', wait: false, origin: { kind: 'scheduled-trigger' } })
-  expect(held).toMatchObject({ drop: expect.stringContaining('resume') })
+  expect(held).toMatchObject({ drop: 'Held by the usage-limit mod: the account is in its reserve. This message is delivered when the session resumes, at Oct 6, 19:30.' })
 
   await clock.set(Date.parse(RESET) + 2 * 60_000)
   expect(s.submitted.length).toBe(1)
   expect(s.submitted[0]).toContain('1. routine: daily report')
 })
 
-test('/limit shows the windows and the state', async ($, on) => {
+test('/limit shows the windows and the state', SAO_PAULO, async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 91 }
   setup(on, s)
   await $.session.start(start)
   const r = await $.command.run({ command: 'limit', args: '' })
-  expect(r.text).toContain('throttled above 90%')
-  expect(r.text).toContain('5-hour window: 91%, resets Oct 6, 19:30')
+  expect(r.text).toBe(
+    'Usage limit: throttled at 91%, one subagent at a time above 90%\n5-hour window: 91%, resets Oct 6, 19:30\n7-day window: 40%, resets Oct 11, 13:00',
+  )
+})
+
+test('/limit reads in plain words in every state', () => {
+  const none = { isResumeScheduled: false, held: 0 }
+  expect(limitReport([], { kind: 'free' }, O, none)).toBe('Usage limit: no reading yet. The first model response in this session reports it.')
+  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Usage limit: normal (one subagent at a time from 90%, pause at 98%)')
+  const paused = { kind: 'paused', window: windows(98)[0] ?? { kind: 'five_hour', percentUsed: 98 } } as const
+  expect(limitReport(windows(98), paused, O, { isResumeScheduled: true, held: 2 })).toBe(
+    [
+      'Usage limit: paused at 98% to keep the 2% reserve, resumes Oct 6, 19:30',
+      '5-hour window: 98%, resets Oct 6, 19:30',
+      '7-day window: 40%, resets Oct 11, 13:00',
+      'Resume scheduled for when the window resets.',
+      '2 messages held for the resume.',
+    ].join('\n'),
+  )
+  expect(statusText({ kind: 'free' }, O)).toBeUndefined()
+  expect(statusText(paused, O)).toBe('Usage limit: paused at 98% to keep the 2% reserve, resumes Oct 6, 19:30')
+  expect(windowName('seven_day_opus')).toBe('seven day opus window')
 })
 
 test('a new session without its own reading uses the one another session stored', async ($, on) => {
@@ -202,7 +226,7 @@ const BAND = {
 
 const OTHER_MODS = { type: 'Text', props: {}, children: ['drawn by another mod'] }
 
-test('the band shows each window with its bar and percent at 91%, and keeps the other mods', async ($, on) => {
+test('the band shows each window with its bar and percent at 91%, and keeps the other mods', SAO_PAULO, async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 91 }
   setup(on, s)
   on('ui.render', () => OTHER_MODS)
@@ -232,7 +256,7 @@ test('the band stays hidden at 50%', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: '50%' })).toBeUndefined()
 })
 
-test('the band adds a red paused row at 98%, and redraws when the window changes', async ($, on) => {
+test('the band adds a red paused row at 98%, and redraws when the window changes', SAO_PAULO, async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 50 }
   setup(on, s)
   on('ui.render', () => OTHER_MODS)
@@ -256,14 +280,14 @@ test('from bandFrom (75% by default), the band shows, green below the alert', as
 
 test('narrow or wide, both bars get the same width, so marks, percents and reset times line up', () => {
   for (const columns of [50, 80, 200]) {
-    const rows = bandRows(windows(91), columns, DEFAULTS)
+    const rows = bandRows(windows(91), columns, O)
     const widths = rows.map((r) => r.runs.map((x) => x.text).join('').length)
     expect(widths[0]).toBe(widths[1])
     expect((widths[0] ?? 0) <= 40).toBe(true)
     expect(rows.map((r) => r.label.length + (widths[0] ?? 0) + r.percent.length)).toEqual([7 + (widths[0] ?? 0) + 5, 7 + (widths[0] ?? 0) + 5])
   }
-  expect(bandRows(windows(91), 200, DEFAULTS)[0]?.runs.map((x) => x.text).join('').length).toBe(40)
-  expect(bandRows(windows(91), 50, DEFAULTS)[0]?.runs.map((x) => x.text).join('').length).toBe(16)
+  expect(bandRows(windows(91), 200, O)[0]?.runs.map((x) => x.text).join('').length).toBe(40)
+  expect(bandRows(windows(91), 50, O)[0]?.runs.map((x) => x.text).join('').length).toBe(16)
 })
 
 test('the session ends with one summary line: tool calls, what the mod held back, and its own time', async ($, on) => {
@@ -289,4 +313,14 @@ test('the session ends with one summary line: tool calls, what the mod held back
     maxHookMs: 0,
   })
   expect(written.filter((l) => l.includes('session-summary')).length).toBe(1)
+})
+
+test('an empty or unknown time zone falls back to the system time zone', () => {
+  expect(options({}).timeZone).toBe('')
+  expect(options({ timeZone: 'Nowhere/Invented' }).timeZone).toBe('')
+  expect(options({ timeZone: ' America/New_York ' }).timeZone).toBe('America/New_York')
+  const iso = '2026-10-06T22:30:00.000Z'
+  const local = new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  expect(formatTime(iso, '')).toBe(local)
+  expect(formatTime(iso, 'America/New_York')).toBe('Oct 6, 18:30')
 })
