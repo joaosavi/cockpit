@@ -353,13 +353,10 @@ test('the pane draws the header, the question, the state badge beside Now, and t
   expect((await ui.find({ type: 'Text', text: ' WORKING ' }))?.props).toEqual({ bold: true, inverse: true, color: 'suggestion' })
   expect((await ui.find({ type: 'Text', text: NOW }))?.props).toMatchObject({ bold: true, wrap: 'wrap' })
   expect(await ui.find({ key: 'you' })).toBeUndefined()
-  // The re-run Button only holds the hotkey, hidden; the row draws the key in cyan and its name dim.
+  // The re-run key is the native Button, so a click works as well as the r key.
   expect((await ui.find({ key: 'rerun', text: 're-run' }))?.props).toMatchObject({ hotkey: 'r', plain: true })
-  expect(await ui.find({ type: 'Box', text: /^re-run$/ })).toMatchObject({ props: { display: 'none' } })
-  expect((await ui.find({ type: 'Text', text: /^r$/ }))?.props).toMatchObject({ color: 'cyan' })
-  expect((await ui.find({ type: 'Text', text: /^ re-run$/ }))?.props).toMatchObject({ dimColor: true })
-  expect((await ui.find({ type: 'Text', text: /^esc$/ }))?.props).toMatchObject({ color: 'cyan' })
-  expect((await ui.find({ type: 'Text', text: /^ close$/ }))?.props).toMatchObject({ dimColor: true })
+  expect((await ui.find({ type: 'Text', text: /^esc$/ }))?.props).toMatchObject({ color: 'suggestion' })
+  expect(await ui.find({ type: 'Text', text: /^: close$/ })).toBeDefined()
 })
 
 test('in the pane, the badge keeps its width and Now wraps in the columns left beside it', async ($, on) => {

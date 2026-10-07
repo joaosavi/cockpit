@@ -255,15 +255,16 @@ function body(ui: Ui, v: View, width: number): RenderElement[] {
 }
 
 function key(ui: Ui, name: string, label: string): RenderElement {
-  return ui.Text({ children: [ui.Text({ color: 'cyan', children: [name] }), ui.Text({ dimColor: true, children: [` ${label}`] })] })
+  // Drawn like the native Button beside it: `esc: close`, the key in the theme's suggestion color.
+  return ui.Text({ children: [ui.Text({ color: 'suggestion', children: [name] }), ui.Text({ children: [`: ${label}`] })] })
 }
 
 // The keys: re-run, hidden while a call is in flight, and Esc, which the pane was opened to honor.
 function footer(ui: Ui, v: View, rerun: () => Promise<void>): RenderElement {
   const keys: RenderElement[] = []
   if (v.kind !== 'waiting') {
-    keys.push(ui.Box({ display: 'none', children: [ui.Button({ key: 'rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: rerun })] }))
-    keys.push(key(ui, 'r', t.rerun))
+    // The native Button, so a mouse click re-runs too. Claude Code draws it as `r: re-run`.
+    keys.push(ui.Button({ key: 'rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: rerun }))
   }
   keys.push(key(ui, 'esc', t.close))
   return ui.Box({ flexDirection: 'row', columnGap: 3, children: keys })
