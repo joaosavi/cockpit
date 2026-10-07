@@ -16,7 +16,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `shell/` | O terminal da VPS: `zshrc`, `profile`, `npmrc`, `starship.toml` e o `config.jsonc` do fastfetch | `~/` e `~/.config/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
 | `ambientes/` | O `CLAUDE.md` de cada pasta que um serviço `*-rc` abre, como `getdemo` e `esag` | `~/<pasta>/CLAUDE.md` |
-| `memorias/` | A memória automática do Claude Code de cada projeto, como `getdemo` e `esag` | `~/.claude/projects/<projeto>/memory/` |
+| `memorias/` | A memória automática do Claude Code de cada projeto, como `getdemo` e `esag`, e a `vps`, com o que vale para qualquer pasta. O `CLAUDE.md` global importa o índice da `vps` e diz quando salvar em cada uma | `~/.claude/projects/<projeto>/memory/`; a `vps` fica no repo |
 | `docs/always-on.html` | O guia "Claude Code Always-On", exportado do claude.ai | |
 | `.env.bw-agente.example` | Modelo das credenciais da conta do agente no Vaultwarden | `~/getdemo/.env.bw-agente` |
 

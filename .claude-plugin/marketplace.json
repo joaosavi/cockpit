@@ -54,11 +54,6 @@
       "name": "rating",
       "source": "./mods/rating",
       "description": "Records every agent turn as a dataset with your 1-5 ratings and automatic weak labels, for analysis and fine-tuning. /rate, /ratings and a rating band above the prompt"
-    },
-    {
-      "name": "global-memory",
-      "source": "./mods/global-memory",
-      "description": "Adds a VPS-wide memory folder beside the per-project auto memory: the memory section describes both folders and where each memory type goes, and the global MEMORY.md reaches every session"
     }
   ]
 }

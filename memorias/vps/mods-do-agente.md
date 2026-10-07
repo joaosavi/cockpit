@@ -33,6 +33,8 @@ O que a validação provou numa sessão de Remote Control:
 - `$.tool.call({ tool: 'Skill' })` responde "Launching skill" mas não põe o texto da skill na conversa; o mod `skill-loader` lê o `SKILL.md` do disco e entrega no `context` do resultado ou no texto da recusa
 - um hook só pode rodar 10 s de código próprio, e o `$.clock.sleep` conta; esperar dentro de `$.process.run(['sleep', '5'])` não conta
 
+O plano Team liga o guarda embutido `sec-default`, que tira os mods instalados pelo usuário dos ganchos `prompt.section`, `prompt.context`, `prompt.compose`, `skill.prompt` e `classic.*`: eles nunca disparam para mod nosso (provado em 07/10/2026 com sonda em -p e no terminal). Por isso a memória global da VPS virou uma seção no `CLAUDE.md` global com `@` import do `memorias/vps/MEMORY.md`, e não um mod. Mod que precise mexer no system prompt só funciona via `prependPlugins` em configuração gerenciada.
+
 Pendências em 07/10/2026 (o João toca várias sessões e pode esquecer; lembre ele):
 - tirar o `segredo.pl` do `settings.json` depois de uns dias de `secret-guard` sem erro (olhar o diário e o `/mods`)
 - o João instalar o pacote no PC de casa (`claude plugin marketplace add joaosavi/claude-devcontainer`, `claude plugin install agent@agent`, ligar autoUpdate) e ver a parte visual

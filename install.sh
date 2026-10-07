@@ -26,7 +26,9 @@ link "$R/shell/starship.toml" "$HOME/.config/starship.toml"
 link "$R/shell/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
 
 # A memória de cada projeto mora em ~/.claude/projects/<pasta com / trocado por ->/memory.
+# A pasta vps é a memória que vale para a VPS inteira. Ela não é de projeto: o CLAUDE.md global importa o índice dela.
 for d in "$R"/memorias/*/; do
+  [ "$(basename "$d")" = vps ] && continue
   p="$HOME/.claude/projects/$(printf '%s' "$HOME/$(basename "$d")" | tr '/' '-')/memory"
   if [ -d "$p" ] && [ ! -L "$p" ]; then
     echo "$p já existe e não é link. Junte com ${d%/} à mão." >&2

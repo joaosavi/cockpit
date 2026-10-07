@@ -200,3 +200,17 @@ Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e pa
 Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado. Uma sessão parada ocupa de 200 a 500 MB, e um `tsc --noEmit` do zippi-datawarehouse ocupa 1 GB.
 
 O mod `memory-guard` guarda typecheck, suíte de teste, build e Playwright: antes de rodar, confere a folga do grupo, e se não couber roda com um processo só ou espera. Depois de um exit 137, ele repete com um processo só. Quando ele recusar um comando, siga com a parte da tarefa que não depende dele e avise o João. O `/ram` mostra a folga de cada grupo.
+
+# Memória que vale para a VPS inteira
+
+A memória automática do Claude Code é por pasta. O fato que vale para qualquer pasta desta VPS mora em `~/claude-devcontainer/memorias/vps/`, no mesmo formato: `MEMORY.md` como índice e um arquivo por fato, com frontmatter. O índice dela segue abaixo e chega em toda sessão.
+
+Escolha a pasta pelo tipo da memória:
+
+- `user` e `feedback` vão para a global. Ficam na pasta do projeto só quando valem só para aquele projeto.
+- `reference` sobre a VPS, as ferramentas, os acessos e os serviços vai para a global.
+- `project` fica na pasta do projeto.
+
+Antes de salvar, confira as duas pastas e atualize o arquivo que já cobre o fato. Depois de salvar, atualize o `MEMORY.md` da pasta onde o arquivo ficou. Toda sessão da VPS lê a global, então ela guarda o caminho até a credencial, nunca o valor.
+
+@~/claude-devcontainer/memorias/vps/MEMORY.md

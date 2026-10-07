@@ -1,9 +1,0 @@
-{
-  "name": "global-memory",
-  "version": "1.0.0",
-  "description": "Adds a VPS-wide memory folder beside the per-project auto memory: the memory section describes both folders and where each type of memory goes, and the global MEMORY.md reaches every session from any folder",
-  "author": { "name": "João Savi" },
-  "userConfig": {
-    "globalDir": { "type": "string", "title": "Global memory folder", "description": "Folder of the VPS-wide memory, with its own MEMORY.md. A leading ~ is the HOME folder", "default": "~/claude-devcontainer/memorias/vps" }
-  }
-}

@@ -5,7 +5,7 @@ metadata:
   type: reference
 ---
 
-Criado pelo João em 06/10/2026 para o agente usar sem depender das contas dele: `claudeocodigo01@gmail.com`. O endereço foi ditado por voz como "Claude o código 01", então confira no item do cofre antes de digitar. A credencial está no Vaultwarden da organização "Agente Getdemo" e chega pelo MCP `navegador` como `ACCOUNTS_GOOGLE_COM_USER` e `ACCOUNTS_GOOGLE_COM_PASSWORD` (ver [[cofre-credenciais-agentes]]).
+Criado pelo João em 06/10/2026 para o agente usar sem depender das contas dele: `claudiocodigo01@gmail.com`, conferido em 06/10/2026 pelo YouTube logado (o ditado por voz sugeria "claudeo", e está errado). A credencial está no Vaultwarden da organização "Agente Getdemo" e chega pelo MCP `navegador` como `ACCOUNTS_GOOGLE_COM_USER` e `ACCOUNTS_GOOGLE_COM_PASSWORD` (ver [[cofre-credenciais-agentes]]).
 
 O João liberou uso à vontade: logar, pegar token, abrir sessão, sem pedir a ele.
 
