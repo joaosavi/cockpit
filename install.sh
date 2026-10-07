@@ -36,9 +36,9 @@ for f in settings.json settings.local.json; do
   [ -f "$HOME/.claude/$f" ] || cp "$R/claude/$f" "$HOME/.claude/$f"
 done
 
-# Os mods do repo: o marketplace `agente` aponta para esta pasta, e o pacote `agente` instala cada mod.
-claude plugin marketplace add "$R" >/dev/null 2>&1 || claude plugin marketplace update agente
-claude plugin install agente@agente
+# Os mods do repo: o marketplace `agent` aponta para esta pasta, e o pacote `agent` instala cada mod.
+claude plugin marketplace add "$R" >/dev/null 2>&1 || claude plugin marketplace update agent
+claude plugin install agent@agent
 
 claude mcp remove -s user navegador >/dev/null 2>&1 || true
 claude mcp add -s user navegador -- "$HOME/.local/bin/navegador-cofre"

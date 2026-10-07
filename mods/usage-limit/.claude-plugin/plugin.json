@@ -1,0 +1,12 @@
+{
+  "name": "usage-limit",
+  "version": "1.0.0",
+  "description": "Guards the account usage limit: one subagent at a time above 90%, a pause with a reserve at 98%, and an automatic resume when the window resets",
+  "author": { "name": "João Savi" },
+  "userConfig": {
+    "reserve": { "type": "number", "title": "Reserve", "description": "Final percentage of the limit kept for the user. The session pauses at 100 minus this value", "default": 2, "min": 0, "max": 20 },
+    "alert": { "type": "number", "title": "Alert", "description": "Above this percentage, only one subagent runs at a time", "default": 90, "min": 50, "max": 99 },
+    "timeZone": { "type": "string", "title": "Time zone", "description": "Time zone for the times shown in messages", "default": "America/Sao_Paulo" },
+    "resumeOnError": { "type": "boolean", "title": "Resume on limit error", "description": "Also resumes a session that hit 100%. Off while retomar-limite.timer handles that case", "default": false }
+  }
+}

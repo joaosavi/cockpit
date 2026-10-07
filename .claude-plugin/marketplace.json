@@ -1,29 +1,29 @@
 {
-  "name": "agente",
+  "name": "agent",
   "owner": {
     "name": "João Savi"
   },
-  "description": "Os mods do agente: o que antes era regra no CLAUDE.md ou script no timer, agora roda dentro do Claude Code",
+  "description": "The agent's mods: what used to be a rule in CLAUDE.md or a script on a timer now runs inside Claude Code",
   "plugins": [
     {
-      "name": "agente",
-      "source": "./mods/agente",
-      "description": "O pacote com todos os mods do agente. Instalar este plugin instala cada mod como dependência"
+      "name": "agent",
+      "source": "./mods/agent",
+      "description": "The bundle with all of the agent's mods. Installing this plugin installs each mod as a dependency"
     },
     {
-      "name": "limite",
-      "source": "./mods/limite",
-      "description": "Segura o limite de uso da conta: um subagente por vez acima de 90%, pausa com reserva em 98% e retoma sozinho quando a janela volta"
+      "name": "usage-limit",
+      "source": "./mods/usage-limit",
+      "description": "Guards the account usage limit: one subagent at a time above 90%, a pause with a reserve at 98%, and an automatic resume when the window resets"
     },
     {
-      "name": "memoria",
-      "source": "./mods/memoria",
-      "description": "Segura typecheck, build, teste e Playwright abaixo do alto de memória: roda com um processo só, espera ou recusa, e repete o comando que morreu com exit 137"
+      "name": "memory-guard",
+      "source": "./mods/memory-guard",
+      "description": "Keeps typecheck, build, test and Playwright below the memory high mark: runs them with a single process, waits or refuses, and retries a command that died with exit 137"
     },
     {
-      "name": "skills",
-      "source": "./mods/skills",
-      "description": "Carrega a skill certa na hora certa: typescript-best-practices ao ler .ts, writing-for-agents em SKILL.md, AGENTS.md e CLAUDE.md, domain-modeling em CONTEXT.md e ADR, technical-writing em README, commit e PR"
+      "name": "skill-loader",
+      "source": "./mods/skill-loader",
+      "description": "Loads the right skill at the right time: typescript-best-practices when reading .ts, writing-for-agents on SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling on CONTEXT.md and ADRs, technical-writing on README, commits and PRs"
     }
   ]
 }

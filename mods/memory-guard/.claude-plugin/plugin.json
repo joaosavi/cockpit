@@ -1,0 +1,10 @@
+{
+  "name": "memory-guard",
+  "version": "1.0.0",
+  "description": "Keeps typecheck, build, test and Playwright below the memory high mark: runs them with a single process, waits or refuses, and retries a command that died with exit 137",
+  "author": { "name": "João Savi" },
+  "userConfig": {
+    "margin": { "type": "number", "title": "Margin", "description": "Percentage of each group's memory high mark that stays free", "default": 2, "min": 0, "max": 30 },
+    "waitSeconds": { "type": "number", "title": "Wait", "description": "Seconds a heavy command waits for memory to drop before it is refused", "default": 120, "min": 0, "max": 600 }
+  }
+}

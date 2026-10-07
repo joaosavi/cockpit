@@ -176,7 +176,7 @@ Bom:
 
 # Skills que chegam sozinhas
 
-O mod `skills` entrega a skill certa junto com a ação que ela cobre: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, e `technical-writing` em README, commit e PR. A skill entregue vem completa no resultado da ferramenta: siga direto dela. Quando eu colar um erro ou disser que algo quebrou, carregue `diagnosing-bugs` antes de investigar.
+O mod `skill-loader` entrega a skill certa junto com a ação que ela cobre: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, e `technical-writing` em README, commit e PR. A skill entregue vem completa no resultado da ferramenta: siga direto dela. Quando eu colar um erro ou disser que algo quebrou, carregue `diagnosing-bugs` antes de investigar.
 
 # Pesquisa na web
 
@@ -199,4 +199,4 @@ Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e pa
 
 Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado. Uma sessão parada ocupa de 200 a 500 MB, e um `tsc --noEmit` do zippi-datawarehouse ocupa 1 GB.
 
-O mod `memoria` guarda typecheck, suíte de teste, build e Playwright: antes de rodar, confere a folga do grupo, e se não couber roda com um processo só ou espera. Depois de um exit 137, ele repete com um processo só. Quando ele recusar um comando, siga com a parte da tarefa que não depende dele e avise o João. O `/memoria` mostra a folga de cada grupo.
+O mod `memory-guard` guarda typecheck, suíte de teste, build e Playwright: antes de rodar, confere a folga do grupo, e se não couber roda com um processo só ou espera. Depois de um exit 137, ele repete com um processo só. Quando ele recusar um comando, siga com a parte da tarefa que não depende dele e avise o João. O `/ram` mostra a folga de cada grupo.

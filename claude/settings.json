@@ -86,10 +86,10 @@
     "frontend-design@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "playwright@claude-plugins-official": false,
-    "limite@agente": true,
-    "agente@agente": true,
-    "memoria@agente": true,
-    "skills@agente": true
+    "agent@agent": true,
+    "usage-limit@agent": true,
+    "memory-guard@agent": true,
+    "skill-loader@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -104,7 +104,7 @@
         "repo": "anthropics/claude-plugins-official"
       }
     },
-    "agente": {
+    "agent": {
       "source": {
         "source": "directory",
         "path": "/home/sv/claude-devcontainer"

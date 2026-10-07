@@ -10,7 +10,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/` |
 | `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite` e `navegador-cofre` | `~/.local/bin/` |
 | `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
-| `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agente` | instalados pelo `claude plugin install` |
+| `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agent`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite` e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
@@ -59,41 +59,41 @@ O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o
 
 ## Os mods
 
-Um mod é um plugin com código que roda dentro do Claude Code e responde a eventos: uma chamada de ferramenta, um prompt, um subagente subindo. Ele faz de forma determinística o que antes era regra no `CLAUDE.md` ou script num timer. A raiz do repo é o marketplace `agente`, e cada pasta em `mods/` é um plugin dele.
+Um mod é um plugin com código que roda dentro do Claude Code e responde a eventos: uma chamada de ferramenta, um prompt, um subagente subindo. Ele faz de forma determinística o que antes era regra no `CLAUDE.md` ou script num timer. A raiz do repo é o marketplace `agent`, e cada pasta em `mods/` é um plugin dele.
 
 | mod | o que faz |
 | :--- | :--- |
-| `agente` | O pacote. Não tem código: instala os outros como dependência |
-| `limite` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta |
-| `memoria` | Antes de typecheck, teste, build ou Playwright, confere se o comando cabe no alto de memória do grupo, menos 2%. Se não cabe, roda com um processo só, espera até 2 minutos ou recusa. Repete com um processo só o comando que morreu com exit 137, e guarda o pico de cada comando para a próxima conta |
-| `skills` | Entrega a skill certa junto com a ação: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, `technical-writing` em README, commit e PR. Lê o `SKILL.md` do disco, porque a ferramenta Skill chamada por um mod não põe o texto na conversa |
+| `agent` | O pacote. Não tem código: instala os outros como dependência |
+| `usage-limit` | Acima de 90% do limite de uso da conta, deixa subir um subagente por vez. Em 98%, para a sessão, guarda os 2% finais para o João e retoma sozinho quando a janela volta |
+| `memory-guard` | Antes de typecheck, teste, build ou Playwright, confere se o comando cabe no alto de memória do grupo, menos 2%. Se não cabe, roda com um processo só, espera até 2 minutos ou recusa. Repete com um processo só o comando que morreu com exit 137, e guarda o pico de cada comando para a próxima conta |
+| `skill-loader` | Entrega a skill certa junto com a ação: `typescript-best-practices` ao ler ou escrever `.ts`, `writing-for-agents` em `SKILL.md`, `AGENTS.md` e `CLAUDE.md`, `domain-modeling` em `CONTEXT.md` e ADR, `technical-writing` em README, commit e PR. Lê o `SKILL.md` do disco, porque a ferramenta Skill chamada por um mod não põe o texto na conversa |
 
-Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`.
+Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit` e `/ram`.
 
-O `retomar-limite.timer` continua rodando para a sessão que ainda bater 100%. A opção `retomarNoErro` do mod `limite` assume esse caso quando o timer sair.
+O `retomar-limite.timer` continua rodando para a sessão que ainda bater 100%. A opção `resumeOnError` do mod `usage-limit` assume esse caso quando o timer sair.
 
 Para mudar um mod:
 
 1. Edite o código e rode os testes na pasta dele:
 
 	```sh
-	claude plugin validate ~/claude-devcontainer/mods/limite
-	claude plugin test ~/claude-devcontainer/mods/limite
+	claude plugin validate ~/claude-devcontainer/mods/usage-limit
+	claude plugin test ~/claude-devcontainer/mods/usage-limit
 	```
 
 2. Suba o `version` no `.claude-plugin/plugin.json` do mod. Sem a versão nova, o Claude Code mantém a cópia antiga.
-3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/agente/.claude-plugin/plugin.json`, suba o `version` do `agente` e registre o mod no `.claude-plugin/marketplace.json`. Para instalar na hora, sem esperar a atualização automática, rode `claude plugin install agente@agente`. O `claude plugin update` sozinho atualiza o pacote mas não instala a dependência nova.
+3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/agent/.claude-plugin/plugin.json`, suba o `version` do `agent` e registre o mod no `.claude-plugin/marketplace.json`. Para instalar na hora, sem esperar a atualização automática, rode `claude plugin install agent@agent`. O `claude plugin update` sozinho atualiza o pacote mas não instala a dependência nova.
 
-O marketplace `agente` tem atualização automática ligada no `settings.json`. Depois da mudança, a primeira sessão que abre atualiza a cópia instalada e instala a dependência que entrou, e as sessões abertas a partir daí carregam a versão nova. As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
+O marketplace `agent` tem atualização automática ligada no `settings.json`. Depois da mudança, a primeira sessão que abre atualiza a cópia instalada e instala a dependência que entrou, e as sessões abertas a partir daí carregam a versão nova. As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
 
 Para usar os mods em outra máquina, adicione o repo como marketplace e instale o pacote:
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install agente@agente
+claude plugin install agent@agent
 ```
 
-Na outra máquina, ligue a atualização automática do marketplace `agente` no `/plugin`, aba **Marketplaces**. Desinstalar o pacote deixa os mods instalados, e o `claude plugin prune` remove os que sobraram.
+Na outra máquina, ligue a atualização automática do marketplace `agent` no `/plugin`, aba **Marketplaces**. Desinstalar o pacote deixa os mods instalados, e o `claude plugin prune` remove os que sobraram.
 
 ## Fica fora do git
 
