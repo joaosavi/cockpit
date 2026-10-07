@@ -39,6 +39,11 @@
       "name": "secret-guard",
       "source": "./mods/secret-guard",
       "description": "Replaces every secret value in tool output with <hidden:NAME> before the agent reads it, and puts the real value back when the agent writes the placeholder into a secret file"
+    },
+    {
+      "name": "pipefail",
+      "source": "./mods/pipefail",
+      "description": "Puts set -o pipefail in front of a command that pipes a test runner into tail, head or grep, so a failing test does not exit 0"
     }
   ]
 }

@@ -18,12 +18,12 @@ export type Options = {
   alert: number
   // Time zone of the times the agent and the user read.
   timeZone: string
-  // Also resumes a session that hit 100% with the limit error. Stays off while the VPS
-  // retomar-limite.timer handles that case.
+  // Also resumes a session that hit 100% with the limit error, when the pause at the reserve came
+  // too late (a burst of parallel requests can jump past it).
   resumeOnError: boolean
 }
 
-export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: 'America/Sao_Paulo', resumeOnError: false }
+export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: 'America/Sao_Paulo', resumeOnError: true }
 
 // Margin after the reset time, because the server can release the limit a few seconds late.
 export const MARGIN_MS = 2 * 60_000

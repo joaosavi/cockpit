@@ -52,7 +52,7 @@ node "$DIR/../playwright/cli.js" install chromium chromium-headless-shell
 sudo cp -r "$R"/systemd/* /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now getdemo-rc.service zippi-rc.service esag-rc.service resgate-rc.service \
-  retomar-limite.timer getdemo-faxina.timer sessoes-esquecidas.timer
+  getdemo-faxina.timer sessoes-esquecidas.timer
 
 [ -f "$HOME/getdemo/.env.bw-agente" ] || echo "Falta o ~/getdemo/.env.bw-agente. Copie o .env.bw-agente.example e preencha." >&2
 perl "$R/hooks/segredo.pl" --teste

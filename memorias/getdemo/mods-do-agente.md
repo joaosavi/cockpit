@@ -16,7 +16,7 @@ Em 07/10/2026 o João decidiu não ter mod de bloqueio: nada é recusado por per
 
 Em 07/10/2026 entrou o `audit` (`/audit`), que grava as chamadas MCP de escrita em `~/.local/state/mods/audit/`.
 
-Também entrou o `loop-breaker`.
+Também entraram o `loop-breaker` e o `pipefail` (põe `set -o pipefail;` em teste cortado por tail/head/grep; o `guard-bash.sh` do zippi aceita o reescrito). Em 07/10/2026 o `retomar-limite.timer` foi desligado e o `resumeOnError` do `usage-limit` passou a vir ligado.
 
 O `secret-guard` (porte do `segredo.pl`, placeholder `<hidden:NOME>`, aceita `<oculto:NOME>` no restore) entrou em 07/10/2026 rodando junto com o Perl. O Perl roda antes do mod, então comparar os dois lado a lado não prova nada: a prova foi a sessão isolada (`CLAUDE_CONFIG_DIR` próprio, sem os hooks, segredos falsos), com zero vazamento. Erro de hook no mod fecha a saída com `deny`. Falta decidir quando tirar o Perl do `settings.json`.
 

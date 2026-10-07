@@ -1,0 +1,6 @@
+{
+  "name": "pipefail",
+  "version": "1.0.0",
+  "description": "Puts set -o pipefail in front of a command that pipes a test, type check or lint runner into tail, head or grep, so a failing test does not exit 0",
+  "author": { "name": "João Savi" }
+}

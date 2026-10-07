@@ -176,3 +176,14 @@ test("in the reserve, a prompt with an unclassified origin counts as the user's"
   await $.session.start(start)
   expect(await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'unclassified' } })).toMatchObject({ text: 'hi' })
 })
+
+test('a session that hit 100% with the limit error resumes when the window resets', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 100 }
+  const clock = setup(on, s)
+  on('classic.StopFailure', () => ({}))
+  await $.session.start(start)
+  await $.classic.StopFailure({ session_id: 's1', transcript_path: '/t', cwd: '/work', hook_event_name: 'StopFailure', error: 'rate_limit' })
+  await clock.set(Date.parse(RESET) + 2 * 60_000)
+  expect(s.submitted.length).toBe(1)
+  expect(s.submitted[0]).toContain('The limit has reset')
+})

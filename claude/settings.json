@@ -92,7 +92,8 @@
     "skill-loader@agent": true,
     "audit@agent": true,
     "loop-breaker@agent": true,
-    "secret-guard@agent": true
+    "secret-guard@agent": true,
+    "pipefail@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

@@ -12,7 +12,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
 | `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agent`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
-| `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite` e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
+| `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite`, desligado desde 07/10/2026, e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
 | `ambientes/` | O `CLAUDE.md` de cada pasta que um serviço `*-rc` abre, como `getdemo` e `esag` | `~/<pasta>/CLAUDE.md` |
 | `memorias/` | A memória automática do Claude Code de cada projeto, como `getdemo` e `esag` | `~/.claude/projects/<projeto>/memory/` |
@@ -70,10 +70,11 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 | `audit` | Grava toda chamada MCP de escrita (Slack, Gmail, HubSpot, Notion, Calendar, Drive) num arquivo por dia em `~/.local/state/mods/audit/`, sem recusar nada, e guarda 30 dias. Na dúvida entre leitura e escrita, grava |
 | `loop-breaker` | Avisa o agente que ele está andando em círculo: 5 edições no mesmo arquivo enquanto um comando segue falhando, o mesmo erro 3 vezes, ou a mesma chamada 3 vezes seguidas. Não recusa nada: o aviso entra no resultado da ferramenta. Reconhece a falha pelo texto mesmo quando um `\| head` esconde o código de saída |
 | `secret-guard` | O porte do `segredo.pl`: troca todo valor de segredo por `<hidden:NOME>` no resultado de qualquer ferramenta, MCP e subagente inclusive, e devolve o valor real quando o agente escreve o placeholder num `.env`. Lê as mesmas fontes do Perl. Roda junto com o `segredo.pl` até o Perl sair do `settings.json` |
+| `pipefail` | Põe `set -o pipefail;` na frente de um comando que corta a saída de teste, typecheck ou lint com `tail`, `head` ou `grep`. Sem isso, o teste reprovado sai com 0. O `guard-bash.sh` do zippi aceita o comando reescrito, então o agente não perde a rodada |
 
 Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`. Os comandos são `/limit`, `/ram` e `/audit [quantidade] [filtro]`.
 
-O `retomar-limite.timer` continua rodando para a sessão que ainda bater 100%. A opção `resumeOnError` do mod `usage-limit` assume esse caso quando o timer sair.
+O `retomar-limite.timer` foi desligado em 07/10/2026. A sessão que ainda bater 100% é retomada pelo próprio `usage-limit`, pela opção `resumeOnError`, ligada por padrão.
 
 Para mudar um mod:
 
