@@ -4,8 +4,9 @@ import { groups, headroom, heavy, reduced, withMeasurement } from '../hooks/rule
 const MB = 1024 * 1024
 const GB = 1024 * MB
 const HIGH = 3 * GB
+const MAX = 3.5 * GB
 // With the 2% margin, up to 98% of the high mark fits.
-const LIMIT = HIGH * 0.98
+const LIMIT = MAX * 0.98
 
 test('recognizes the heavy runners and ignores what only mentions the name', () => {
   expect(heavy('yarn turbo run typecheck')).toMatchObject({ kind: 'typecheck' })
@@ -42,6 +43,8 @@ test('the headroom is that of the tightest group, and without a group the machin
   ]
   expect(headroom(levels, null, 0)).toBe(0.5 * GB)
   expect(headroom([], { available: 8 * GB, total: 16 * GB }, 2)).toBe(8 * GB - 16 * GB * 0.02)
+  // The max, where the kernel kills, wins over the high mark, where the group only slows down.
+  expect(headroom([{ group: '/a', used: 3 * GB, high: 3 * GB, max: 3.5 * GB }], null, 0)).toBe(0.5 * GB)
   expect(groups('0::/agentes.slice/getdemo-rc.service\n')).toEqual(['/agentes.slice/getdemo-rc.service', '/agentes.slice'])
 })
 
@@ -61,6 +64,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
     if (p.endsWith('/proc/self/cgroup')) return { value: '0::/agentes.slice/getdemo-rc.service\n' }
     if (p.endsWith('getdemo-rc.service/memory.current')) return { value: String(c.used[0]) }
     if (p.endsWith('getdemo-rc.service/memory.high')) return { value: String(HIGH) }
+    if (p.endsWith('getdemo-rc.service/memory.max')) return { value: String(MAX) }
     if (p.endsWith('memory.max')) return { value: 'max' }
     if (p.endsWith('agentes.slice/memory.current')) return { value: String(c.used[0]) }
     if (p.endsWith('agentes.slice/memory.high')) return { value: 'max' }

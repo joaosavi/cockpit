@@ -1,4 +1,4 @@
-// Keeps heavy commands (typecheck, build, test, Playwright) below the group's memory high mark.
+// Keeps heavy commands (typecheck, build, test, Playwright) below the group's memory max, where the kernel kills.
 //
 // Before running, the mod checks whether the command fits in the tightest group, minus the margin. If
 // it does not fit, it tries with a single process. If it still does not fit, it waits for memory to
@@ -115,7 +115,7 @@ async function updateStatus($: Api) {
   const h = await headroomNow($)
   // Shows up only when memory is tight, so the line with the ⚠ does not become background noise.
   if (h === null || h > 500 * 1024 * 1024) $.ui.status(undefined)
-  else $.ui.status(`${mb(Math.max(0, h))} fits before the memory high mark`)
+  else $.ui.status(`${mb(Math.max(0, h))} fits before the memory max`)
 }
 
 // Decides how the command runs: whole, with a single process, or not at all, after waiting.

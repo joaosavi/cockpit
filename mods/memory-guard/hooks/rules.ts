@@ -125,11 +125,13 @@ export function peakKey(h: Heavy, isReduced: boolean): string {
   return isReduced ? `${h.key} (1 process)` : h.key
 }
 
-// How much still fits without passing the high mark, minus the margin, in the tightest group. With no
-// group that has a limit, as on a PC, the machine's available memory minus the margin applies.
+// How much still fits without passing the max (where the kernel kills), minus the margin, in the
+// tightest group. Past the high mark the group only slows down, so the high counts only for a group
+// with no max. With no group that has a limit, as on a PC, the machine's available memory minus the
+// margin applies.
 export function headroom(levels: readonly Level[], machine: { available: number; total: number } | null, margin: number): number | null {
   const limited = levels.flatMap((l) => {
-    const limit = l.high ?? l.max
+    const limit = l.max ?? l.high
     return limit === null ? [] : [limit * (1 - margin / 100) - l.used]
   })
   if (limited.length > 0) return Math.min(...limited)
