@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import {
   activityRows,
+  parsePr,
   ansiRow,
   compactWindowOf,
   sgrColor,
@@ -33,6 +34,7 @@ import {
   toolName,
   width,
 } from '../hooks/rules.ts'
+import { statusRows } from '../hooks/styles.ts'
 
 const GiB = 1024 ** 3
 const MiB = 1024 ** 2
@@ -164,8 +166,8 @@ test('notes from other mods become a short notable', () => {
 })
 
 test('git status, cgroup memory, diaries and ratings parse into what the rows show', () => {
-  expect(parseGit('# branch.oid abc\n# branch.head main\n1 .M N... 100644 100644 100644 a b src/x.ts\n')).toEqual({ branch: 'main', isDirty: true })
-  expect(parseGit('# branch.oid 0123456789\n# branch.head (detached)\n')).toEqual({ branch: '0123456', isDirty: false })
+  expect(parseGit('# branch.oid abc\n# branch.head main\n1 .M N... 100644 100644 100644 a b src/x.ts\n')).toMatchObject({ branch: 'main', isDirty: true, modified: 1, staged: 0 })
+  expect(parseGit('# branch.oid 0123456789\n# branch.head (detached)\n')).toMatchObject({ branch: '0123456', isDirty: false })
   expect(parseGit('')).toBeNull()
 
   const m = memory(
@@ -548,4 +550,83 @@ test('the context is measured against the auto-compact window when it is smaller
   expect(compactWindowOf(undefined, 300_000)).toBe(300_000)
   expect(compactWindowOf('500k', 50_000)).toBe(100_000)
   expect(compactWindowOf(undefined, undefined)).toBeNull()
+})
+
+// ---------------------------------------------------------------------------------------------
+// The status line styles
+// ---------------------------------------------------------------------------------------------
+
+const GIT_STATUS = [
+  '# branch.oid abc',
+  '# branch.head feat/hud-git',
+  '# branch.upstream origin/feat/hud-git',
+  '# branch.ab +2 -1',
+  '1 M. N... 100644 100644 100644 a b staged.ts',
+  '1 .M N... 100644 100644 100644 a b one.ts',
+  '1 MM N... 100644 100644 100644 a b both.ts',
+  'u UU N... 100644 100644 100644 100644 a b c conflict.ts',
+  '? new.ts',
+].join('\n')
+
+test('git status counts ahead, behind, staged, modified and untracked', () => {
+  expect(parseGit(GIT_STATUS)).toEqual({ branch: 'feat/hud-git', isDirty: true, ahead: 2, behind: 1, staged: 2, modified: 3, untracked: 1 })
+})
+
+test('the PR shows only when open, with its checks rolled up', () => {
+  const pr = (rollup: unknown[], state = 'OPEN') => parsePr(JSON.stringify({ number: 252, state, statusCheckRollup: rollup }))
+  expect(pr([{ status: 'COMPLETED', conclusion: 'SUCCESS' }])).toEqual({ number: 252, checks: 'ok' })
+  expect(pr([{ status: 'COMPLETED', conclusion: 'SUCCESS' }, { status: 'COMPLETED', conclusion: 'FAILURE' }])).toEqual({ number: 252, checks: 'fail' })
+  expect(pr([{ status: 'IN_PROGRESS', conclusion: '' }])).toEqual({ number: 252, checks: 'pending' })
+  expect(pr([{ state: 'PENDING' }])).toEqual({ number: 252, checks: 'pending' })
+  expect(pr([])).toEqual({ number: 252, checks: 'none' })
+  expect(pr([], 'MERGED')).toBeNull()
+  expect(parsePr('{}')).toBeNull()
+  expect(parsePr('not json')).toBeNull()
+})
+
+const RICH = snap({ git: { branch: 'feat/hud-git', isDirty: true, ahead: 2, behind: 0, staged: 1, modified: 3, untracked: 0 }, pr: { number: 252, checks: 'ok' } })
+
+test('every style fits 100, 80 and 60 columns in every git state', () => {
+  const states = [RICH, snap({ git: { branch: 'dev', isDirty: false, ahead: 0, behind: 0, staged: 0, modified: 0, untracked: 0 }, pr: null }), snap({ git: null, project: 'getdemo' })]
+  for (const style of ['refined', 'blocks', 'minimal', 'compact'] as const)
+    for (const icons of ['nerd', 'unicode'] as const)
+      for (const s of states) for (const columns of [100, 80, 60]) for (const r of statusRows(s, style, icons, columns)) expect(width(r) <= columns).toBe(true)
+})
+
+test('refined: identity and git on top, meters below, as designed', () => {
+  const [top = [], bottom = []] = statusRows(RICH, 'refined', 'unicode', 100).map(rowText)
+  expect(top).toMatch(/^Opus 5\.5 {3}my-app {3}feat\/hud-git {2}↑ 2 {2}\+ 1 {2}● 3 {3}PR #252 ✓ +38m {2}· {2}214 calls$/)
+  expect(bottom).toBe('ctx ▰▰▰▰▱▱▱▱▱▱ 42%   5h ▰▰▰▰▰▰▱▱▱▱ 61%  resets 2h30m   7d ▰▰▰▰▱▱▱▱▱▱ 44%   mem 1.9G free')
+})
+
+test('refined in a narrow terminal drops the calls first and keeps the git counts', () => {
+  const [top = ''] = statusRows(RICH, 'refined', 'unicode', 72).map(rowText)
+  expect(top).not.toContain('calls')
+  expect(top).toContain('↑ 2  + 1  ● 3')
+})
+
+test('a clean branch reads synced, and outside a repo there is no git', () => {
+  const clean = snap({ git: { branch: 'dev', isDirty: false, ahead: 0, behind: 0, staged: 0, modified: 0, untracked: 0 } })
+  expect(rowText(statusRows(clean, 'refined', 'unicode', 100)[0] ?? [])).toContain('dev  ✓ synced')
+  expect(rowText(statusRows(clean, 'minimal', 'unicode', 100)[0] ?? [])).toContain('dev  in sync')
+  expect(rowText(statusRows(snap({ git: null }), 'minimal', 'unicode', 100)[0] ?? [])).toContain('not a git repo')
+})
+
+test('compact is one line when it fits and two when it does not', () => {
+  const small = snap({ git: null, project: 'x', memory: null })
+  expect(statusRows(small, 'compact', 'unicode', 100)).toHaveLength(1)
+  expect(statusRows(RICH, 'compact', 'unicode', 80)).toHaveLength(2)
+})
+
+test('blocks paint their background, and the nerd set uses Nerd Font glyphs', () => {
+  const [top = []] = statusRows(RICH, 'blocks', 'nerd', 100)
+  expect(top.some((s) => s.chip === 'strong')).toBe(true)
+  expect(top.some((s) => s.chip === 'soft')).toBe(true)
+  expect(rowText(top)).toContain('\u{F418} feat/hud-git')
+  expect(ansiRow([{ text: 'x', chip: 'soft', hue: 'branch' }])).toBe('\x1b[35;48;5;236mx\x1b[0m')
+})
+
+test('the style and icons options fall back to refined and nerd', () => {
+  expect(options({ style: 'BLOCKS', icons: 'Unicode' })).toMatchObject({ style: 'blocks', icons: 'unicode' })
+  expect(options({ style: 'fancy', icons: 'emoji' })).toMatchObject({ style: 'refined', icons: 'nerd' })
 })

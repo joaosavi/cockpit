@@ -1,6 +1,6 @@
 {
   "name": "hud",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
   "author": {
     "name": "João Savi"
@@ -93,6 +93,28 @@
         "window"
       ],
       "default": "compact"
+    },
+    "style": {
+      "type": "string",
+      "title": "Status line style",
+      "description": "Layout of the status line under the prompt: refined (two rows, the default), blocks (two rows of colored blocks), minimal (two rows in words) or compact (one row, two when it does not fit)",
+      "options": [
+        "refined",
+        "blocks",
+        "minimal",
+        "compact"
+      ],
+      "default": "refined"
+    },
+    "icons": {
+      "type": "string",
+      "title": "Icons",
+      "description": "nerd uses Nerd Font glyphs for git, folder, model and memory, which need a Nerd Font in the terminal. unicode uses plain arrows and marks",
+      "options": [
+        "nerd",
+        "unicode"
+      ],
+      "default": "nerd"
     }
   }
 }

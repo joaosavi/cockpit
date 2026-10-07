@@ -25,7 +25,7 @@ Done when you can say, for each section below, what is set today.
 Ask with AskUserQuestion, at most four questions per call, each with a recommended first option. Skip a question the current settings already answer, unless the user asked to change it.
 
 1. **HUD placement.** Under the prompt as the status line (recommended), or above the prompt in the band.
-2. **HUD style.** Bar glyphs (`blocks ▰▱`, `solid █░`, `line ━─`, `dots ●○`, `squares ■□`), colors for ok, warning and critical (names, `#rrggbb` or 0-255; default green, yellow, red), and fields to hide (`model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem`). Show a sample row in the option preview.
+2. **HUD style.** The layout: `refined` (default), `blocks`, `minimal` or `compact`; show each style's two sample rows from `mods/hud/README.md`, section "The styles", in the option preview. Then the icons: `nerd` needs a Nerd Font in the terminal, so ask the user whether `printf '\uf418 \uf407 \U000f06a9\n'` shows a branch, a pull request and a robot; if not, use `unicode`. Optional: bar glyphs (`blocks ▰▱`, `solid █░`, `line ━─`, `dots ●○`, `squares ■□`), colors for ok, warning and critical, and fields to hide (`model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem`).
 3. **Time zone** for the `hud`, `audit` and `usage-limit` mods (IANA name; empty uses the system's). The mods have no language option: their text is English, and the model-written lines follow the user's language.
 4. **Auto-compact window**, in tokens (`100000` to `1000000`). Claude Code compacts when the conversation reaches the window less a buffer of about 33K tokens. A smaller window compacts earlier, which keeps long sessions sharper and costs more summaries. To compact at 70% of a 1M model, set `733000`. Leave it unset to keep Claude Code's default, about 967K on a 1M model. Check the result with `claude -p /context`: the tokens used plus `Free space` is where compaction runs.
 
@@ -41,9 +41,9 @@ Merge exactly what the user chose:
 
 | Choice | Keys |
 | :- | :- |
-| HUD under the prompt | `statusLine: { "type": "command", "command": "<installLocation>/mods/hud/statusline/statusline.sh" }` and `pluginConfigs["hud@agent"].options.band: "off"`. If `claude-hud@claude-hud` is enabled, set it to `false`, because its status line is the one replaced. If another status line is set, show it to the user and confirm before you replace it. |
+| HUD under the prompt | `statusLine: { "type": "command", "command": "<installLocation>/mods/hud/statusline/statusline.sh", "refreshInterval": 5 }` and `pluginConfigs["hud@agent"].options.band: "off"`. If `claude-hud@claude-hud` is enabled, set it to `false`, because its status line is the one replaced. If another status line is set, show it to the user and confirm before you replace it. |
 | HUD above the prompt | `pluginConfigs["hud@agent"].options.band: "panel"`. Leave `statusLine` as it is. |
-| HUD style | `bar`, `colors` (space-separated), `hide` (comma-separated) under `pluginConfigs["hud@agent"].options` |
+| HUD style | `style`, `icons`, and when chosen `bar`, `colors` (space-separated), `hide` (comma-separated), under `pluginConfigs["hud@agent"].options` |
 | Time zone | `timeZone` under the `hud@agent`, `audit@agent` and `usage-limit@agent` options |
 | Spinner tip | `spinnerTipsEnabled: false` whenever `tip@agent` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | Auto-compact window | top-level `autoCompactWindow: <tokens>` |

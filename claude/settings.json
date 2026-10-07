@@ -74,7 +74,8 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh"
+    "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh",
+    "refreshInterval": 5
   },
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": true,
@@ -152,7 +153,9 @@
       "options": {
         "timeZone": "America/Sao_Paulo",
         "band": "off",
-        "activity": true
+        "activity": true,
+        "style": "refined",
+        "icons": "nerd"
       }
     },
     "pipefail@agent": {

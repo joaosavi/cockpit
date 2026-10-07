@@ -3,10 +3,12 @@
 // in a live file; this script reads git and the cgroup memory itself. Run by statusline.sh, which
 // sets COLUMNS. Node 22.18+ runs this TypeScript as is.
 
-import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { ansiRow, compactWindowOf, type Git, groups, inactiveFile, type Level, MEMORY_MARGIN, type Memory, memory, meminfo, numberOrMax, options, panelRows, parseGit, parseLive, statusSession, statusSnapshot, styleOf } from '../hooks/rules.ts'
+import { statusRows } from '../hooks/styles.ts'
+import { ansiRow, compactWindowOf, type Git, groups, inactiveFile, type Level, MEMORY_MARGIN, type Memory, memory, meminfo, numberOrMax, options, parseGit, parseLive, parsePr, type Pr, statusSession, statusSnapshot, styleOf } from '../hooks/rules.ts'
 
 function read(path: string): string | null {
   try {
@@ -23,6 +25,37 @@ function readGit(dir: unknown): Git | null {
   } catch {
     return null
   }
+}
+
+// How long a PR reading stays fresh. `gh` takes about a second, so it runs in the background and the
+// status line shows the last reading until the new one lands.
+const PR_TTL_MS = 60_000
+
+// The branch's open PR from the cache, refreshed in a detached `gh` run when the cache is stale.
+function readPr(dir: unknown, git: Git | null): Pr | null {
+  if (typeof dir !== 'string' || dir === '' || git === null) return null
+  const cacheDir = `${homedir()}/.local/state/mods/hud/pr`
+  const file = `${cacheDir}/${createHash('sha1').update(`${dir}\0${git.branch}`).digest('hex').slice(0, 16)}.json`
+  let age = Infinity
+  try {
+    age = Date.now() - statSync(file).mtimeMs
+  } catch {
+    // no reading yet
+  }
+  if (age > PR_TTL_MS) {
+    try {
+      mkdirSync(cacheDir, { recursive: true })
+      // Touch the file first, so the redraws during this run do not start another one.
+      if (age === Infinity) writeFileSync(file, '{}')
+      else writeFileSync(file, read(file) ?? '{}')
+      const child = spawn('sh', ['-c', 'gh pr view --json number,state,statusCheckRollup > "$1.tmp" 2>/dev/null && mv "$1.tmp" "$1" || { echo "{}" > "$1"; rm -f "$1.tmp"; }', 'sh', file], { cwd: dir, detached: true, stdio: 'ignore' })
+      child.on('error', () => {})
+      child.unref()
+    } catch {
+      // no gh or no cache folder: no PR shown
+    }
+  }
+  return parsePr(read(file) ?? '')
 }
 
 function readMemory(): Memory | null {
@@ -70,6 +103,7 @@ const compactWindow = o.contextBase === 'compact' ? compactWindowOf(process.env[
 const id = statusSession(input)
 const live = id === null ? null : parseLive(read(`${homedir()}/.local/state/mods/hud/live/${id}.json`) ?? '')
 const dir = typeof input === 'object' && input !== null ? (Reflect.get(Reflect.get(input, 'workspace') ?? {}, 'current_dir') ?? Reflect.get(input, 'cwd')) : undefined
-const snapshot = statusSnapshot(input, live, { now: Date.now(), timeZone: o.timeZone, git: readGit(dir), memory: o.memory ? readMemory() : null, compactWindow, style })
+const git = readGit(dir)
+const snapshot = { ...statusSnapshot(input, live, { now: Date.now(), timeZone: o.timeZone, git, memory: o.memory ? readMemory() : null, compactWindow, style }), pr: readPr(dir, git) }
 const columns = Number(process.env['COLUMNS'])
-process.stdout.write(panelRows(snapshot, Number.isFinite(columns) && columns > 20 ? columns : 120).map((r) => ansiRow(r, style.colors)).join('\n') + '\n')
+process.stdout.write(statusRows(snapshot, o.style, o.icons, Number.isFinite(columns) && columns > 20 ? columns : 120).map((r) => ansiRow(r, style.colors)).join('\n') + '\n')

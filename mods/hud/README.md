@@ -9,21 +9,63 @@ added to a tool result, which only the model reads otherwise.
 ## The status line
 
 A mod cannot draw rows under the prompt: that place belongs to the status line command of the
-settings. The mod ships one, `statusline/statusline.sh`, which draws the two `panel` rows there.
-Set it in `~/.claude/settings.json`, and set `band` to `off` so the rows do not show twice:
+settings. The mod ships one, `statusline/statusline.sh`, which draws the hud there in one of four
+styles. Set it in `~/.claude/settings.json`, and set `band` to `off` so the rows do not show twice:
 
 ```json
 {
-  "statusLine": { "type": "command", "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh" },
-  "pluginConfigs": { "hud@agent": { "options": { "band": "off" } } }
+  "statusLine": { "type": "command", "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh", "refreshInterval": 5 },
+  "pluginConfigs": { "hud@agent": { "options": { "band": "off", "style": "refined", "icons": "nerd" } } }
 }
 ```
 
 The path above is a clone of the repo. When the marketplace was added from GitHub, Claude Code keeps
 its own clone at `~/.claude/plugins/marketplaces/agent`, and `claude plugin marketplace update agent`
 keeps it current, so `~/.claude/plugins/marketplaces/agent/mods/hud/statusline/statusline.sh` works
-too. The `installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18 or later, which runs its
-TypeScript as is.
+too. The `installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18
+or later, which runs its TypeScript as is.
+
+`refreshInterval` re-runs the script every 5 seconds, so git, the PR and the session time stay
+current while the session is idle. Without it, the status line redraws only on Claude Code's events,
+such as a new message.
+
+### The styles
+
+With the `style` option. Each style drops its least useful fields first when the terminal is
+narrow, so no row passes the width.
+
+```text
+refined   󰚩 Opus 5.5    my-app    feat/hud-git   2   1   3    #252            12m  ·  37 calls
+          ctx ▰▰▰▰▱▱▱▱▱▱ 38%   5h ▰▱▱▱▱▱▱▱▱▱ 11%  resets 4h13m   7d ▰▰▰▰▰▰▱▱▱▱ 59%   󰍛 1.8G free
+
+blocks     󰚩 Opus 5.5    my-app    feat/hud-git   2   1   3    #252              12m
+           ctx 38%   5h 11%  resets 4h13m  7d 59%   󰍛 1.8G free
+
+minimal   my-app  feat/hud-git  2 to push · 1 staged · 3 modified  PR #252 passing   Opus 5.5 · 12m
+          context ━━━━────── 38%    5-hour ━───────── 11% 4h13m    weekly ━━━━━━──── 59%    1.8G free
+
+compact    my-app   feat/hud-git  2  1  3   252   󰚩 Opus 5.5
+          ctx 38% │ 5h 11%  4h13m │ 7d 59% │ 󰍛 1.8G
+```
+
+`compact` is one row when it fits and two when it does not. `blocks` paints each block's background.
+
+### Git and the PR
+
+The git field shows the branch, then commits to push, commits to pull, files staged, files changed
+outside the stage and untracked files, or `synced` when there is nothing. The PR is the branch's
+open pull request from `gh pr view`, with its checks: passing, failing or running. `gh` takes about a
+second, so the script runs it in the background at most once a minute, caches the answer in
+`~/.local/state/mods/hud/pr/`, and shows the last answer meanwhile. Without `gh`, or without an open
+PR, the field is left out.
+
+### Icons
+
+With `icons` set to `nerd`, the default, the git, folder, model and memory fields use Nerd Font
+glyphs, which show only when the terminal's font is a Nerd Font. With `unicode`, they use `↑ ↓ + ● ? ✓`
+and no glyph for the folder, the model and the memory.
+
+### Where the data comes from
 
 The status line reads the model, the folder, the context window and the plan limits from the JSON
 Claude Code pipes to it, so they show from the session's first screen, before any prompt. It reads
@@ -31,15 +73,10 @@ git and the cgroup memory itself. The tool call count comes from the mod, which 
 call to `~/.local/state/mods/hud/live/<session>.json` and removes the file when the session ends.
 Without the file, the row shows `0 calls`.
 
+Claude Code draws uncolored status line text in gray, so the names that should stand out are bold.
+
 With `band` set to `off`, the band still draws the activity row while a turn runs, unless
 `activity` is `false`.
-
-The band works in the terminal and the Desktop app. Remote Control draws no band, so there `/hud`
-answers with the same content as text.
-
-A mod gets the session's data when the session starts, which in an interactive terminal happens at
-the first prompt. Until then, the band shows only the call count. The context window and the plan
-limits arrive with the model's first answer.
 
 ## What the band shows
 
@@ -108,6 +145,8 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 | `barWidth` | `10` | Cells of a full-width bar, 4 to 30. A narrow terminal still shrinks the bars |
 | `colors` | empty | The colors for ok, warning and critical, separated by spaces. Each one is a name (`green`, `bright-cyan`), `#rrggbb` or a 256-color number. Empty uses green, yellow and red |
 | `hide` | empty | Fields to leave out, separated by commas: `model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem` |
+| `style` | `refined` | The status line layout: `refined`, `blocks`, `minimal` or `compact` |
+| `icons` | `nerd` | `nerd` for Nerd Font glyphs, `unicode` for plain marks |
 | `contextBase` | `compact` | What `ctx` measures against. With `compact`, 100% is the auto-compact window that `/autocompact` or `CLAUDE_CODE_AUTO_COMPACT_WINDOW` sets, when it is smaller than the model's window. With `window`, the model's full window. The status line only. The band and `/hud` read the model's window |
 | `timeZone` | empty | The IANA time zone for what counts as today, such as `America/New_York`. Empty uses the system time zone |
 

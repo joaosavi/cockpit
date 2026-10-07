@@ -11,6 +11,9 @@
 export type BandMode = 'panel' | 'line' | 'off'
 
 export type BarStyle = 'blocks' | 'solid' | 'line' | 'dots' | 'squares'
+// The status line's layout, and the glyph set it draws its icons with.
+export type StatusStyle = 'refined' | 'blocks' | 'minimal' | 'compact'
+export type IconSet = 'nerd' | 'unicode'
 export type ContextBase = 'compact' | 'window'
 
 // Fields the `hide` option takes, by the names the README gives them.
@@ -28,6 +31,8 @@ export type Options = {
   colors: string
   hide: string
   contextBase: ContextBase
+  style: StatusStyle
+  icons: IconSet
 }
 
 export const DEFAULTS: Options = {
@@ -41,6 +46,8 @@ export const DEFAULTS: Options = {
   colors: '',
   hide: '',
   contextBase: 'compact',
+  style: 'refined',
+  icons: 'nerd',
 }
 
 // Percentage of each cgroup's limit kept free, as memory-guard counts it.
@@ -71,7 +78,13 @@ export function options(values: unknown): Options {
     colors: text('colors', DEFAULTS.colors),
     hide: text('hide', DEFAULTS.hide),
     contextBase: text('contextBase', DEFAULTS.contextBase) === 'window' ? 'window' : 'compact',
+    style: oneOf(text('style', DEFAULTS.style), ['refined', 'blocks', 'minimal', 'compact'] as const, DEFAULTS.style),
+    icons: oneOf(text('icons', DEFAULTS.icons), ['nerd', 'unicode'] as const, DEFAULTS.icons),
   }
+}
+
+function oneOf<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
+  return allowed.find((a) => a === value.toLowerCase()) ?? fallback
 }
 
 // How the rows look: the bar glyphs and width, the color of each tone, and the fields left out.
@@ -131,7 +144,11 @@ export function expandHome(path: string, home: string | undefined): string | nul
 
 export type Tone = 'success' | 'warning' | 'error'
 
-export type Seg = { text: string; tone?: Tone; dim?: boolean; bold?: boolean }
+// Colors beyond the three tones, for the status line's git and PR fields.
+export type Hue = 'branch' | 'ahead' | 'behind' | 'pr' | 'accent'
+
+// `chip` paints the segment's background, for the blocks style: `strong` for the model, `soft` for the rest.
+export type Seg = { text: string; tone?: Tone; hue?: Hue; dim?: boolean; bold?: boolean; italic?: boolean; chip?: 'strong' | 'soft' }
 export type Row = Seg[]
 
 export function width(row: readonly Seg[]): number {
@@ -142,12 +159,12 @@ export function rowText(row: readonly Seg[]): string {
   return row.map((s) => s.text).join('')
 }
 
-function gap(n: number): Seg {
+export function gap(n: number): Seg {
   return { text: ' '.repeat(Math.max(0, n)) }
 }
 
 // Left segments, then the right ones flush with the last column. Null when both do not fit.
-function spread(left: readonly Seg[], right: readonly Seg[], columns: number): Row | null {
+export function spread(left: readonly Seg[], right: readonly Seg[], columns: number): Row | null {
   const room = columns - width(left) - width(right)
   if (room < 2) return null
   return [...left, gap(room), ...right]
@@ -248,22 +265,66 @@ export function resetIn(iso: string, now: number): string | null {
 // Git
 // ---------------------------------------------------------------------------------------------
 
-export type Git = { branch: string; isDirty: boolean }
+// The branch, and the counts the status line shows: commits ahead of and behind the upstream, files
+// staged, files changed outside the stage (conflicts included), and untracked files.
+export type Git = { branch: string; isDirty: boolean; ahead?: number; behind?: number; staged?: number; modified?: number; untracked?: number }
 
-// The output of `git status --porcelain=v2 --branch`: the branch (or the short commit when detached)
-// and whether any file changed.
+// The output of `git status --porcelain=v2 --branch`.
 export function parseGit(stdout: string): Git | null {
   let head: string | null = null
   let oid: string | null = null
-  let isDirty = false
+  let ahead = 0
+  let behind = 0
+  let staged = 0
+  let modified = 0
+  let untracked = 0
   for (const line of stdout.split('\n')) {
     if (line.startsWith('# branch.head ')) head = line.slice('# branch.head '.length).trim()
     else if (line.startsWith('# branch.oid ')) oid = line.slice('# branch.oid '.length).trim()
-    else if (line.trim() !== '' && !line.startsWith('#')) isDirty = true
+    else if (line.startsWith('# branch.ab ')) {
+      const m = /\+(\d+) -(\d+)/.exec(line)
+      ahead = Number(m?.[1] ?? 0)
+      behind = Number(m?.[2] ?? 0)
+    } else if (line.startsWith('1 ') || line.startsWith('2 ')) {
+      const xy = line.slice(2, 4)
+      if (xy[0] !== '.') staged += 1
+      if (xy[1] !== '.') modified += 1
+    } else if (line.startsWith('u ')) modified += 1
+    else if (line.startsWith('? ')) untracked += 1
   }
   if (head === null) return null
-  if (head === '(detached)') return { branch: oid === null || oid === '(initial)' ? 'detached' : oid.slice(0, 7), isDirty }
-  return { branch: head, isDirty }
+  const isDirty = staged + modified + untracked > 0
+  const branch = head === '(detached)' ? (oid === null || oid === '(initial)' ? 'detached' : oid.slice(0, 7)) : head
+  return { branch, isDirty, ahead, behind, staged, modified, untracked }
+}
+
+// The open pull request of the branch, with its checks rolled up: `ok` when all passed, `fail` when
+// any failed, `pending` while any runs, `none` without checks.
+export type Pr = { number: number; checks: 'ok' | 'fail' | 'pending' | 'none' }
+
+// `gh pr view --json number,state,statusCheckRollup`: the PR when it is open, else null.
+export function parsePr(json: string): Pr | null {
+  try {
+    const v: unknown = JSON.parse(json)
+    if (typeof v !== 'object' || v === null) return null
+    const n: unknown = Reflect.get(v, 'number')
+    if (typeof n !== 'number' || Reflect.get(v, 'state') !== 'OPEN') return null
+    const rollup: unknown = Reflect.get(v, 'statusCheckRollup')
+    const items = Array.isArray(rollup) ? (rollup as unknown[]) : []
+    let fail = false
+    let pending = false
+    for (const item of items) {
+      if (typeof item !== 'object' || item === null) continue
+      const conclusion = String(Reflect.get(item, 'conclusion') ?? '')
+      const status = String(Reflect.get(item, 'status') ?? '')
+      const state = String(Reflect.get(item, 'state') ?? '')
+      if (['FAILURE', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR'].includes(conclusion) || ['FAILURE', 'ERROR'].includes(state)) fail = true
+      else if ((status !== '' && status !== 'COMPLETED') || ['PENDING', 'EXPECTED'].includes(state)) pending = true
+    }
+    return { number: n, checks: items.length === 0 ? 'none' : fail ? 'fail' : pending ? 'pending' : 'ok' }
+  } catch {
+    return null
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -372,10 +433,12 @@ export type Snapshot = {
   memory: Memory | null
   // Absent, the default style.
   style?: Style
+  // The branch's open pull request, read by the status line script only.
+  pr?: Pr | null
 }
 
 // The snapshot with the hidden fields taken out, so every layout leaves them out the same way.
-function visible(s: Snapshot): Snapshot {
+export function visible(s: Snapshot): Snapshot {
   const hide = s.style?.hide
   if (hide === undefined || hide.size === 0) return s
   return {
@@ -392,7 +455,7 @@ function visible(s: Snapshot): Snapshot {
   }
 }
 
-function windowOf(s: Snapshot, kind: string): Window | null {
+export function windowOf(s: Snapshot, kind: string): Window | null {
   return s.windows.find((w) => w.kind === kind) ?? null
 }
 
@@ -885,6 +948,9 @@ export function statusSnapshot(
   }
 }
 
+const HUES: Record<Hue, string> = { branch: '35', ahead: '36', behind: '31', pr: '34', accent: '35' }
+const CHIPS = { strong: '48;5;239', soft: '48;5;236' } as const
+
 const BASIC: Record<string, number> = { black: 30, red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36, white: 37, gray: 90, grey: 90 }
 
 // A color of the `colors` option as an SGR code: `green` → 32, `bright-green` → 92, `#ff8800` →
@@ -906,7 +972,13 @@ export function sgrColor(c: string): string {
 export function ansiRow(row: readonly Seg[], colors: Record<Tone, string> = DEFAULT_STYLE.colors): string {
   return row
     .map((s) => {
-      const codes = [...(s.bold === true ? ['1'] : []), ...(s.dim === true ? ['2'] : []), ...(s.tone === undefined ? [] : [sgrColor(colors[s.tone])])]
+      const codes = [
+        ...(s.bold === true ? ['1'] : []),
+        ...(s.dim === true ? ['2'] : []),
+        ...(s.italic === true ? ['3'] : []),
+        ...(s.tone !== undefined ? [sgrColor(colors[s.tone])] : s.hue !== undefined ? [HUES[s.hue]] : []),
+        ...(s.chip === undefined ? [] : [CHIPS[s.chip]]),
+      ]
       return codes.length === 0 ? s.text : `\x1b[${codes.join(';')}m${s.text}\x1b[0m`
     })
     .join('')
