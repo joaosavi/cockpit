@@ -19,6 +19,11 @@ link "$R/tarefas/sessoes-limite/PROMPT.md" "$HOME/tarefas/sessoes-limite/PROMPT.
 link "$R/tarefas/sessoes-limite/retomar.py" "$HOME/tarefas/sessoes-limite/retomar.py"
 link "$R/resgate/CLAUDE.md" "$HOME/resgate/CLAUDE.md"
 for d in "$R"/ambientes/*/; do link "${d}CLAUDE.md" "$HOME/$(basename "$d")/CLAUDE.md"; done
+link "$R/shell/zshrc" "$HOME/.zshrc"
+link "$R/shell/profile" "$HOME/.profile"
+link "$R/shell/npmrc" "$HOME/.npmrc"
+link "$R/shell/starship.toml" "$HOME/.config/starship.toml"
+link "$R/shell/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
 
 # A memória de cada projeto mora em ~/.claude/projects/<pasta com / trocado por ->/memory.
 for d in "$R"/memorias/*/; do

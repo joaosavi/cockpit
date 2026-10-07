@@ -1,0 +1,71 @@
+// fastfetch — splash de login. Torii com tema komorebi (木漏れ日).
+//
+// Roda só em SHELL DE LOGIN (ver o guarda no ~/.zshrc): 12 ms por aba nova,
+// zero em subshell, script ou sessão do Claude Code.
+//
+// ── Sobre a arte ────────────────────────────────────────────────────────────
+// Komorebi é a luz do sol filtrada pelas folhas. Três decisões que fizeram a
+// peça funcionar, e que valem se você for editá-la:
+//
+//   1. A copa tem FRESTA. Komorebi não é sombra nem sol, é o intervalo entre
+//      os dois. Folhagem em bloco cheio vira teto e a ideia some.
+//   2. Os raios são PARALELOS, todos na mesma diagonal. Raio cruzado lê como
+//      hachura; paralelo lê como luz vindo de um ponto só.
+//   3. O salpico no chão fecha a cena. Sem ele os raios ficam soltos no ar.
+//
+// A palavra fica DENTRO do vão, logo abaixo da travessa — é onde o torii de
+// verdade leva o 額束, a placa com o nome do santuário.
+//
+// ── Alinhamento ─────────────────────────────────────────────────────────────
+// Cada kanji ocupa DUAS colunas. Os pilares estão nas colunas de exibição
+// 5-6 e 24-25 em todas as linhas, inclusive na do kanji — conferido coluna a
+// coluna. Se for mexer na legenda, lembre que 木漏れ日 mede 8 colunas e não 4.
+//
+// A JetBrainsMono NF não traz glifo CJK: quem desenha os kanji é a fonte de
+// fallback do Windows Terminal. O romaji embaixo é o seguro — mesmo que o
+// fallback saia torto, a palavra continua legível.
+//
+// Cores: $1 copa · $2 luz · $3 portal · $4 chão e leitura (paleta Gruvbox,
+// resolvida pelo esquema do terminal, então acompanha se você trocar de tema).
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+
+  "logo": {
+    "type": "data",
+    "source": "$1▓▒▓░▓░▓▒▓▒▓▒▒░▒▓▒░▓░▒░▒▒▓▓▒▒▒▓\n$1▒ ▒▒░░▒▓ ░▓▓▓▓    ▒▓ ░ ░▒▒▓▓▒▒\n  $1▓▓▓ $2╲   $1▓░▒ ▓▒ ▒▒  ▒░▓ ▒▒\n   $2╲   ╲   ╲   ╲   ╲   ╲\n $3▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n  $3▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n     $3██   $2╲   ╲   ╲   ╲ $3██\n  $3▄▄▄██▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄██▄▄▄\n     $3██   $2木 漏 れ 日   $3██\n     $3██ $4k o m o r e b i $3██\n     $3██   $2╲   ╲   ╲   ╲ $3██\n  $3▄▄▄██▄▄▄           ▄▄▄██▄▄▄\n      $4░   ∘       · ∘  ░ ░",
+    "color": {
+      "1": "green",
+      "2": "yellow",
+      "3": "red",
+      "4": "white"
+    },
+    "padding": { "top": 1, "right": 3 }
+  },
+
+  "display": {
+    "separator": "  ",
+    "key": { "width": 11 }
+  },
+
+  // O trilho │ em vez de caixa fechada é de propósito: valor longo (nome de GPU,
+  // versão de kernel) estouraria a borda direita e quebraria o desenho.
+  "modules": [
+    "break",
+    { "type": "custom", "format": "┌────── Sistema ───────────────────────┐", "outputColor": "yellow" },
+    { "type": "os",     "key": "│  OS",     "keyColor": "yellow", "format": "{pretty-name}" },
+    { "type": "kernel", "key": "│  Kernel", "keyColor": "yellow", "format": "{release}" },
+    { "type": "uptime", "key": "│  Uptime", "keyColor": "yellow" },
+    { "type": "shell",  "key": "│  Shell",  "keyColor": "yellow" },
+    { "type": "custom", "format": "└──────────────────────────────────────┘", "outputColor": "yellow" },
+    { "type": "custom", "format": "┌────── Hardware ──────────────────────┐", "outputColor": "green" },
+    { "type": "cpu",    "key": "│  CPU",    "keyColor": "green", "format": "{name}" },
+    { "type": "gpu",    "key": "│  GPU",    "keyColor": "green", "format": "{name}" },
+    { "type": "memory", "key": "│  RAM",    "keyColor": "green" },
+    // só a raiz: sem isto o fastfetch lista os seis /mnt do Windows e o
+    // docker-desktop, e o splash vira relatório de disco
+    { "type": "disk",   "key": "│  Disco",  "keyColor": "green", "folders": "/" },
+    { "type": "custom", "format": "└──────────────────────────────────────┘", "outputColor": "green" },
+    "break",
+    { "type": "colors", "paddingLeft": 2, "symbol": "circle" }
+  ]
+}

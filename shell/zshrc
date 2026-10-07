@@ -1,0 +1,271 @@
+# ~/.zshrc — leve, fish-like: autosuggestions + syntax highlight + fzf + starship
+#
+# Versionado em joaosavi/claude-devcontainer, em shell/zshrc. O ~/.zshrc é link para lá.
+#
+# Regra deste arquivo: NADA que faça `eval "$(cmd)"` sem custo medido. A abertura
+# do shell é orçamento — o nvm sozinho já custou 709 ms até ser posto no laço.
+
+# --- PATH: poda as entradas herdadas do Windows -----------------------------
+# O WSL injeta o PATH inteiro do Windows: 25 diretórios sobre o 9p, que é lento.
+# Todo lookup que FALHA precisa varrer os 25 — medido em 42 ms por lookup. Isso
+# pesa na abertura do shell (que faz vários `command -v`), no autocomplete e em
+# todo comando que você digita errado.
+#
+# Bônus: a entrada .../AppData/Roaming/npm é de onde vinham os shims do Windows
+# que sequestravam `yarn`, `npm` e `claude` — processos Windows lendo o $HOME do
+# Windows. Podando ela, esse bug fica impossível em vez de só improvável.
+#
+# Fica o mínimo que se usa de dentro do WSL: powershell/cmd, explorer, `code .`
+# e o winget. Medido: 42 ms → ~5 ms por lookup que falha.
+if [[ "$PATH" == */mnt/* ]]; then
+  () {
+    local -a keep new
+    local p pat
+    keep=( '*/windows/system32' '*/windows' '*windowspowershell/v1.0*' '*vs code/bin*' '*winget/links*' )
+    for p in ${(s.:.)PATH}; do
+      if [[ "$p" != /mnt/* ]]; then
+        new+=("$p")
+        continue
+      fi
+      for pat in $keep; do
+        if [[ "${p:l}" == ${~pat} ]]; then new+=("$p"); break; fi
+      done
+    done
+    export PATH="${(j.:.)new}"
+  }
+fi
+
+# ~/.local/bin — starship e binário de usuário moram aqui
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- Node via nvm — carregamento SOB DEMANDA --------------------------------
+# NÃO faça `source "$NVM_DIR/nvm.sh"` aqui. Ele define ~40 funções e dispara o
+# nvm_auto, que valida a versão instalada: 709 ms, 98% do tempo de abertura.
+#
+# Em vez disso: o bin da versão mais recente entra direto no PATH (é tudo que
+# `node`, `npm`, `npx`, `yarn` e `pnpm` precisam), e o comando `nvm` vira uma
+# função que se auto-substitui pelo nvm de verdade na primeira invocação.
+# Resultado medido: 0,90 s → 0,15 s.
+export NVM_DIR="$HOME/.nvm"
+_nvm_bin=$(command ls -1d "$NVM_DIR"/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
+[ -n "$_nvm_bin" ] && export PATH="$_nvm_bin:$PATH"
+unset _nvm_bin
+
+nvm() {
+  unset -f nvm
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+  nvm "$@"
+}
+
+# --- Locale ------------------------------------------------------------------
+# O Ubuntu do WSL vem só com C.UTF-8. É UTF-8, mas não tem regra de colação nem
+# de formatação: `sort` ordena por byte (acentuada vai pro fim), `date` não sabe
+# português, e algumas ferramentas reclamam de locale inválido.
+#
+# Tudo em inglês, por escolha — mensagem de erro em inglês é pesquisável.
+#
+# A geração dos locales é da etapa 01; a ESCOLHA é aqui, versionada, em vez de
+# num /etc/default/locale que ninguém revisa. A guarda evita exportar um LANG
+# que não existe no sistema, o que faria toda ferramenta imprimir aviso.
+if locale -a 2>/dev/null | grep -qix 'en_US.UTF8'; then
+  export LANG='en_US.UTF-8'
+fi
+
+# --- Histórico ---
+HISTFILE=~/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+setopt SHARE_HISTORY HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE INC_APPEND_HISTORY
+
+# --- Autocomplete (case-insensitive, menu navegável com Tab) ---
+autoload -Uz compinit && compinit -C
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# --- Cores do ls/grep ---
+if [ -x /usr/bin/dircolors ]; then
+  if [ -r "$HOME/.dircolors" ]; then
+    eval "$(dircolors -b "$HOME/.dircolors")"
+  else
+    eval "$(dircolors -b)"
+  fi
+  alias grep='grep --color=auto'
+  alias fgrep='fgrep --color=auto'
+  alias egrep='egrep --color=auto'
+fi
+
+# --- eza no lugar do ls (ícones Nerd Font + coluna de git) ------------------
+# Só alias, custo zero na abertura. Se o eza não estiver instalado, cai no ls
+# de sempre em vez de deixar `ll` quebrado.
+if command -v eza >/dev/null; then
+  alias ls='eza --icons --group-directories-first'
+  alias ll='eza --icons --group-directories-first -la --git --time-style=long-iso'
+  alias la='eza --icons --group-directories-first -a'
+  alias lt='eza --icons --tree --level=2 --git-ignore'
+else
+  alias ls='ls --color=auto'
+  alias ll='ls -alF'
+  alias la='ls -A'
+fi
+alias l='ls -CF'
+
+# --- bat no lugar do cat ----------------------------------------------------
+# No Debian/Ubuntu o binário chama batcat (conflito de nome com outro pacote).
+if command -v batcat >/dev/null; then
+  alias bat='batcat'
+  alias cat='batcat --paging=never'
+  export MANPAGER="sh -c 'col -bx | batcat -l man -p'"
+  export BAT_THEME="gruvbox-dark"
+elif command -v bat >/dev/null; then
+  alias cat='bat --paging=never'
+  export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+  export BAT_THEME="gruvbox-dark"
+fi
+
+# --- fd (no Ubuntu o binário chama fdfind) ----------------------------------
+command -v fdfind >/dev/null && alias fd='fdfind'
+
+# --- less abre .gz/.zip/binário ---
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
+# --- Sugestão fantasma (fish-like); →/End aceita ---
+if [ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
+  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+  ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#665c54'   # gruvbox bg3
+  # sugere a partir do histórico E do autocomplete
+  ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+fi
+
+# --- fzf: Ctrl+R (histórico fuzzy) e Ctrl+T (arquivos) ---
+if command -v fzf >/dev/null; then
+  if fzf --zsh >/dev/null 2>&1; then
+    source <(fzf --zsh)
+  else
+    [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+    [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh
+  fi
+  # fd como fonte do Ctrl+T: respeita .gitignore e é muito mais rápido que find
+  command -v fdfind >/dev/null && export FZF_CTRL_T_COMMAND='fdfind --type f --hidden --exclude .git'
+  # Gruvbox no fzf
+  export FZF_DEFAULT_OPTS="
+    --color=bg+:#3c3836,bg:#282828,spinner:#fe8019,hl:#fb4934
+    --color=fg:#ebdbb2,header:#fb4934,info:#8ec07c,pointer:#fe8019
+    --color=marker:#fe8019,fg+:#ebdbb2,prompt:#8ec07c,hl+:#fb4934
+    --height=40% --layout=reverse --border=sharp"
+fi
+
+# --- zoxide: `z <parte-do-nome>` pula por frequência+recência ---------------
+# Custo medido da inicialização: ~1,6 ms por shell. O único `eval` que passou
+# no orçamento além do starship.
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+
+# --- Atalhos ---
+alias cld='claude --dangerously-skip-permissions'
+alias ff='fastfetch'
+
+# --- Splash de login (fastfetch) --------------------------------------------
+# Só em SHELL DE LOGIN e só com terminal de verdade. Sem esses dois guardas ele
+# rodaria em subshell, em `zsh -i -c`, em script e em cada sessão de ferramenta
+# que abre um shell — 12 ms cada, e saída de arte no meio de um pipe.
+#
+# No Windows Terminal cada aba nova é um shell de login, que é exatamente a
+# frequência desejada: uma vez por aba.
+if [[ -o login ]] && [[ -t 1 ]] && command -v fastfetch >/dev/null; then
+  fastfetch
+fi
+
+# --- Credenciais — ÚNICO lugar onde elas vivem ---
+# ~/.secrets vem cifrado com age no repo (encrypted_private_dot_secrets.age).
+# Exporta GITHUB_TOKEN (usado pelo npm do datalake) e BI_MCP_PG_URL.
+#
+# O shell que o Claude Code abre tem CLAUDECODE=1 e não carrega o arquivo: o
+# segredo no ambiente do agente sai no primeiro `env`, como saiu em 02/10/2026.
+# O claude lançado daqui herda o token mesmo assim, e quem o tira do Bash do
+# agente é o "env" do ~/.claude/settings.json. Ver o CLAUDE.md do dotfiles.
+[ -z "$CLAUDECODE" ] && [ -f "$HOME/.secrets" ] && . "$HOME/.secrets"
+
+# --- gh: ignora o GITHUB_TOKEN do ambiente ----------------------------------
+# O gh dá precedência ao GITHUB_TOKEN sobre o ~/.config/gh/hosts.yml. Como o
+# token do ~/.secrets é um PAT fixo de uma conta só, o `gh auth switch` vira
+# no-op e o `gh auth status` acusa "sobrescrito por GITHUB_TOKEN".
+#
+# A var não pode simplesmente sumir: o .npmrc versionado do datalake referencia
+# ${GITHUB_TOKEN} para os pacotes @Get-Demo. Então quem cede é o gh — e só ele.
+#
+# Efeito: gh passa a usar os tokens gho_ do hosts.yml (que têm read:org,
+# workflow e gist, escopos que o PAT não tem) e o `gh auth switch` volta a
+# funcionar. `command gh` continua acessível se algum dia precisar do PAT.
+#
+# Sem `command` aqui: o env exec o binário direto do PATH, então não recursa —
+# e `env -u X command gh` falharia, porque command é builtin e o env não o vê.
+gh() { env -u GITHUB_TOKEN -u GH_TOKEN gh "$@" }
+
+# --- Prompt: Starship -------------------------------------------------------
+export STARSHIP_CONFIG="$HOME/.config/starship.toml"
+if command -v starship >/dev/null; then
+  eval "$(starship init zsh)"
+
+  # --- Prompt transiente ----------------------------------------------------
+  # Depois do Enter, a linha que vira histórico colapsa para um "❯" cinza: o
+  # scroll fica limpo e o prompt de duas linhas para de custar caro.
+  #
+  # Feito na mão porque o Starship 1.26 não implementa transience para zsh.
+  #
+  # ATENÇÃO ao restaurar. O `starship init zsh` atribui o PROMPT UMA ÚNICA VEZ,
+  # como uma string com $(...) que o prompt_subst reexpande a cada desenho. O
+  # precmd dele só atualiza variáveis de ambiente (STARSHIP_CMD_STATUS e cia.) —
+  # ele NUNCA reatribui o PROMPT. Então quem sobrescreve o PROMPT tem que
+  # guardar o original e devolver, senão o prompt completo some para sempre
+  # depois do primeiro Enter e sobra só o "❯".
+  _PROMPT_FULL="$PROMPT"
+  _RPROMPT_FULL="$RPROMPT"
+
+  _starship_transient() {
+    # Cinza fixo, não colorido por status: no momento em que o zle-line-finish
+    # dispara, $? ainda é o do comando ANTERIOR — colorir aqui mostraria o
+    # resultado errado ao lado do comando.
+    PROMPT='%F{#928374}❯%f '
+    RPROMPT=''
+    zle && zle .reset-prompt
+  }
+  _starship_restore() {
+    PROMPT="$_PROMPT_FULL"
+    RPROMPT="$_RPROMPT_FULL"
+  }
+
+  zle-line-finish() { _starship_transient }
+  zle -N zle-line-finish
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _starship_restore
+
+  # Ctrl+C também colapsa — senão a linha abortada fica com o prompt inteiro.
+  TRAPINT() { _starship_transient; return $(( 128 + $1 )) }
+fi
+
+# --- Realce de sintaxe (precisa ser o ÚLTIMO source) ---
+if [ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
+  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+  # Gruvbox: comando válido em verde, inválido em vermelho, caminho sublinhado
+  ZSH_HIGHLIGHT_STYLES[command]='fg=#b8bb26'
+  ZSH_HIGHLIGHT_STYLES[builtin]='fg=#b8bb26'
+  ZSH_HIGHLIGHT_STYLES[alias]='fg=#b8bb26'
+  ZSH_HIGHLIGHT_STYLES[function]='fg=#b8bb26'
+  ZSH_HIGHLIGHT_STYLES[unknown-token]='fg=#fb4934,bold'
+  ZSH_HIGHLIGHT_STYLES[path]='fg=#ebdbb2,underline'
+  ZSH_HIGHLIGHT_STYLES[single-quoted-argument]='fg=#fabd2f'
+  ZSH_HIGHLIGHT_STYLES[double-quoted-argument]='fg=#fabd2f'
+  ZSH_HIGHLIGHT_STYLES[comment]='fg=#928374'
+fi
+
+# navegação por palavra (Ctrl+setas) e deleção por palavra
+bindkey "^[[1;5C" forward-word
+bindkey "^[[1;5D" backward-word
+bindkey "^[[1;3C" forward-word      # Alt+seta
+bindkey "^[[1;3D" backward-word
+bindkey "^[[5C"   forward-word      # variante de terminais antigos
+bindkey "^[[5D"   backward-word
+bindkey "^[[3;5~" kill-word         # Ctrl+Delete
+bindkey "^H"      backward-kill-word # Ctrl+Backspace
+bindkey "^[[H"    beginning-of-line
+bindkey "^[[F"    end-of-line

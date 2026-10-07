@@ -1,0 +1,96 @@
+# Starship — Gruvbox Dark, duas linhas com caixa.
+#
+# Gruvbox: paleta quente e de baixo ofuscamento, escolhida para jornada longa.
+# Os hex ficam em [palettes.gruvbox] no fim do arquivo — mudar de paleta é
+# reescrever esse bloco, não caçar cor solta pelo arquivo.
+#
+# Linha de contexto: caminho · branch · detalhe do git · runtime · duração.
+# O ❯ da segunda linha fica verde ou vermelho conforme o último comando.
+#
+# O prompt transiente (colapsar para "❯" depois do Enter) NÃO está aqui: o
+# Starship 1.26 não implementa transience para zsh. Está no ~/.zshrc, via zle.
+
+add_newline = true
+command_timeout = 1000
+scan_timeout = 1000   # evita "Scanning current directory timed out" em /mnt (WSL)
+
+palette = "gruvbox"
+
+format = """
+[╭─](gray)$directory$git_branch$git_status$nodejs$python$cmd_duration
+[╰─](gray)$character"""
+
+[directory]
+style = "blue bold"
+truncation_length = 3
+truncate_to_repo = true
+truncation_symbol = "…/"
+read_only = " "
+read_only_style = "red"
+
+[git_branch]
+symbol = " "
+style = "green"
+format = "[$symbol$branch]($style) "
+
+# Detalhe do git em vez do ✗ genérico — contagem por tipo de mudança:
+#   !2 = 2 modificados   +1 = 1 staged   ?3 = 3 não rastreados
+#   ⇡3 = 3 commits à frente do origin    ⇣1 = 1 atrás
+[git_status]
+style = "yellow"
+format = '([\[$all_status$ahead_behind\]]($style) )'
+conflicted = "=${count}"
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+untracked = "?${count}"
+stashed = "≡${count}"
+modified = "!${count}"
+staged = "+${count}"
+renamed = "»${count}"
+deleted = "✘${count}"
+
+# Runtime só aparece onde existe projeto daquele tipo — em ~ ele some.
+[nodejs]
+symbol = " "
+style = "aqua"
+format = "[$symbol($version )]($style)"
+detect_files = ["package.json", ".nvmrc", ".node-version"]
+detect_folders = ["node_modules"]
+
+[python]
+symbol = " "
+style = "yellow"
+format = "[$symbol($version )]($style)"
+
+[cmd_duration]
+min_time = 2000
+style = "orange"
+format = "[$duration]($style) "
+
+[character]
+success_symbol = "[❯](green bold)"
+error_symbol = "[❯](red bold)"
+vimcmd_symbol = "[❮](purple bold)"
+
+# Desligados: cada um custa um processo por prompt e nenhum diz algo que você
+# não saiba olhando para a pasta em que está.
+[aws]
+disabled = true
+[gcloud]
+disabled = true
+[docker_context]
+disabled = true
+[package]
+disabled = true
+
+[palettes.gruvbox]
+gray   = "#665c54"
+red    = "#fb4934"
+green  = "#b8bb26"
+yellow = "#fabd2f"
+blue   = "#83a598"
+purple = "#d3869b"
+aqua   = "#8ec07c"
+orange = "#fe8019"
+fg     = "#ebdbb2"

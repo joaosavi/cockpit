@@ -13,6 +13,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agent`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite`, desligado desde 07/10/2026, e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
+| `shell/` | O terminal da VPS: `zshrc`, `profile`, `npmrc`, `starship.toml` e o `config.jsonc` do fastfetch | `~/` e `~/.config/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
 | `ambientes/` | O `CLAUDE.md` de cada pasta que um serviço `*-rc` abre, como `getdemo` e `esag` | `~/<pasta>/CLAUDE.md` |
 | `memorias/` | A memória automática do Claude Code de cada projeto, como `getdemo` e `esag` | `~/.claude/projects/<projeto>/memory/` |

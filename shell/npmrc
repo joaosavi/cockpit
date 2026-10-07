@@ -1,0 +1,14 @@
+# Gerenciado pelo chezmoi.
+#
+# SEM `prefix=` de propósito. Duas coisas quebravam com ele:
+#
+#   1. `prefix` é incompatível com o nvm. O `nvm install --lts` instalava o node
+#      e mesmo assim saía com código != 0, avisando sobre o prefix — o bootstrap
+#      lia isso como falha e pulava tudo que dependia de node.
+#   2. Os binários globais iam para ~/.npm-global/bin, que o ~/.zshrc não põe no
+#      PATH. Funcionavam no bash e sumiam no zsh (foi o que aconteceria com o `bd`).
+#
+# Com o nvm, global do npm mora em ~/.nvm/versions/node/<versão>/bin, que o
+# próprio nvm coloca no PATH. Nada a configurar.
+
+fund=false
