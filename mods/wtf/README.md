@@ -39,12 +39,12 @@ The quoted footer tells the main agent, which also reads the reply, that the lin
 user, and gives the call's tokens.
 
 The answer shows in the transcript. Claude Code prints a command's text only when the turn ends, so
-in the middle of a turn the answer also opens at once in a pane. With the `pane` option on, the
-pane opens when idle too:
+in the middle of a turn the answer also opens at once in a pane, and the text follows when the turn
+ends. When the session is idle, only the text shows. The pane, mid-turn:
 
 ```text
 ╭──────────────────────────────────────────────────────────────────✕─╮
-│ WTF  claude-devcontainer · idle 2s · haiku 941→142                 │
+│ WTF  claude-devcontainer · running · haiku 941→142                 │
 │                                                                    │
 │  WAITING FOR YOU  The demo file was created with "oi", and the     │
 │                   agent waits for you to delete or keep it.        │
@@ -54,7 +54,7 @@ pane opens when idle too:
 │       reads it                                                     │
 │    2. Keep: it stays in /tmp until the next reboot                 │
 │                                                                    │
-│ r re-run   esc close                                               │
+│ r: re-run   esc: close                                             │
 ╰────────────────────────────────────────────────────────────────────╯
 ```
 

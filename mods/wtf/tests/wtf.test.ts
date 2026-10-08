@@ -2,7 +2,6 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
 import { DIGEST_CHARS, digest, parseAnswer, reply, system, texts } from '../hooks/rules.ts'
 
-const WITH_PANE = { options: { pane: true } }
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const NOW = 'the deploy is running after 84 tests passed.'
@@ -236,10 +235,11 @@ function lines(c: Scenario): unknown[] {
     .map((l): unknown => JSON.parse(l))
 }
 
-test('answered: Haiku reads the digest, and the reply is the note, the state, the body and the cost', WITH_PANE, async ($, on) => {
+test('answered: Haiku reads the digest, and the reply is the note, the state, the body and the cost', async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
+  await $.turn.start({ text: 'deploy', turnId: 't1' })
   const r = await $.command.run({ command: 'wtf', args: '' })
   expect(r.text).toBe(`\`WORKING\`  **${NOW}**\n\n${IDLE_FOOTER}`)
   expect(c.calls).toEqual([{ model: 'haiku', system: system(), prompt: `<session>\n${digest(SESSION)}\n</session>\n\nSummarize this session for its user.`, maxTokens: 500 }])
@@ -254,10 +254,11 @@ test('an answer without a state line still comes back whole, under the note', as
   expect(r.text).toBe(`The agent is deploying.\n\n${FOOTER}`)
 })
 
-test('the desktop app gets the pane too', WITH_PANE, async ($, on) => {
+test('the desktop app gets the pane too', async ($, on) => {
   const c = scenario(answered(), ['desktop'])
   setup(on, c)
   await $.session.start(start)
+  await $.turn.start({ text: 'deploy', turnId: 't1' })
   await $.command.run({ command: 'wtf', args: '' })
   expect(c.opened).toEqual(['wtf'])
 })
@@ -445,10 +446,11 @@ test('while the model answers the pane says it is reading, shows a running turn 
   expect((await pending).text?.endsWith(IDLE_FOOTER)).toBe(true)
 })
 
-test('the re-run key asks the model again, with the same question, and logs it as a re-run', WITH_PANE, async ($, on) => {
+test('the re-run key asks the model again, with the same question, and logs it as a re-run', async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
+  await $.turn.start({ text: 'deploy', turnId: 't1' })
   await $.command.run({ command: 'wtf', args: 'and now?' })
   c.complete = answered(`STATE: done\n${BODY}`)
   const ui = await $.ui.mount(PANE)
@@ -521,7 +523,7 @@ test('the session ends with one summary line: uses by outcome and their tokens',
   expect(all.filter((l) => JSON.stringify(l).includes('session-summary'))).toHaveLength(1)
 })
 
-test('without the pane option the answer shows once, in the transcript, and no pane opens', async ($, on) => {
+test('when the session is idle the answer shows once, in the transcript, and no pane opens', async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)

@@ -6,7 +6,7 @@
 // line. A side call like this neither interrupts the agent nor records anything in the conversation,
 // and the command is immediate, so it also runs mid-turn.
 //
-// In the terminal and the desktop app the answer opens in a pane. The text reply always comes too,
+// In the middle of a turn, in the terminal and the desktop app, the answer also opens in a pane. The text reply always comes,
 // because Remote Control draws no pane. That reply also lands in the main agent's context, so it
 // opens with a note saying it is a summary for the user and not an instruction.
 //
@@ -64,8 +64,6 @@ type View =
 let view: View = { kind: 'waiting', question: '', activity: '' }
 
 const t: Texts = texts()
-// The pane repeats the text reply, so when idle it opens only when the pane option asks for it.
-let usePane = false
 let diary = ''
 let project = ''
 let cwd = ''
@@ -138,7 +136,7 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
     showIfLatest({ kind: 'waiting', ...shared })
     // Claude Code prints a command's text only when the turn ends, so mid-turn the pane is the one
     // place the answer shows at once.
-    if (trigger === 'command' && (usePane || turnRunning)) await openPane($)
+    if (trigger === 'command' && turnRunning) await openPane($)
     const messages = await $.session.messages()
     const d = messages.length === 0 ? '' : digest(messages)
     digestChars = d.length
@@ -279,7 +277,6 @@ function pane(ui: Ui, v: View, width: number, rerun: () => Promise<void>): Rende
 }
 
 export function register(on: On, values: PluginOptions) {
-  usePane = Reflect.get(values ?? {}, 'pane') === true
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
