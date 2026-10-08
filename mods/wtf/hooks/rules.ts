@@ -73,15 +73,15 @@ const YOU = 'You'
 const NOTHING = '-'
 
 // The instructions, the labels and the state keys stay in English. The model writes the sentences
-// in Claude Code's `language` setting when set, else in the language the user writes in the excerpt.
-export function system(language = ''): string {
+// in the language the user writes in, which it reads from the excerpt.
+export function system(): string {
   return [
     "You summarize another agent's session for its user, from the excerpt of that session given below. This is a side question: the agent keeps working on its own, and nobody asked it to stop.",
     'The user runs several sessions at once and just came back to this one. They remember nothing about it.',
     '',
     'Use only what the excerpt shows. Never invent files, numbers, names, results or intentions. When the excerpt is too short to tell where the session stands or what the agent needs, say so plainly instead of guessing.',
     '',
-    `${writeIn(language, 'the sentences')} Keep the labels and the key in English, exactly as below.`,
+    'Write the sentences in the language the user writes in the excerpt. Keep the labels and the key in English, exactly as below.',
     'Answer in exactly this shape:',
     '',
     'STATE: <key>',
@@ -106,12 +106,6 @@ export function system(language = ''): string {
 }
 
 export const MODEL = 'haiku'
-
-// Claude Code's `language` setting is free text ("japanese", "pt-br"), passed to the model as written.
-export function writeIn(language: string, what: string): string {
-  const l = language.trim()
-  return l === '' ? `Write ${what} in the language the user writes in the excerpt.` : `Write ${what} in ${l}, whatever language the excerpt is in.`
-}
 // 8 short lines fit in ~250 tokens; the headroom keeps a long option from being cut mid-sentence.
 export const MAX_TOKENS = 500
 

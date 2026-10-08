@@ -79,16 +79,6 @@ let modelMs = 0
 
 // One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
 // on each write, because `/clear` and `/resume` change it without reloading the mod.
-// Claude Code's `language` setting, or '' when unset or unreadable.
-async function languageOf($: Api): Promise<string> {
-  try {
-    const { language } = await $.settings.read()
-    return typeof language === 'string' ? language : ''
-  } catch {
-    return ''
-  }
-}
-
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
@@ -155,7 +145,7 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
       text = t.noMessages
       showIfLatest({ kind: 'failed', line: text, isError: false, ...shared })
     } else {
-      const r = await $.model.complete({ model: MODEL, system: system(await languageOf($)), prompt: prompt(d, q), maxTokens: MAX_TOKENS })
+      const r = await $.model.complete({ model: MODEL, system: system(), prompt: prompt(d, q), maxTokens: MAX_TOKENS })
       used = usage(r.usage)
       if (r.isAnswered) {
         outcome = 'answered'

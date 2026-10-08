@@ -111,13 +111,6 @@ test('the system prompt keeps English labels and asks for the user\'s language i
   for (const word of ['Agora', 'Você', 'Portuguese', 'Translate']) expect(s).not.toContain(word)
 })
 
-test('with the language setting, the sentences follow it and the labels stay English', () => {
-  const s = system(' japanese ')
-  expect(s).toContain('Write the sentences in japanese, whatever language the excerpt is in. Keep the labels and the key in English')
-  expect(s).not.toContain('the language the user writes in')
-  expect(system('  ')).toBe(system())
-})
-
 test('the state line gives the state, and Now, You and the options are read from the lines under it', () => {
   expect(parseAnswer(ANSWER)).toEqual({ state: 'working', now: NOW, you: null, options: [], rest: [], body: BODY })
   expect(parseAnswer('**STATE: Waiting**\n**Now:** x\nYou: pick one')).toMatchObject({ state: 'waiting', now: 'x', you: 'pick one' })
@@ -186,8 +179,6 @@ type Scenario = {
   modelMs?: number
   // The session id `$.session.id()` returns; `/clear` changes it without reloading the mod.
   sessionId?: string
-  // Claude Code's `language` setting; unset when absent.
-  language?: string
   // What the mod sent to the model, the panes it opened and the lines it wrote to its diary.
   calls: { model: string; system: unknown; prompt: unknown; maxTokens: unknown }[]
   opened: string[]
@@ -208,7 +199,6 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
   })
   on('session.surfaces', () => ({ value: c.surfaces ?? [] }))
   on('session.messages', () => ({ value: c.messages }))
-  on('settings.read', () => ({ value: c.language === undefined ? {} : { language: c.language } }))
   on('ui.open', ($, e) => {
     c.opened.push(e.id)
     return { value: { isPlaced: true } }
@@ -553,14 +543,4 @@ test('in the middle of a turn the pane opens even without the pane option, becau
   await $.turn.start({ text: 'deploy', turnId: 't1' })
   await $.command.run({ command: 'wtf', args: '' })
   expect(c.opened).toEqual(['wtf'])
-})
-
-test('the language setting reaches the model', async ($, on) => {
-  const c = scenario(answered(), ['terminal'])
-  c.language = 'portuguese'
-  setup(on, c)
-  await $.session.start(start)
-  await $.turn.start({ text: 'deploy', turnId: 't1' })
-  await $.command.run({ command: 'wtf', args: '' })
-  expect(c.calls[0]?.system).toBe(system('portuguese'))
 })
