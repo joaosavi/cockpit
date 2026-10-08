@@ -87,6 +87,7 @@
     "frontend-design@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "playwright@claude-plugins-official": false,
+    "mattpocock-skills@mattpocock": true,
     "cockpit@cockpit": true,
     "usage-limit@cockpit": true,
     "memory-guard@cockpit": true,
@@ -99,7 +100,6 @@
     "rating@cockpit": true,
     "wtf@cockpit": true,
     "hud@cockpit": true,
-    "mattpocock-skills@mattpocock": true,
     "spinner-status@cockpit": true,
     "collision-guard@cockpit": true
   },
@@ -116,17 +116,17 @@
         "repo": "anthropics/claude-plugins-official"
       }
     },
-    "cockpit": {
-      "source": {
-        "source": "directory",
-        "path": "/home/sv/claude-devcontainer"
-      },
-      "autoUpdate": true
-    },
     "mattpocock": {
       "source": {
         "source": "github",
         "repo": "mattpocock/skills"
+      },
+      "autoUpdate": true
+    },
+    "cockpit": {
+      "source": {
+        "source": "directory",
+        "path": "/home/sv/claude-devcontainer"
       },
       "autoUpdate": true
     }
