@@ -17,6 +17,7 @@ claude plugin install agent@agent
 - `audit`: records every MCP call that writes in a daily file. `/audit`.
 - `loop-breaker`: tells the agent to stop and change approach when it goes in circles.
 - `secret-guard`: hides every secret value in tool output as `<hidden:NAME>`, and writes the real value back into `.env` files.
+- `collision-guard`: warns when another session on this machine edited the same file, and holds a git command once when it would take that session's uncommitted edits along.
 - `pipefail`: adds `set -o pipefail;` to a test, typecheck or lint run piped into `tail`, `head` or `grep`.
 - `mod-report`: `/mods`, what each mod did and what it cost per tool call.
 - `rating`: records every turn as a dataset with your 1-5 ratings and weak labels. `/rate`, `/ratings` and a band above the prompt.

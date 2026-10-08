@@ -71,6 +71,11 @@
       "description": "A heads-up display above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view"
     },
     {
+      "name": "collision-guard",
+      "source": "./mods/collision-guard",
+      "description": "Warns when two Claude Code sessions on this machine edit the same file, and holds a git command once when it would stage, commit, stash or discard another session's uncommitted edits"
+    },
+    {
       "name": "spinner-status",
       "source": "./mods/spinner-status",
       "description": "Replaces the tip under the spinner with one short line from Haiku: where this session stands, or a tip about your mods and their commands that fits the moment"

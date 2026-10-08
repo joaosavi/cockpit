@@ -52,6 +52,7 @@ const TIPS = [
   'secret-guard hides secret values as <hidden:NAME> before the agent reads them',
   'pipefail keeps a test piped into tail or head from passing when it failed',
   'usage-limit pauses at 98% of the plan limit and resumes when the window resets',
+  'collision-guard warns when another session edited the same file, and holds git add -A over its edits',
 ] as const
 
 export function catalog(): readonly string[] {
