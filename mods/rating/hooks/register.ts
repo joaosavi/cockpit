@@ -36,6 +36,7 @@ import {
   outputOf,
   parseDays,
   parseLines,
+  isTemporary,
   parseRate,
   project,
   RATE_USAGE,
@@ -83,6 +84,8 @@ let dir = ''
 let diary = ''
 let session = ''
 let cwd = ''
+// False for a test session (see isTemporary): nothing is written to the dataset and no band shows.
+let recording = true
 let configVersion: string | null = null
 let pending: { text: string; origin: string } | null = null
 let live: Live | null = null
@@ -203,7 +206,8 @@ export function register(on: On, values: PluginOptions) {
     cwd = e.cwd
     session = await $.session.id()
     const home = await $.env.get('HOME')
-    const root = expandHome(o.datasetDir, home)
+    recording = !(o.skipTemporary && isTemporary(cwd, await $.env.get('CLAUDE_CONFIG_DIR'), await $.env.get('TMPDIR')))
+    const root = recording ? expandHome(o.datasetDir, home) : null
     if (root !== null) {
       dir = root
       await $.process.run(['mkdir', '-p', ...KINDS.map((k) => `${dir}/${k}`)])
@@ -323,7 +327,7 @@ export function register(on: On, values: PluginOptions) {
       signalsWritten: false,
       implicit: null,
     }
-    if (!e.isAborted && o.band && (await $.session.surfaces()).length > 0) {
+    if (!e.isAborted && o.band && recording && (await $.session.surfaces()).length > 0) {
       bandFor = id
       $.ui.invalidate('ui.render')
     }

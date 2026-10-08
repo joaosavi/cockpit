@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { approves, bandLayout, implicitScore, isRetry, mentions, CORRECTION_PHRASES, APPROVAL_PHRASES, parseRate, signalsFor } from '../hooks/rules.ts'
+import { approves, isTemporary, bandLayout, implicitScore, isRetry, mentions, CORRECTION_PHRASES, APPROVAL_PHRASES, parseRate, signalsFor } from '../hooks/rules.ts'
 
 // Invented data only.
 const NOW = Date.parse('2026-10-07T13:00:00Z')
@@ -411,4 +411,24 @@ test('the band drops its hint, then its separators, so the row fits down to 44 c
   expect(bandLayout(50)).toEqual({ label: 'Rate', separators: false, hint: null })
   expect(bandLayout(70)).toEqual({ label: 'Rate', separators: true, hint: null })
   expect(bandLayout(100)).toEqual({ label: 'Rate', separators: true, hint: '/rate 1-5 tags -- note' })
+})
+
+test('a session in a temporary folder or with a temporary config is a test', () => {
+  expect(isTemporary('/tmp/x', undefined, undefined)).toBe(true)
+  expect(isTemporary('/tmp', undefined, undefined)).toBe(true)
+  expect(isTemporary('/home/me/work', '/tmp/claude-1000/cfg', undefined)).toBe(true)
+  expect(isTemporary('/home/me/scratch', undefined, '/home/me/scratch')).toBe(true)
+  expect(isTemporary('/home/me/work', '/home/me/.claude', '/tmp')).toBe(false)
+  expect(isTemporary('/tmpfoo/work', undefined, undefined)).toBe(false)
+})
+
+test('a session opened in /tmp writes nothing to the dataset and shows no band', async ($, on) => {
+  const s: Scene = { appends: [], surfaces: ['terminal'] }
+  prepare(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start({ ...start, cwd: '/tmp/claude-1000/scratch' })
+  await turn($, 't1', 'responda só ok', 'ok')
+  expect(lines(s, 'turns')).toEqual([])
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'rate-1' })).toBeUndefined()
 })

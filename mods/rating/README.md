@@ -27,6 +27,7 @@ The mod lists secret-guard, loop-breaker and skill-loader as dependencies, so it
 | Option | Default | Meaning |
 | :- | :- | :- |
 | `datasetDir` | `~/datasets/agent-ratings` | Folder of the turns, ratings and signals files. |
+| `skipTemporary` | `true` | Sessions opened in a temporary folder (`/tmp`, `TMPDIR`) or run with a temporary `CLAUDE_CONFIG_DIR` are tests: they write nothing to the dataset and show no band. |
 | `band` | `true` | Show the rating row above the prompt after each answer. |
 | `configRepo` | empty | Git repo whose short HEAD commit each turn records as `configVersion`, such as the repo that holds your Claude Code settings. Empty records none. |
 

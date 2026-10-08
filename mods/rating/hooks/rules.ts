@@ -8,9 +8,11 @@ export type Options = {
   // Git repo whose short HEAD commit each turn records as `configVersion`, such as the repo that holds
   // your Claude Code settings. Empty records none.
   configRepo: string
+  // Leave out sessions opened in a temporary folder or with a temporary CLAUDE_CONFIG_DIR (tests).
+  skipTemporary: boolean
 }
 
-export const DEFAULTS: Options = { datasetDir: '~/datasets/agent-ratings', band: true, configRepo: '' }
+export const DEFAULTS: Options = { datasetDir: '~/datasets/agent-ratings', band: true, configRepo: '', skipTemporary: true }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -21,6 +23,7 @@ export function options(values: unknown): Options {
     datasetDir: typeof dir === 'string' && dir.trim() !== '' ? dir.trim() : DEFAULTS.datasetDir,
     band: typeof band === 'boolean' ? band : DEFAULTS.band,
     configRepo: typeof repo === 'string' ? repo.trim() : DEFAULTS.configRepo,
+    skipTemporary: Reflect.get(values, 'skipTemporary') !== false,
   }
 }
 
@@ -529,4 +532,13 @@ export function bandLayout(columns: number): BandLayout {
   if (columns >= 82) return { label: 'Rate', separators: true, hint: BAND_HINT }
   if (columns >= 54) return { label: 'Rate', separators: true, hint: null }
   return { label: 'Rate', separators: false, hint: null }
+}
+
+// A session opened in a temporary folder, or run with a temporary CLAUDE_CONFIG_DIR, is a test: its
+// turns stay out of the dataset, so test prompts never train or skew the ratings.
+export function isTemporary(cwd: string, configDir: string | undefined, tmpDir: string | undefined): boolean {
+  const roots = ['/tmp/', '/var/tmp/', '/private/tmp/', '/private/var/folders/']
+  if (tmpDir !== undefined && tmpDir !== '') roots.push(tmpDir.endsWith('/') ? tmpDir : `${tmpDir}/`)
+  const under = (path: string) => roots.some((r) => `${path}/`.startsWith(r))
+  return under(cwd) || (configDir !== undefined && configDir !== '' && under(configDir))
 }
