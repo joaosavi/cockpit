@@ -100,7 +100,8 @@
     "wtf@agent": true,
     "hud@agent": true,
     "mattpocock-skills@mattpocock": true,
-    "spinner-status@agent": true
+    "spinner-status@agent": true,
+    "collision-guard@agent": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
