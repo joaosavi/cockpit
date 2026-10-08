@@ -181,7 +181,7 @@ test('the band shows after a turn, keeps the other mods, and pressing rate-2 wri
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ key: 'rate-2' })).toBeUndefined()
   await turn($, 't1', 'rename the column', 'Renamed.')
-  expect(await ui.find({ type: 'Text', text: 'Rate the last answer:' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Rate' })).toMatchObject({ props: { dimColor: true } })
   expect(await ui.find({ key: 'rate-5' })).toMatchObject({ props: { hotkey: '5', plain: true } })
   expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined()
   await ui.press({ key: 'rate-2' })
@@ -392,20 +392,23 @@ test('boa and show count as approval only in a short message', () => {
   expect(approves('perfeito, era isso que eu queria')).toBe(true)
 })
 
-test('the band drops its hint, then shortens its label, so the row fits down to 50 columns', async ($, on) => {
+test('the band drops its hint, then its separators, so the row fits down to 44 columns', async ($, on) => {
   const s: Scene = { appends: [], surfaces: ['terminal'] }
   prepare(on, s)
   on('ui.render', () => OTHER_MODS)
   await $.session.start(start)
   await turn($, 't1', 'rename the column', 'Renamed.')
   const wide = await $.ui.mount(BAND)
-  expect(await wide.find({ type: 'Text', text: '/rate N tags -- comment' })).toMatchObject({ props: { dimColor: true } })
+  expect(await wide.find({ type: 'Text', text: '/rate 1-5 tags -- note' })).toMatchObject({ props: { dimColor: true } })
+  expect(await wide.find({ type: 'Text', text: '·' })).toMatchObject({ props: { dimColor: true } })
   await wide.unmount()
   const narrow = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 50 } })
-  expect(await narrow.find({ type: 'Text', text: 'Rate:' })).toBeDefined()
-  expect(await narrow.find({ type: 'Text', text: '/rate N tags -- comment' })).toBeUndefined()
+  expect(await narrow.find({ type: 'Text', text: 'Rate' })).toBeDefined()
+  expect(await narrow.find({ type: 'Text', text: '/rate 1-5 tags -- note' })).toBeUndefined()
+  expect(await narrow.find({ type: 'Text', text: '·' })).toBeUndefined()
   expect(await narrow.find({ key: 'rate-5' })).toBeDefined()
-  // Five plain buttons take 33 columns: the narrow row is 5 + 33 + 5 gaps.
-  expect(bandLayout(50)).toEqual({ label: 'Rate:', gap: 1, hint: null })
-  expect(bandLayout(70)).toEqual({ label: 'Rate the last answer:', gap: 2, hint: null })
+  // Five plain buttons take 33 columns; Rate, the separators and the hint add the rest.
+  expect(bandLayout(50)).toEqual({ label: 'Rate', separators: false, hint: null })
+  expect(bandLayout(70)).toEqual({ label: 'Rate', separators: true, hint: null })
+  expect(bandLayout(100)).toEqual({ label: 'Rate', separators: true, hint: '/rate 1-5 tags -- note' })
 })

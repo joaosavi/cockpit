@@ -377,8 +377,14 @@ export function register(on: On, values: PluginOptions) {
         },
       }),
     )
-    const hint = layout.hint === null ? [] : [ui.Text({ dimColor: true, wrap: 'truncate', children: [layout.hint] })]
-    const row = ui.Box({ flexDirection: 'row', columnGap: layout.gap, children: [ui.Text({ children: [layout.label] }), ...buttons, ...hint] })
+    // Rate   1: bad · 2: weak · 3: ok · 4: good · 5: great      /rate 1-5 tags -- note
+    const scale = buttons.flatMap((b, i) => (i === 0 || !layout.separators ? [b] : [ui.Text({ dimColor: true, children: ['·'] }), b]))
+    const hint = layout.hint === null ? [] : [ui.Box({ marginLeft: 4, children: [ui.Text({ dimColor: true, wrap: 'truncate', children: [layout.hint] })] })]
+    const row = ui.Box({
+      flexDirection: 'row',
+      columnGap: 1,
+      children: [ui.Box({ marginRight: 2, children: [ui.Text({ dimColor: true, children: [layout.label] })] }), ...scale, ...hint],
+    })
     return ui.Box({ flexDirection: 'column', children: [row, await next(e)] })
   })
 

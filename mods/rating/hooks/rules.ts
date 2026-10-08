@@ -518,12 +518,15 @@ export function report(turns: readonly TurnRecord[], ratings: readonly RatingRec
 
 export const BAND_LABELS = ['bad', 'weak', 'ok', 'good', 'great'] as const
 
-// What the rating row holds at a width. The five buttons (`1: bad` to `5: great`) take 33 columns; the
-// label and the hint come and go so the row never wraps, down to 50 columns.
-export type BandLayout = { label: string; gap: number; hint: string | null }
+// What the rating row holds at a width: `Rate`, the five buttons (`1: bad` to `5: great`, 33 columns)
+// with a dim ` · ` between them, and the `/rate` hint. The hint goes first, then the separators, so the
+// row never wraps, down to 44 columns.
+export type BandLayout = { label: string; separators: boolean; hint: string | null }
+
+export const BAND_HINT = '/rate 1-5 tags -- note'
 
 export function bandLayout(columns: number): BandLayout {
-  if (columns >= 90) return { label: 'Rate the last answer:', gap: 2, hint: '/rate N tags -- comment' }
-  if (columns >= 66) return { label: 'Rate the last answer:', gap: 2, hint: null }
-  return { label: 'Rate:', gap: 1, hint: null }
+  if (columns >= 82) return { label: 'Rate', separators: true, hint: BAND_HINT }
+  if (columns >= 54) return { label: 'Rate', separators: true, hint: null }
+  return { label: 'Rate', separators: false, hint: null }
 }
