@@ -41,7 +41,7 @@ The hook does nothing for a read call. A write call costs one `cat >>` process a
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install audit@agent
+claude plugin install audit@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

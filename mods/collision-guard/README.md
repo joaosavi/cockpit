@@ -44,7 +44,7 @@ A tool call that is neither an edit nor a git command costs nothing measurable. 
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install collision-guard@agent
+claude plugin install collision-guard@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

@@ -74,7 +74,7 @@ The hook added about 19 ms per tool call on the author's VPS (17 calls measured 
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install rating@agent
+claude plugin install rating@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

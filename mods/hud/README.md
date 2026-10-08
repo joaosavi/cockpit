@@ -15,12 +15,12 @@ styles. Set it in `~/.claude/settings.json`, and set `band` to `off` so the rows
 ```json
 {
   "statusLine": { "type": "command", "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh", "refreshInterval": 5 },
-  "pluginConfigs": { "hud@agent": { "options": { "band": "off", "style": "refined", "icons": "nerd" } } }
+  "pluginConfigs": { "hud@cockpit": { "options": { "band": "off", "style": "refined", "icons": "nerd" } } }
 }
 ```
 
 The path above is a clone of the repo. When the marketplace was added from GitHub, Claude Code keeps
-its own clone at `~/.claude/plugins/marketplaces/agent`, and `claude plugin marketplace update agent`
+its own clone at `~/.claude/plugins/marketplaces/cockpit`, and `claude plugin marketplace update cockpit`
 keeps it current, so `~/.claude/plugins/marketplaces/agent/mods/hud/statusline/statusline.sh` works
 too. The `installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18
 or later, which runs its TypeScript as is.

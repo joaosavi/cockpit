@@ -87,21 +87,21 @@
     "frontend-design@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "playwright@claude-plugins-official": false,
-    "agent@agent": true,
-    "usage-limit@agent": true,
-    "memory-guard@agent": true,
-    "skill-loader@agent": true,
-    "audit@agent": true,
-    "loop-breaker@agent": true,
-    "secret-guard@agent": true,
-    "pipefail@agent": true,
-    "mod-report@agent": true,
-    "rating@agent": true,
-    "wtf@agent": true,
-    "hud@agent": true,
+    "cockpit@cockpit": true,
+    "usage-limit@cockpit": true,
+    "memory-guard@cockpit": true,
+    "skill-loader@cockpit": true,
+    "audit@cockpit": true,
+    "loop-breaker@cockpit": true,
+    "secret-guard@cockpit": true,
+    "pipefail@cockpit": true,
+    "mod-report@cockpit": true,
+    "rating@cockpit": true,
+    "wtf@cockpit": true,
+    "hud@cockpit": true,
     "mattpocock-skills@mattpocock": true,
-    "spinner-status@agent": true,
-    "collision-guard@agent": true
+    "spinner-status@cockpit": true,
+    "collision-guard@cockpit": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -116,7 +116,7 @@
         "repo": "anthropics/claude-plugins-official"
       }
     },
-    "agent": {
+    "cockpit": {
       "source": {
         "source": "directory",
         "path": "/home/sv/claude-devcontainer"
@@ -135,22 +135,22 @@
   "effortLevel": "xhigh",
   "autoCompactWindow": 733000,
   "pluginConfigs": {
-    "secret-guard@agent": {
+    "secret-guard@cockpit": {
       "options": {
         "envRoot": "~/getdemo"
       }
     },
-    "usage-limit@agent": {
+    "usage-limit@cockpit": {
       "options": {
         "timeZone": "America/Sao_Paulo"
       }
     },
-    "audit@agent": {
+    "audit@cockpit": {
       "options": {
         "timeZone": "America/Sao_Paulo"
       }
     },
-    "hud@agent": {
+    "hud@cockpit": {
       "options": {
         "timeZone": "America/Sao_Paulo",
         "band": "off",
@@ -159,7 +159,7 @@
         "icons": "nerd"
       }
     },
-    "pipefail@agent": {
+    "pipefail@cockpit": {
       "options": {
         "extraRunners": [
           "verificar",
@@ -167,7 +167,7 @@
         ]
       }
     },
-    "rating@agent": {
+    "rating@cockpit": {
       "options": {
         "configRepo": "~/claude-devcontainer"
       }

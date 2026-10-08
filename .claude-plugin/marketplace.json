@@ -1,14 +1,14 @@
 {
-  "name": "agent",
+  "name": "cockpit",
   "owner": {
     "name": "João Savi"
   },
-  "description": "The agent's mods: what used to be a rule in CLAUDE.md or a script on a timer now runs inside Claude Code",
+  "description": "Mods for Claude Code: guards that keep the agent out of trouble, and instruments that show where the session stands",
   "plugins": [
     {
-      "name": "agent",
-      "source": "./mods/agent",
-      "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner tip line."
+      "name": "cockpit",
+      "source": "./mods/cockpit",
+      "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, audit, loop, secret and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner tip line."
     },
     {
       "name": "usage-limit",

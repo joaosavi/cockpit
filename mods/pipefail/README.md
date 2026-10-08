@@ -41,7 +41,7 @@ The hook added about 2 ms per Bash call on the author's VPS (56 calls measured i
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install pipefail@agent
+claude plugin install pipefail@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

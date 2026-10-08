@@ -49,7 +49,7 @@ The hook added about 4 ms per Bash call on the author's VPS, not counting the ti
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install memory-guard@agent
+claude plugin install memory-guard@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

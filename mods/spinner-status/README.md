@@ -40,7 +40,7 @@ The `mode` option picks what the line shows. The default is `mixed`.
 | `tips` | A tip from the catalog, a new one each turn | None |
 | `summary` | The session summary only. Before the first reply, the spinner shows nothing extra | One per turn |
 
-The catalog has one tip for each command and mod of the `agent` marketplace: `/wtf`, `/hud`,
+The catalog has one tip for each command and mod of the `cockpit` marketplace: `/wtf`, `/hud`,
 `/rate` and `/ratings`, `/mods`, `/limit`, `/ram`, `/audit`, and what `memory-guard`,
 `loop-breaker`, `secret-guard`, `pipefail` and `usage-limit` do. It is a static list in
 `hooks/rules.ts`.
@@ -58,7 +58,7 @@ Set them in `settings.json` under `pluginConfigs`:
 ```json
 {
   "pluginConfigs": {
-    "spinner-status@agent": { "options": { "mode": "summary" } }
+    "spinner-status@cockpit": { "options": { "mode": "summary" } }
   }
 }
 ```

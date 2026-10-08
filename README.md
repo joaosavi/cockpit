@@ -10,7 +10,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/` |
 | `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite`, `navegador-cofre` e `avaliacoes-backup`, que envia o dataset do mod `rating` para o repo privado `joaosavi/agent-ratings` depois de passar pelo filtro de segredos | `~/.local/bin/` |
 | `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
-| `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `agent`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
+| `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `cockpit`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite`, desligado desde 07/10/2026, e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `shell/` | O terminal da VPS: `zshrc`, `profile`, `npmrc`, `starship.toml` e o `config.jsonc` do fastfetch | `~/` e `~/.config/` |
@@ -60,7 +60,7 @@ O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o
 
 ## Os mods
 
-Um mod é um plugin com código que roda dentro do Claude Code e responde a eventos: uma chamada de ferramenta, um prompt, um subagente subindo. Ele faz de forma determinística o que antes era regra no `CLAUDE.md` ou script num timer. A raiz do repo é o marketplace `agent`, e cada pasta em `mods/` é um plugin dele.
+Um mod é um plugin com código que roda dentro do Claude Code e responde a eventos: uma chamada de ferramenta, um prompt, um subagente subindo. Ele faz de forma determinística o que antes era regra no `CLAUDE.md` ou script num timer. A raiz do repo é o marketplace `cockpit`, e cada pasta em `mods/` é um plugin dele.
 
 | mod | o que faz |
 | :--- | :--- |
@@ -74,7 +74,7 @@ Um mod é um plugin com código que roda dentro do Claude Code e responde a even
 | `collision-guard` | Avisa quando outra sessão desta máquina editou o mesmo arquivo e ainda não commitou, e segura uma vez o `git add -A`, `commit -a`, `stash`, `checkout` ou `reset --hard` que levaria junto a edição da outra. Rodar o mesmo comando de novo em 2 min libera |
 | `pipefail` | Põe `set -o pipefail;` na frente de um comando que corta a saída de teste, typecheck ou lint com `tail`, `head` ou `grep`. Sem isso, o teste reprovado sai com 0. O `guard-bash.sh` do zippi aceita o comando reescrito, então o agente não perde a rodada |
 | `mod-report` | O `/mods [dias]` soma os diários de todos os mods: quantas vezes cada um agiu, quanto tempo gastou por chamada de ferramenta, e uma seção de atenção com o que pode estar atrapalhando (mod acima de 20 ms por chamada, comando recusado por memória, escrita refeita por skill, aviso de laço, pausa por limite) |
-| `global-memory` | A memória que vale para a VPS inteira, em `memorias/vps/`: reescreve a seção de memória do system prompt para as duas pastas, com a regra de onde salvar cada tipo, e põe o índice global no contexto de toda sessão. Numa conta Team, o guarda embutido barra mod de usuário nesses ganchos, então ele roda como mod da organização: `claude/managed-settings.json` vai para `/etc/claude-code/`, e o painel de admin do claude.ai tem `"managedSourcesBehavior": "merge"`. Fica fora do pacote `agent` |
+| `global-memory` | A memória que vale para a VPS inteira, em `memorias/vps/`: reescreve a seção de memória do system prompt para as duas pastas, com a regra de onde salvar cada tipo, e põe o índice global no contexto de toda sessão. Numa conta Team, o guarda embutido barra mod de usuário nesses ganchos, então ele roda como mod da organização: `claude/managed-settings.json` vai para `/etc/claude-code/`, e o painel de admin do claude.ai tem `"managedSourcesBehavior": "merge"`. Fica fora do pacote `cockpit` |
 | `wtf` | O `/wtf [pergunta]` responde em poucas linhas onde a sessão está e o que o agente espera de você, sem interromper o turno. Quem resume é o Haiku, lendo só o pedido que abriu a tarefa e as últimas 12 mensagens cortadas (uns 600 tokens de entrada por uso). A resposta em texto também chega ao contexto do agente principal, marcada como resumo e não instrução |
 | `hud` | Um painel com modelo, projeto e branch, contexto, limites e folga de memória, e durante o turno a ferramenta e os subagentes em andamento. O `/hud` abre a visão completa. Opções: `band` (`panel`, `line` ou `off`), `activity`, `memory`. Na VPS o painel fica embaixo do prompt pela statusline `mods/hud/statusline/statusline.sh`, com `band` em `off`, e a faixa de cima mostra só a atividade do turno |
 | `spinner-status` | Troca a dica embaixo do spinner por uma linha do Haiku: onde a sessão está, alternando a cada 15 s com uma dica dos mods que serve ao momento. Uma chamada por turno, em segundo plano, lendo só os 3 últimos prompts e o texto do agente entre eles (até 3.000 caracteres, uns 500 tokens de entrada). Opções: `mode` (`mixed`, `tips` sem chamada de modelo, `summary`) e `model`. O texto do mod é em inglês, e a linha do Haiku sai na língua em que o usuário escreve. A dica nativa sai com `"spinnerTipsEnabled": false` no `settings.json` |
@@ -95,18 +95,18 @@ Para mudar um mod:
 	```
 
 2. Suba o `version` no `.claude-plugin/plugin.json` do mod. Sem a versão nova, o Claude Code mantém a cópia antiga.
-3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/agent/.claude-plugin/plugin.json`, suba o `version` do `agent` e registre o mod no `.claude-plugin/marketplace.json`. Para instalar na hora, sem esperar a atualização automática, rode `claude plugin install agent@agent`. O `claude plugin update` sozinho atualiza o pacote mas não instala a dependência nova.
+3. Para um mod novo, inclua o nome dele no `dependencies` de `mods/cockpit/.claude-plugin/plugin.json`, suba o `version` do `cockpit` e registre o mod no `.claude-plugin/marketplace.json`. Para instalar na hora, sem esperar a atualização automática, rode `claude plugin install cockpit@cockpit`. O `claude plugin update` sozinho atualiza o pacote mas não instala a dependência nova.
 
-O marketplace `agent` tem atualização automática ligada no `settings.json`. Depois da mudança, a primeira sessão que abre atualiza a cópia instalada e instala a dependência que entrou, e as sessões abertas a partir daí carregam a versão nova. As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
+O marketplace `cockpit` tem atualização automática ligada no `settings.json`. Depois da mudança, a primeira sessão que abre atualiza a cópia instalada e instala a dependência que entrou, e as sessões abertas a partir daí carregam a versão nova. As sessões abertas continuam com a versão antiga até um `/reload-plugins` ou até reabrir.
 
 Para usar os mods em outra máquina, adicione o repo como marketplace e instale o pacote:
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install agent@agent
+claude plugin install cockpit@cockpit
 ```
 
-Na outra máquina, ligue a atualização automática do marketplace `agent` no `/plugin`, aba **Marketplaces**. Desinstalar o pacote deixa os mods instalados, e o `claude plugin prune` remove os que sobraram.
+Na outra máquina, ligue a atualização automática do marketplace `cockpit` no `/plugin`, aba **Marketplaces**. Desinstalar o pacote deixa os mods instalados, e o `claude plugin prune` remove os que sobraram.
 
 ## Fica fora do git
 

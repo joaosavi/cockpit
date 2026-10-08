@@ -46,7 +46,7 @@ The hook added about 64 ms per tool call on the author's VPS (60 calls measured 
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install secret-guard@agent
+claude plugin install secret-guard@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

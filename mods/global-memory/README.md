@@ -18,12 +18,12 @@ On a Team or Enterprise plan, the built-in guard `sec-default@builtin` skips mod
 
 ```json
 {
-  "enabledPlugins": { "global-memory@agent": true },
-  "prependPlugins": ["global-memory@agent", "sec-default@builtin"]
+  "enabledPlugins": { "global-memory@cockpit": true },
+  "prependPlugins": ["global-memory@cockpit", "sec-default@builtin"]
 }
 ```
 
-For the same reason, the `agent` bundle does not list it as a dependency. On a personal plan, `claude plugin install global-memory@agent` is enough.
+For the same reason, the `cockpit` bundle does not list it as a dependency. On a personal plan, `claude plugin install global-memory@cockpit` is enough.
 
 ## Commands
 
@@ -54,7 +54,7 @@ None per tool call: the mod has no `tool.call` hook. It reads the global `MEMORY
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install global-memory@agent
+claude plugin install global-memory@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

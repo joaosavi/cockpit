@@ -57,7 +57,7 @@ The hook added about 2 ms per tool call on the author's VPS (60 calls measured i
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install skill-loader@agent
+claude plugin install skill-loader@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

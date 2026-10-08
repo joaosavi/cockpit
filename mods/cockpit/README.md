@@ -1,12 +1,12 @@
-# agent
+# cockpit
 
-Installs every agent mod at once. Each mod is a dependency of this bundle, so one install brings them all.
+Installs every Cockpit mod at once. Each mod is a dependency of this bundle, so one install brings them all.
 
 ## Install
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install agent@agent
+claude plugin install cockpit@cockpit
 ```
 
 ## The mods
@@ -28,7 +28,7 @@ Each mod has its own README with its options, what it records and what it costs.
 
 ## Not in the bundle: global-memory
 
-`global-memory` adds a machine-wide memory folder beside the per-project auto memory. On a Team or Enterprise plan the built-in guard skips it unless it runs as an organization mod, listed in `prependPlugins` in managed settings, so it is not a dependency of this bundle. Its README shows the settings. On a personal plan, install it with `claude plugin install global-memory@agent`.
+`global-memory` adds a machine-wide memory folder beside the per-project auto memory. On a Team or Enterprise plan the built-in guard skips it unless it runs as an organization mod, listed in `prependPlugins` in managed settings, so it is not a dependency of this bundle. Its README shows the settings. On a personal plan, install it with `claude plugin install global-memory@cockpit`.
 
 ## Where the mods write
 

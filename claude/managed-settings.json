@@ -1,6 +1,6 @@
 {
   "extraKnownMarketplaces": {
-    "agent": {
+    "cockpit": {
       "source": {
         "source": "directory",
         "path": "/home/sv/claude-devcontainer"
@@ -8,14 +8,14 @@
     }
   },
   "enabledPlugins": {
-    "global-memory@agent": true
+    "global-memory@cockpit": true
   },
   "prependPlugins": [
-    "global-memory@agent",
+    "global-memory@cockpit",
     "sec-default@builtin"
   ],
   "pluginConfigs": {
-    "global-memory@agent": {
+    "global-memory@cockpit": {
       "options": {
         "globalDir": "~/claude-devcontainer/memorias/vps"
       }

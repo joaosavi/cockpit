@@ -174,8 +174,8 @@ test('the agent texts say what the mod did and what to do next', () => {
 })
 
 test('the install record gives the plugin folder, and a broken record gives none', () => {
-  const record = JSON.stringify({ version: 2, plugins: { 'other@x': [{ installPath: '/o' }], 'skill-loader@agent': [{ installPath: '/cache/agent/skill-loader/1.2.0' }] } })
-  expect(installPathOf(record, 'skill-loader')).toBe('/cache/agent/skill-loader/1.2.0')
+  const record = JSON.stringify({ version: 2, plugins: { 'other@x': [{ installPath: '/o' }], 'skill-loader@cockpit': [{ installPath: '/cache/cockpit/skill-loader/1.2.0' }] } })
+  expect(installPathOf(record, 'skill-loader')).toBe('/cache/cockpit/skill-loader/1.2.0')
   expect(installPathOf('{}', 'skill-loader')).toBeNull()
   expect(installPathOf('not json', 'skill-loader')).toBeNull()
 })
@@ -188,7 +188,7 @@ test('the plugin\'s own copy of a skill comes before the user\'s', async ($, on)
   on('session.cwd', () => ({ value: '/work' }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('fs.read', ($, e) => {
-    if (e.path === '/home/.claude/plugins/installed_plugins.json') return { value: JSON.stringify({ plugins: { 'skill-loader@agent': [{ installPath: '/plug' }] } }) }
+    if (e.path === '/home/.claude/plugins/installed_plugins.json') return { value: JSON.stringify({ plugins: { 'skill-loader@cockpit': [{ installPath: '/plug' }] } }) }
     if (!e.path.endsWith('/SKILL.md')) return { deny: 'no file' }
     read.push(e.path)
     return { value: '---\nname: x\n---\n\n# Body\n' }

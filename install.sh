@@ -43,9 +43,9 @@ for f in settings.json settings.local.json; do
   [ -f "$HOME/.claude/$f" ] || cp "$R/claude/$f" "$HOME/.claude/$f"
 done
 
-# Os mods do repo: o marketplace `agent` aponta para esta pasta, e o pacote `agent` instala cada mod.
-claude plugin marketplace add "$R" >/dev/null 2>&1 || claude plugin marketplace update agent
-claude plugin install agent@agent
+# Os mods do repo: o marketplace `cockpit` aponta para esta pasta, e o pacote `cockpit` instala cada mod.
+claude plugin marketplace add "$R" >/dev/null 2>&1 || claude plugin marketplace update cockpit
+claude plugin install cockpit@cockpit
 
 # O dataset do mod rating é um clone do repo privado joaosavi/agent-ratings, enviado todo dia pelo avaliacoes-backup.timer.
 [ -d "$HOME/datasets/agent-ratings/.git" ] || git clone git@github.com:joaosavi/agent-ratings.git "$HOME/datasets/agent-ratings"

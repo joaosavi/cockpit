@@ -37,7 +37,7 @@ None per tool call: the mod has no `tool.call` hook. `/mods` reads every diary i
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install mod-report@agent
+claude plugin install mod-report@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

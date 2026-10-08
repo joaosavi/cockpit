@@ -50,7 +50,7 @@ The `tool.call` hook added about 6 ms per tool call on the author's VPS (60 call
 
 ```sh
 claude plugin marketplace add joaosavi/claude-devcontainer
-claude plugin install usage-limit@agent
+claude plugin install usage-limit@cockpit
 ```
 
-The `agent` bundle installs it with the other mods.
+The `cockpit` bundle installs it with the other mods.

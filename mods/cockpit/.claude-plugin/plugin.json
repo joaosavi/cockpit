@@ -1,19 +1,19 @@
 {
-  "name": "agent",
-  "version": "1.4.0",
-  "description": "Installs every agent mod at once: the usage-limit, memory, skill, audit, loop, secret, collision and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner status line.",
+  "name": "cockpit",
+  "version": "2.0.0",
+  "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, audit, loop, secret, collision and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner status line.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
   },
-  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/agent",
+  "homepage": "https://github.com/joaosavi/claude-devcontainer/tree/main/mods/cockpit",
   "repository": "https://github.com/joaosavi/claude-devcontainer",
   "license": "MIT",
   "keywords": [
     "bundle",
     "mods",
     "guards",
-    "agent",
+    "cockpit",
     "mod"
   ],
   "dependencies": [

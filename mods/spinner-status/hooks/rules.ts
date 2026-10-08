@@ -37,7 +37,7 @@ export function options(values: unknown): Options {
 
 // --- the catalog ---
 
-// One tip per command or mod of the `agent` marketplace. The tips mode rotates through them as
+// One tip per command or mod of the `cockpit` marketplace. The tips mode rotates through them as
 // written; in mixed mode the model picks one and writes it in the user's language.
 const TIPS = [
   '/wtf [question] sums up where this session stands and what it needs from you',
