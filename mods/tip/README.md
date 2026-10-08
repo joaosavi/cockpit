@@ -17,7 +17,7 @@ tip about the mods.
 ## Language
 
 The labels and the tip catalog are English. In `mixed` and `summary` modes, Haiku writes the line in
-the language the user writes in. The `tips` mode shows the catalog as written.
+Claude Code's `language` setting when it is set, and otherwise in the language the user writes in. The `tips` mode shows the catalog as written.
 
 ## Turn off the native tip
 

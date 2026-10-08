@@ -73,15 +73,15 @@ const YOU = 'You'
 const NOTHING = '-'
 
 // The instructions, the labels and the state keys stay in English. The model writes the sentences
-// in the language the user writes in, which it reads from the excerpt.
-export function system(): string {
+// in Claude Code's `language` setting when set, else in the language the user writes in the excerpt.
+export function system(language = ''): string {
   return [
     "You summarize another agent's session for its user, from the excerpt of that session given below. This is a side question: the agent keeps working on its own, and nobody asked it to stop.",
     'The user runs several sessions at once and just came back to this one. They remember nothing about it.',
     '',
     'Use only what the excerpt shows. Never invent files, numbers, names, results or intentions. When the excerpt is too short to tell where the session stands or what the agent needs, say so plainly instead of guessing.',
     '',
-    'Write the sentences in the language the user writes in the excerpt. Keep the labels and the key in English, exactly as below.',
+    `${writeIn(language, 'the sentences')} Keep the labels and the key in English, exactly as below.`,
     'Answer in exactly this shape:',
     '',
     'STATE: <key>',
@@ -97,7 +97,7 @@ export function system(): string {
     `Only when a decision or a validation is pending, add numbered options on the lines after "${YOU}", the recommended one first, each with its cost, at most 70 characters per option:`,
     '1. <option> (recommended): <its cost>',
     '2. <option>: <its cost>',
-    'Write the word "recommended" in the user\'s language too. Recommend the option the agent recommends, or the one you would.',
+    'Recommend the option the agent recommends, or the one you would.',
     '',
     `When the user asks a question, answer it in "${NOW}" and keep the same shape.`,
     '',
@@ -106,6 +106,12 @@ export function system(): string {
 }
 
 export const MODEL = 'haiku'
+
+// Claude Code's `language` setting is free text ("japanese", "pt-br"), passed to the model as written.
+export function writeIn(language: string, what: string): string {
+  const l = language.trim()
+  return l === '' ? `Write ${what} in the language the user writes in the excerpt.` : `Write ${what} in ${l}, whatever language the excerpt is in.`
+}
 // 8 short lines fit in ~250 tokens; the headroom keeps a long option from being cut mid-sentence.
 export const MAX_TOKENS = 500
 
@@ -219,6 +225,9 @@ const STATE_LINE = /^\s*\**\s*STATE\s*:\s*\**\s*([a-z]+)\s*(?:\(([^)\n]+)\))?\s*
 const LABELED_LINE = /^\s*\**\s*(Now|You)\s*\**\s*:\s*\**\s*(.*?)\s*$/i
 const OPTION_LINE = /^\s*(\d+)[.)]\s+(.*?)\s*$/
 // An option's parts: a name, an optional mark in parentheses, then a colon and its cost.
+// The only mark the prompt asks for is "recommended", and the model translates it at will
+// ("recomendado"), so any mark shows as this fixed label.
+const RECOMMENDED = 'recommended'
 const OPTION_PARTS = /^([^():]+?)\s*(?:\(([^)]+)\))?\s*(?::\s*(.*))?$/
 // `You: -`, and the dashes a model writes for it.
 const NOTHING_LINE = /^[-–—]?$/
@@ -226,7 +235,7 @@ const NOTHING_LINE = /^[-–—]?$/
 function option(number: string, text: string): Option {
   const parts = OPTION_PARTS.exec(text)
   if (parts === null) return { number, text, name: null, mark: null, cost: null }
-  return { number, text, name: (parts[1] ?? '').trim(), mark: parts[2]?.trim() ?? null, cost: parts[3]?.trim() || null }
+  return { number, text, name: (parts[1] ?? '').trim(), mark: parts[2] === undefined ? null : RECOMMENDED, cost: parts[3]?.trim() || null }
 }
 
 export function parseAnswer(text: string): Answer {

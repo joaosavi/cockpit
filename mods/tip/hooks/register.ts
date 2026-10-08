@@ -54,6 +54,16 @@ let modelMs = 0
 let excerptChars = 0
 
 // One diary line. Every mod's diary line starts with `at`, `session` and `event`.
+// Claude Code's `language` setting, or '' when unset or unreadable.
+async function languageOf($: Api): Promise<string> {
+  try {
+    const { language } = await $.settings.read()
+    return typeof language === 'string' ? language : ''
+  } catch {
+    return ''
+  }
+}
+
 async function log($: Api, entry: Record<string, unknown>) {
   if (diary === '') return
   let before = ''
@@ -85,7 +95,7 @@ async function refresh($: Api, current: string): Promise<void> {
     if (ex === '') {
       outcome = 'no-text'
     } else {
-      const r = await $.model.complete({ model: opts.model, system: system(mode), prompt: prompt(ex), maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS })
+      const r = await $.model.complete({ model: opts.model, system: system(mode, await languageOf($)), prompt: prompt(ex), maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS })
       used = usage(r.usage)
       if (r.isAnswered) {
         const got = parseLines(r.text)

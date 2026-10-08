@@ -70,6 +70,8 @@ test('the instructions carry the catalog in mixed mode only, and follow the user
   expect(system('mixed')).toContain('/wtf [question]')
   expect(system('summary')).not.toContain('/wtf')
   expect(system('mixed')).toContain('Write in the language the user writes in the excerpt.')
+  expect(system('mixed', 'japanese')).toContain('Write in japanese, whatever language the excerpt is in.')
+  expect(system('summary', '')).toBe(system('summary'))
   expect(prompt('x')).toBe('<session>\nx\n</session>')
 })
 
@@ -95,7 +97,7 @@ test('each line carries a label that tells it apart from the native Tip line', (
 
 // --- the hooks ---
 
-type Scenario = { reply: { value: unknown } | { deny: string }; calls: { model: string; system: unknown; prompt: unknown; maxTokens: unknown }[]; written: string[]; modelMs: number }
+type Scenario = { reply: { value: unknown } | { deny: string }; calls: { model: string; system: unknown; prompt: unknown; maxTokens: unknown }[]; written: string[]; modelMs: number; language?: string }
 
 function scenario(reply: Scenario['reply'] = { value: { isAnswered: true, text: REPLY, usage: USAGE } }, modelMs = 0): Scenario {
   return { reply, calls: [], written: [], modelMs }
@@ -106,6 +108,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
   mock.env(on, { HOME: '/home' })
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('session.messages', () => ({ value: SESSION }))
+  on('settings.read', () => ({ value: c.language === undefined ? {} : { language: c.language } }))
   on('fs.read', () => (c.written.length === 0 ? { deny: 'no file' } : { value: c.written.at(-1) ?? '' }))
   on('fs.write', ($, e) => {
     c.written.push(e.text)
@@ -224,4 +227,14 @@ test('disabled, the mod draws nothing and calls nothing', { options: { enabled: 
   const ui = await $.ui.mount(SPINNER)
   expect(await ui.find({ type: 'Text', text: /⎿/ })).toBeUndefined()
   expect(c.calls).toHaveLength(0)
+})
+
+test('the language setting reaches the model', { options: { mode: 'summary' } }, async ($, on) => {
+  const c = scenario()
+  c.language = 'portuguese'
+  const clock = setup(on, c)
+  await $.session.start(start)
+  await $.turn.start({ text: 'a', turnId: 't1' })
+  await clock.advance(1000)
+  expect(c.calls[0]?.system).toBe(system('summary', 'portuguese'))
 })

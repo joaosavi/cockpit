@@ -65,7 +65,8 @@ again and `Esc` to close. A text reply always comes too, because Remote Control 
 ## Language
 
 The mod's own text is English: the labels, the state words and the fixed messages. Haiku writes the
-sentences in the language the user writes in, which it reads from the session. A user who writes in
+sentences in Claude Code's `language` setting when it is set, and otherwise in the language the user
+writes in, which it reads from the session. A user who writes in
 Portuguese gets `` `WAITING`  **A migração rodou em staging...** ``. The model writes `You: -` when
 nothing is needed, so the mod tells "nothing" apart in any language.
 
