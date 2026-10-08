@@ -8,6 +8,8 @@ import markdown
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODS = os.path.dirname(HERE)
 REPO = 'joaosavi/cockpit'
+# Updating the bundle does not update its dependencies, so a manual update names every mod.
+UPDATE_ALL = 'claude plugin marketplace update cockpit\n' + "for m in $(claude plugin list | grep -o '[a-z-]*@cockpit'); do claude plugin update \"$m\"; done"
 
 # --- ANSI to HTML, for the real status line output -------------------------------------------
 
@@ -160,8 +162,8 @@ def install():
 <h2 id="install-check">Check the install</h2>
 {code('claude plugin list')}
 <p>You should see 15 entries ending in <code>@cockpit</code>, each marked <code>enabled</code>. An entry marked <code>failed to load</code> points to a version mismatch; see <a href="#troubleshooting">Troubleshooting</a>.</p>
-<h2 id="install-auto">Turn on automatic updates</h2>
-<p>Open <code>/plugin</code>, go to <b>Marketplaces</b>, select <code>cockpit</code>, and choose <b>Enable auto-update</b>. A new version then installs when Claude Code starts, and a mod added to the bundle installs with it.</p>
+<h2 id="install-auto">Updates install by themselves</h2>
+<p>The setup turns on auto-update for the <code>cockpit</code> marketplace. A few minutes after the first message of a session, Claude Code updates every mod that has a new version, installs any mod added to the bundle, and shows <code>Plugin updated: &lt;name&gt; · Run /reload-plugins to apply</code>. To turn it off, open <code>/plugin</code>, go to <b>Marketplaces</b>, and select <code>cockpit</code>.</p>
 <h2 id="install-team">On a Team or Enterprise plan</h2>
 <p>Every mod works the same on every plan, except <code>global-memory</code>. Team and Enterprise plans run a built-in guard that skips plugins you install yourself on the two hooks it needs, so it installs and does nothing. To use it, your organization adds it to managed settings, ahead of the guard:</p>
 {code(json.dumps({'enabledPlugins': {'global-memory@cockpit': True}, 'prependPlugins': ['global-memory@cockpit', 'sec-default@builtin']}, indent=2), 'json')}
@@ -297,10 +299,13 @@ def troubleshooting():
     return out
 
 def update():
-    return f'''<p class="lead">With auto-update on, new versions install when Claude Code starts. You can also update by hand, and remove everything in two commands.</p>
+    return f'''<p class="lead">Updates arrive by themselves, a few minutes after the first message of a session. You can also update by hand, and remove everything in two commands.</p>
+<h2 id="up-auto">Automatic updates</h2>
+<p>The setup turns on auto-update for the <code>cockpit</code> marketplace. Claude Code then refreshes the marketplace once per session and updates every Cockpit mod with a new version, each one on its own. The open session keeps the versions it loaded until you run <code>/reload-plugins</code>; the next session loads the new ones.</p>
 <h2 id="up-manual">Update by hand</h2>
-{code('claude plugin marketplace update cockpit' + chr(10) + 'claude plugin update cockpit@cockpit')}
-<p>Claude Code has no command that updates every plugin at once. To update one mod, name it: <code>claude plugin update hud@cockpit</code>. A session that is already open keeps the old version until you run <code>/reload-plugins</code> or restart.</p>
+<p>Updating the bundle does not update the mods: each mod is its own plugin. To update them all now:</p>
+{code(UPDATE_ALL)}
+<p>To update one mod, name it: <code>claude plugin update hud@cockpit</code>.</p>
 <h2 id="up-remove">Uninstall</h2>
 {code('claude plugin uninstall cockpit@cockpit' + chr(10) + 'claude plugin prune')}
 <p>Uninstalling the bundle leaves the mods installed; <code>claude plugin prune</code> removes them. The setup wrote <code>statusLine</code>, <code>spinnerTipsEnabled</code> and <code>autoCompactWindow</code> to your settings file and kept a backup next to it. Remove those keys by hand, or restore the backup.</p>
@@ -310,7 +315,8 @@ def update():
 def versions():
     names = [m for _, _, ms in GROUPS for m in ms]
     rows = ''.join(f'<tr><td><a href="#mod-{m}"><code>{m}</code></a></td><td class="num">{meta(m)["version"]}</td><td class="num">{len(meta(m).get("userConfig", {}))}</td></tr>' for m in ['cockpit'] + names if m != 'cockpit')
-    return f'''<p class="lead">The version of each mod in this release. Each mod keeps its own version, so an update to one leaves the others as they are.</p>
+    return f'''<p class="lead">Cockpit {meta("cockpit")["version"]}. The bundle carries the version of the release, and each mod carries the version of the release where it last changed.</p>
+<p>A mod that did not change in a release keeps its version, so Claude Code does not update it. Versions before 1.0.0 are betas, such as <code>1.0.0-beta.2</code>.</p>
 <table><thead><tr><th>Mod</th><th>Version</th><th>Options</th></tr></thead><tbody><tr><td><code>cockpit</code> (bundle)</td><td class="num">{meta("cockpit")["version"]}</td><td class="num">0</td></tr>{rows}</tbody></table>'''
 
 PAGES = [

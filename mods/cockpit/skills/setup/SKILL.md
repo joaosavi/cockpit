@@ -17,8 +17,8 @@ Collect these facts in one command, before asking anything:
 
 - `claude --version`, and `node --version`. The hud status line needs Node 22.18 or later and `sh` (on Windows, Git Bash or WSL).
 - `claude plugin list`: which `@cockpit` mods are installed and enabled.
-- The marketplace folder: `installLocation` of `cockpit` in `<config>/plugins/known_marketplaces.json`. The status line script is `<installLocation>/mods/hud/statusline/statusline.sh`. Check that the file exists.
-- In the settings: `statusLine`, `spinnerTipsEnabled`, `autoCompactWindow`, `enabledPlugins["claude-hud@claude-hud"]`, and `pluginConfigs` entries ending in `@cockpit`.
+- The marketplace entry: `installLocation`, `source` and `autoUpdate` of `cockpit` in `<config>/plugins/known_marketplaces.json`. The status line script is `<installLocation>/mods/hud/statusline/statusline.sh`. Check that the file exists.
+- In the settings: `extraKnownMarketplaces.cockpit`, `statusLine`, `spinnerTipsEnabled`, `autoCompactWindow`, `enabledPlugins["claude-hud@claude-hud"]`, and `pluginConfigs` entries ending in `@cockpit`.
 - The system time zone: `node -e 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'`.
 - The style previews: each style drawn by the real script, with the user's own folder and branch, narrow enough to fit the question's preview box. Run this from the user's working folder:
 
@@ -64,6 +64,7 @@ Merge exactly what the user chose:
 | Time zone | `timeZone` under the `hud@cockpit`, `audit@cockpit` and `usage-limit@cockpit` options |
 | Spinner tip | `spinnerTipsEnabled: false` whenever `spinner-status@cockpit` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | When to compact | top-level `autoCompactWindow: <tokens>` |
+| Updates (always, no question) | `extraKnownMarketplaces.cockpit: { "source": <the source from known_marketplaces.json, copied exactly>, "autoUpdate": true }`. Claude Code refuses a marketplace whose settings entry names a different source, so copy it as it is. If the entry exists, set only `autoUpdate`. With this on, every mod updates by itself a few minutes after the first message of a session. |
 | Ratings folder | `datasetDir` under `pluginConfigs["rating@cockpit"].options` for a folder they chose; `enabled: false` under `pluginConfigs["rating@cockpit"].options` for no ratings |
 
 Keep every other key and every other plugin's options as they were.
@@ -72,6 +73,6 @@ Keep every other key and every other plugin's options as they were.
 
 1. Validate the file: `node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' <settings>`.
 2. If the status line was set, run the preview command of step 1 once more with the real settings (no temporary `CLAUDE_CONFIG_DIR`, `COLUMNS=120`, one pass) and check that two rows print in the chosen style.
-3. Close with a short message in plain words, in this order: the two rows as the person will see them, in a code block; one line per change, said as what they will notice (the status line under the prompt in the blocks style, times in São Paulo time, the conversation summarized at about 70%, the mod's tip line in place of Claude Code's); where the backup is; restart Claude Code so every change takes effect; to change any of it later, `/config` or `/cockpit:setup` again.
+3. Close with a short message in plain words, in this order: the two rows as the person will see them, in a code block; one line per change, said as what they will notice (the status line under the prompt in the blocks style, times in São Paulo time, the conversation summarized at about 70%, the mod's tip line in place of Claude Code's, updates arriving by themselves); where the backup is; restart Claude Code so every change takes effect; to change any of it later, `/config` or `/cockpit:setup` again.
 
 Done when the JSON parses, the status line printed its rows (if it was chosen), and the closing message names each change in plain words and the restart.

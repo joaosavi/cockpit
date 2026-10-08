@@ -24,7 +24,7 @@ The mods are tested on Linux. `memory-guard` reads Linux memory files, so it doe
 2. Restart Claude Code.
 3. Run `/cockpit:setup`. It asks four or five questions, with previews, and writes what a plugin cannot set by itself: the status line, the spinner tip, when to compact, and where to keep ratings. It shows the result and tells you what changed.
 
-To turn on updates, open `/plugin`, go to **Marketplaces**, and turn on auto-update for `cockpit`. A new mod added to the bundle then installs on the next start.
+The setup turns on auto-update for `cockpit`, so new versions install by themselves a few minutes after the first message of a session.
 
 ## The mods
 
