@@ -60,6 +60,8 @@ Em 08/10/2026 o João escolheu `cockpit` como nome da suíte (marketplace, pacot
 
 Em 08/10/2026 o João descartou o terminal-browser, porque ele depende do protocolo gráfico do kitty e o Windows Terminal, que ele usa no PC, não tem esse protocolo. Descartou também o micro-compaction (/compact micro). Não proponha esses dois de novo.
 
+Em 08/10/2026 o João comparou o `hud` com o claude-hud (jarrodwatts, 28 mil estrelas) e manteve o nosso como está, sem trazer campo dele. O claude-hud mede a RAM da máquina inteira, não o teto do cgroup, e não mostra PR. Não proponha trocar.
+
 **Why:** regra em CLAUDE.md depende de o modelo lembrar; o mod é determinístico.
 Nomes (08/10/2026, aprovados pelo João): substantivo mais papel, como `secret-guard`; `/wtf` fica, porque a gíria é da comunidade. Mods novos avaliados com os transcripts da VPS (08/10/2026): `output-trim` e `paste-to-file` não compensam (teste, typecheck, lint e build são 2,8% dos 8 M de caracteres de Bash, média de 497 por saída de teste, porque o vitest fora de TTY já sai compacto e o agente usa `| tail`; o maior prompt colado tem 11 mil caracteres). `collision-guard` tem caso: 11 pares de sessões editaram o mesmo repo com menos de 30 min de distância em 8 dias, 5 no mesmo arquivo. O Edit nativo já recusa arquivo mudado desde a leitura, então o risco que sobra é git (`add -A`, commit, checkout) levando a edição da outra sessão. Descartados: `style-guard` (estilo de resposta é individual) e typecheck em segundo plano (gasta RAM para adiantar um erro que o agente acha antes do commit). A pré-compactação existe no Claude Code atrás de flags do servidor (`tengu_gleaming_fair`), desligada aqui; mod não dispara.
 
