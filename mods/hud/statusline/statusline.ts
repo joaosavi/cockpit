@@ -90,6 +90,9 @@ function hudOptions(settings: object) {
   return options(typeof hud === 'object' && hud !== null ? Reflect.get(hud, 'options') : undefined)
 }
 
+// A reader that closes the pipe early (a pager, head) is not an error worth a stack trace.
+process.stdout.on('error', () => {})
+
 let input: unknown = null
 try {
   input = JSON.parse(readFileSync(0, 'utf8'))
