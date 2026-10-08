@@ -88,7 +88,7 @@ let cwd = ''
 let recording = true
 
 // What /rate answers in a session the mod does not record (`skipTemporary`).
-const TEMPORARY_TEXT = '/rate: this session runs in a temporary folder, so the rating mod records nothing here. Turn off skipTemporary in /config to record it.'
+const TEMPORARY_TEXT = '/rate: this session runs in a temporary folder, so the rating mod records nothing here. Turn off Skip test sessions in /config to record it.'
 let configVersion: string | null = null
 let pending: { text: string; origin: string } | null = null
 let live: Live | null = null
