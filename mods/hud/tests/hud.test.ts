@@ -37,6 +37,12 @@ import {
 } from '../hooks/rules.ts'
 import { statusRows } from '../hooks/styles.ts'
 
+// A row draws as one Text with a Text per segment, and `find` matches text by inclusion, so the
+// row itself matches first. The segment is the innermost Text whose whole text is `text`.
+async function segment(ui: { findAll: (q: { type: string; text: string }) => Promise<unknown[]> }, text: string): Promise<unknown> {
+  return (await ui.findAll({ type: 'Text', text })).filter((x) => (x as { text?: string }).text === text).at(-1)
+}
+
 const GiB = 1024 ** 3
 const MiB = 1024 ** 2
 // 17:00 in São Paulo.
@@ -319,17 +325,17 @@ test('idle panel band: identity, meters colored by threshold, other mods kept, n
   setup(on)
   await $.session.start(START)
   const ui = await $.ui.mount(band(120, false))
-  expect(await ui.find({ type: 'Text', text: 'Opus 5.5' })).toMatchObject({ props: { bold: true } })
+  expect(await segment(ui, 'Opus 5.5')).toMatchObject({ props: { bold: true } })
   expect(await ui.find({ type: 'Text', text: 'my-app' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'main' })).toMatchObject({ props: { dimColor: true } })
-  expect(await ui.find({ type: 'Text', text: '●' })).toMatchObject({ props: { color: 'warning' } })
+  expect(await segment(ui, 'main')).toMatchObject({ props: { dimColor: true } })
+  expect(await segment(ui, '●')).toMatchObject({ props: { color: 'warning' } })
   expect(await ui.find({ type: 'Text', text: '0m' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: ' 42%' })).toMatchObject({ props: { color: 'success' } })
+  expect(await segment(ui, ' 42%')).toMatchObject({ props: { color: 'success' } })
   expect(await ui.find({ type: 'Text', text: ' resets 2h30m' })).toBeDefined()
   // 61% of 10 cells is 6 filled.
-  expect(await ui.find({ type: 'Text', text: '●●●●●●' })).toMatchObject({ props: { color: 'success' } })
+  expect(await segment(ui, '●●●●●●')).toMatchObject({ props: { color: 'success' } })
   // The tightest group is the slice: 5 GiB × 0.98 − 3 GiB used = 1.9 GiB.
-  expect(await ui.find({ type: 'Text', text: '1.9G' })).toMatchObject({ props: { color: 'success' } })
+  expect(await segment(ui, '1.9G')).toMatchObject({ props: { color: 'success' } })
   expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /turn / })).toBeUndefined()
 })
@@ -339,8 +345,8 @@ test('a measure past the thresholds turns ctx red and 5h yellow', async ($, on) 
   await $.session.start(START)
   const ui = await $.ui.mount(band(120, false))
   await $.session.measure({ context: { tokens: 180000, window: 200000, percent: 90 }, rateLimits: [{ kind: 'five_hour', percentUsed: 80, resetsAt: FIVE_RESET }], changed: ['context', 'rateLimits'] })
-  expect(await ui.find({ type: 'Text', text: ' 90%' })).toMatchObject({ props: { color: 'error' } })
-  expect(await ui.find({ type: 'Text', text: ' 80%' })).toMatchObject({ props: { color: 'warning' } })
+  expect(await segment(ui, ' 90%')).toMatchObject({ props: { color: 'error' } })
+  expect(await segment(ui, ' 80%')).toMatchObject({ props: { color: 'warning' } })
 })
 
 const LINE_MODE = { options: { band: 'line' }, timeoutMs: 5000 }
@@ -379,7 +385,7 @@ test('during a turn the band adds mod notes, never errors, the tool, the subagen
   expect(await ui.find({ type: 'Text', text: 'Explore' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /turn / })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: '1 error' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'loop-breaker: repeated error' })).toMatchObject({ props: { color: 'warning' } })
+  expect(await segment(ui, 'loop-breaker: repeated error')).toMatchObject({ props: { color: 'warning' } })
   await ui.unmount()
   await clock.advance(20_000)
   await running
@@ -426,9 +432,11 @@ test('/hud opens the pane with every section, and r refreshes it', async ($, on)
   expect(answer).toEqual({})
   expect(opened).toEqual(['hud'])
   const ui = await $.ui.mount(PANE)
-  for (const label of ['SESSION   ', 'LIMITS    ', 'MEMORY    ', 'NOW       ', 'TODAY     ', 'RATINGS   ']) {
-    expect(await ui.find({ type: 'Text', text: label })).toMatchObject({ props: { dimColor: true } })
+  // Each label sits in a box of LABEL_WIDTH columns, so a wrapped row keeps its indent.
+  for (const label of ['SESSION', 'LIMITS', 'MEMORY', 'NOW', 'TODAY', 'RATINGS']) {
+    expect(await segment(ui, label)).toMatchObject({ props: { dimColor: true } })
   }
+  expect(await ui.findAll({ type: 'Box', text: 'SESSION' })).toContainEqual(expect.objectContaining({ props: expect.objectContaining({ width: 10, flexShrink: 0 }) }))
   expect(await ui.find({ type: 'Text', text: '1 skill' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '4/5' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'idle' })).toBeDefined()

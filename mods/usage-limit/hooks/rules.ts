@@ -215,16 +215,18 @@ export function statusText(zone: Zone, o: Options): string | undefined {
 // What the mod is holding for the resume, as /limit reports it.
 export type Pending = { isResumeScheduled: boolean; held: number }
 
-// The /limit reply: plain lines, so it reads the same in Remote Control.
+// The /limit reply: plain lines, so it reads the same in Remote Control. Claude Code already puts
+// `usage-limit:` in front of a command's text, so the reply starts with the state itself.
 export function limitReport(windows: readonly Window[], zone: Zone, o: Options, pending: Pending): string {
-  if (windows.length === 0) return 'Usage limit: no reading yet. It arrives with the first model response.'
+  if (windows.length === 0) return 'No reading yet. It arrives with the first model response.'
   const lines = windows.map((w) => {
     const back = w.resetsAt === undefined ? '' : `, resets ${formatTime(w.resetsAt, o.timeZone)}`
     return `${windowName(w.kind)}: ${w.percentUsed}%${back}`
   })
   if (pending.isResumeScheduled) lines.push('Resume scheduled for the window reset.')
   if (pending.held > 0) lines.push(`${plural(pending.held, 'message')} held for the resume.`)
-  return [`Usage limit: ${stateText(zone, o)}`, ...lines].join('\n')
+  const state = stateText(zone, o)
+  return [state.charAt(0).toUpperCase() + state.slice(1), ...lines].join('\n')
 }
 
 // What arrives without anyone typing: routine, task notification, another session, MCP channel,

@@ -86,6 +86,9 @@ let session = ''
 let cwd = ''
 // False for a test session (see isTemporary): nothing is written to the dataset and no band shows.
 let recording = true
+
+// What /rate answers in a session the mod does not record (`skipTemporary`).
+const TEMPORARY_TEXT = '/rate: this session runs in a temporary folder, so the rating mod records nothing here. Turn off skipTemporary in /config to record it.'
 let configVersion: string | null = null
 let pending: { text: string; origin: string } | null = null
 let live: Live | null = null
@@ -107,7 +110,7 @@ async function append($: Api, file: string, line: string) {
 }
 
 async function write($: Api, kind: Kind, at: string, record: TurnRecord | RatingRecord | SignalRecord) {
-  if (dir === '') return
+  if (dir === '' || !recording) return
   await append($, `${dir}/${kind}/${day(at)}.jsonl`, JSON.stringify(record))
 }
 
@@ -207,10 +210,11 @@ export function register(on: On, values: PluginOptions) {
     session = await $.session.id()
     const home = await $.env.get('HOME')
     recording = !(o.skipTemporary && isTemporary(cwd, await $.env.get('CLAUDE_CONFIG_DIR'), await $.env.get('TMPDIR')))
-    const root = recording ? expandHome(o.datasetDir, home) : null
+    // `/ratings` reads the dataset from any session; only a recording session writes to it.
+    const root = expandHome(o.datasetDir, home)
     if (root !== null) {
       dir = root
-      await $.process.run(['mkdir', '-p', ...KINDS.map((k) => `${dir}/${k}`)])
+      if (recording) await $.process.run(['mkdir', '-p', ...KINDS.map((k) => `${dir}/${k}`)])
     }
     if (home !== undefined) {
       const state = `${home}/.local/state/mods/rating`
@@ -338,6 +342,7 @@ export function register(on: On, values: PluginOptions) {
   on('command.run', { command: 'rate' }, async ($, e) => {
     const req = parseRate(e.args)
     if (req.kind === 'invalid') return { text: RATE_USAGE }
+    if (!recording) return { text: TEMPORARY_TEXT }
     if (last === null) return { text: `/rate: no finished turn in this session yet.\n${RATE_USAGE}` }
     if (req.kind === 'show') return { text: showText(last.id, last.prompt, userScores.get(last.id) ?? null, last.implicit) }
     await rate($, last, req.score, req.tags, req.comment)

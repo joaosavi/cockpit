@@ -120,18 +120,18 @@ test('/limit shows the windows and the state', SAO_PAULO, async ($, on) => {
   await $.session.start(start)
   const r = await $.command.run({ command: 'limit', args: '' })
   expect(r.text).toBe(
-    'Usage limit: throttled at 91%, one subagent at a time from 90%\n5-hour window: 91%, resets Oct 6, 19:30\n7-day window: 40%, resets Oct 11, 13:00',
+    'Throttled at 91%, one subagent at a time from 90%\n5-hour window: 91%, resets Oct 6, 19:30\n7-day window: 40%, resets Oct 11, 13:00',
   )
 })
 
 test('/limit reads in plain words in every state', () => {
   const none = { isResumeScheduled: false, held: 0 }
-  expect(limitReport([], { kind: 'free' }, O, none)).toBe('Usage limit: no reading yet. It arrives with the first model response.')
-  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Usage limit: normal, one subagent at a time from 90%, pause at 98%')
+  expect(limitReport([], { kind: 'free' }, O, none)).toBe('No reading yet. It arrives with the first model response.')
+  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Normal, one subagent at a time from 90%, pause at 98%')
   const paused = { kind: 'paused', window: windows(98)[0] ?? { kind: 'five_hour', percentUsed: 98 } } as const
   expect(limitReport(windows(98), paused, O, { isResumeScheduled: true, held: 2 })).toBe(
     [
-      'Usage limit: paused at 98% (2% reserve), resumes Oct 6, 19:30',
+      'Paused at 98% (2% reserve), resumes Oct 6, 19:30',
       '5-hour window: 98%, resets Oct 6, 19:30',
       '7-day window: 40%, resets Oct 11, 13:00',
       'Resume scheduled for the window reset.',

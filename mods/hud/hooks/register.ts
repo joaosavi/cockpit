@@ -398,12 +398,13 @@ async function refreshPane($: Api) {
 // Drawing
 // ---------------------------------------------------------------------------------------------
 
-function rowElement(ui: Ui, row: Row): RenderElement {
-  return ui.Box({
-    flexDirection: 'row',
+// One row as a single line of text, its segments styled inline. The row is cut or wrapped as a whole:
+// cut per segment, each one shrinks on its own and a narrow pane shows only the ends of words.
+function rowElement(ui: Ui, row: Row, wrap: 'truncate' | 'wrap' = 'truncate'): RenderElement {
+  return ui.Text({
+    wrap,
     children: row.map((s) =>
       ui.Text({
-        wrap: 'truncate',
         ...(s.tone === undefined ? {} : { color: o.colors === '' ? s.tone : style.colors[s.tone] }),
         ...(s.dim === true ? { dimColor: true } : {}),
         ...(s.bold === true ? { bold: true } : {}),
@@ -424,7 +425,7 @@ function bandRows(columns: number, isWorking: boolean): Row[] {
 function sectionElement(ui: Ui, x: Section): RenderElement {
   return ui.Box({
     flexDirection: 'row',
-    children: [ui.Text({ dimColor: true, children: [x.label.padEnd(LABEL_WIDTH)] }), rowElement(ui, x.segs)],
+    children: [ui.Box({ width: LABEL_WIDTH, flexShrink: 0, children: [ui.Text({ dimColor: true, children: [x.label] })] }), rowElement(ui, x.segs, 'wrap')],
   })
 }
 

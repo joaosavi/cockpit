@@ -432,3 +432,15 @@ test('a session opened in /tmp writes nothing to the dataset and shows no band',
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ key: 'rate-1' })).toBeUndefined()
 })
+
+test('in a temporary session, /rate says why nothing is recorded and /ratings still reads the dataset', async ($, on) => {
+  const s: Scene = { appends: [], surfaces: ['terminal'] }
+  prepare(on, s)
+  await $.session.start({ ...start, cwd: '/tmp/claude-1000/scratch' })
+  await turn($, 't1', 'responda só ok', 'ok')
+  const rated = await $.command.run({ command: 'rate', args: '4' })
+  expect(rated.text).toContain('temporary folder')
+  expect(lines(s, 'ratings')).toEqual([])
+  const report = await $.command.run({ command: 'ratings', args: '' })
+  expect(report.text).not.toContain('HOME is not set')
+})
