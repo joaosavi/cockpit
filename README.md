@@ -83,7 +83,7 @@ Os mods estão em inglês e com padrões genéricos, prontos para outro usuário
 
 Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`, com uma linha de resumo no fim da sessão (chamadas vistas, ações, tempo gasto nos hooks). Os comandos são `/limit`, `/ram`, `/audit [quantidade] [filtro]`, `/mods`, `/rate`, `/ratings`, `/wtf [pergunta]` e `/hud`, e respondem em texto em qualquer lugar, Remote Control inclusive. No terminal e no app Desktop há também a parte visual: o `usage-limit` desenha uma faixa acima do prompt com as barras de 5 h e de 7 dias a partir de 75% (opção `bandFrom`), o `/ram` abre um painel com a barra de cada grupo que se atualiza a cada 2 s, e o `/audit` abre um painel com as últimas chamadas e os botões `m` (mais) e `r` (atualizar).
 
-O `retomar-limite.timer` foi desligado em 07/10/2026. A sessão que ainda bater 100% é retomada pelo próprio `usage-limit`, pela opção `resumeOnError`, ligada por padrão.
+O `retomar-limite.timer` foi desligado em 07/10/2026. A sessão que ainda bater 100% é retomada pelo próprio `usage-limit`, pela opção `resume`, ligada por padrão.
 
 Para mudar um mod:
 

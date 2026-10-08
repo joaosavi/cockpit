@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { bandRows, DEFAULTS, formatTime, limitReport, options, statusText, windowName } from '../hooks/rules.ts'
+import { bandRows, DEFAULTS, formatTime, isCommitCommand, limitReport, options, statusText, windowName } from '../hooks/rules.ts'
 
 const NOW = Date.parse('2026-10-06T20:00:00Z')
 const RESET = '2026-10-06T22:30:00.000Z'
@@ -8,7 +8,7 @@ const RESET = '2026-10-06T22:30:00.000Z'
 const SAO_PAULO = { options: { timeZone: 'America/Sao_Paulo' } }
 const O = { ...DEFAULTS, timeZone: 'America/Sao_Paulo' }
 
-type Stubs = { submitted: string[]; running: number; initialUsage: number | null; stored?: Record<string, unknown>; written?: string[] }
+type Stubs = { submitted: string[]; running: number; initialUsage: number | null; stored?: Record<string, unknown>; written?: string[]; contexts?: string[] }
 
 function windows(fiveHour: number) {
   return [
@@ -42,6 +42,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], s: Stubs) {
   on('session.end', () => ({ sessionId: 's1' }))
   on('prompt.submit', ($, e) => {
     s.submitted.push(e.text)
+    s.contexts?.push(...(e.context ?? []))
     return { text: e.text }
   })
   return clock
@@ -292,7 +293,7 @@ test('narrow or wide, both bars get the same width, so marks, percents and reset
 
 test('the session ends with one summary line: tool calls, what the mod held back, and its own time', async ($, on) => {
   const written: string[] = []
-  const s = { submitted: [], running: 0, initialUsage: 97, written }
+  const s = { submitted: [], running: 0, initialUsage: 96, written }
   setup(on, s)
   await $.session.start(start)
   await $.tool.call({ tool: 'Bash', command: 'ls' })
@@ -323,4 +324,77 @@ test('an empty or unknown time zone falls back to the system time zone', () => {
   const local = new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
   expect(formatTime(iso, '')).toBe(local)
   expect(formatTime(iso, 'America/New_York')).toBe('Oct 6, 18:30')
+})
+
+test('from 97%, the main conversation is asked once per window to commit without pushing', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 96 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toEqual({ result: 'ran' })
+  await $.session.measure({ rateLimits: windows(97), context: { tokens: 0, window: 200000, percent: 0 }, changed: ['rateLimits'] })
+  // A subagent's call does not get the request.
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'sub1' })).toEqual({ result: 'ran' })
+  const asked = await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(asked).toMatchObject({ result: 'ran', context: [expect.stringContaining('commit the work in progress')] })
+  expect(asked).toMatchObject({ context: [expect.stringContaining('Do not push')] })
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toEqual({ result: 'ran' })
+})
+
+test('a prompt at 97% carries the request to commit, and commitAt 0 turns it off', async ($, on) => {
+  const s = { submitted: [] as string[], running: 0, initialUsage: 97, contexts: [] as string[] }
+  setup(on, s)
+  await $.session.start(start)
+  const r = await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'bridge' } })
+  expect(r).toMatchObject({ text: 'go on' })
+  expect(s.contexts).toEqual([expect.stringContaining('commit the work in progress')])
+  expect(options({ commitAt: 0 }).commitAt).toBe(0)
+  expect(options({}).commitAt).toBe(97)
+})
+
+test('commitAt 0 never asks to commit', { options: { commitAt: 0 } }, async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 97 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toEqual({ result: 'ran' })
+})
+
+test('in the pause, a commit-only command passes and schedules the resume; a push does not', async ($, on) => {
+  const s = { submitted: [] as string[], running: 0, initialUsage: 98 }
+  const clock = setup(on, s)
+  await $.session.start(start)
+  const commit = 'cd /work/repo && git add -A && git commit --no-verify -m "wip: pause at 98% (usage)"'
+  expect(await $.tool.call({ tool: 'Bash', command: commit })).toMatchObject({ result: 'ran' })
+  expect(await $.tool.call({ tool: 'Bash', command: 'git push' })).toMatchObject({ deny: expect.stringContaining('paused at') })
+  await clock.set(Date.parse(RESET) + 2 * 60_000)
+  expect(s.submitted.length).toBe(1)
+})
+
+test('only staging and committing count as a commit command', () => {
+  expect(isCommitCommand('git add -A && git commit -m "wip: x"')).toBe(true)
+  expect(isCommitCommand('git -C /work/repo commit -am "wip: (half) done"')).toBe(true)
+  expect(isCommitCommand('git add -A')).toBe(false)
+  expect(isCommitCommand('git commit -m x && git push')).toBe(false)
+  expect(isCommitCommand('git commit -m "$(rm -rf /)"')).toBe(false)
+  expect(isCommitCommand('git commit -m x; rm -rf /')).toBe(false)
+  expect(isCommitCommand('git commit -m x | tee log')).toBe(false)
+  expect(isCommitCommand('npm test && git commit -m x')).toBe(false)
+})
+
+test('resume off: no resume after the pause, and an automatic prompt is dropped', { options: { resume: false } }, async ($, on) => {
+  const s = { submitted: [] as string[], running: 0, initialUsage: 98 }
+  const clock = setup(on, s)
+  await $.session.start(start)
+  const refusal = await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(refusal).toMatchObject({ deny: expect.stringContaining('the user resumes it') })
+  expect(await $.prompt.submit({ text: 'routine', wait: false, origin: { kind: 'scheduled-trigger' } })).toMatchObject({
+    drop: 'usage-limit: paused, and resume is off, so this message was not delivered.',
+  })
+  await clock.set(Date.parse(RESET) + 5 * 60_000)
+  expect(s.submitted.length).toBe(0)
+})
+
+test('the old resumeOnError setting still turns the resume off', () => {
+  expect(options({ resumeOnError: false }).resume).toBe(false)
+  expect(options({ resume: true, resumeOnError: false }).resume).toBe(true)
+  expect(options({}).resume).toBe(true)
 })

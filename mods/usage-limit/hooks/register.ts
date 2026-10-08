@@ -1,8 +1,9 @@
 // Guards the account usage limit before it runs out.
 //
-// Above the alert (90%), only one subagent runs at a time. At the reserve (98%), the session stops
-// calling tools, the agent writes where it stopped, and the mod schedules the resume for the time the
-// window resets. A prompt the user types during the pause gets one turn without subagents, spent from
+// Above the alert (90%), only one subagent runs at a time. From `commitAt` (97%), the agent is asked once
+// per window to commit its work in progress, without pushing. At the reserve (98%), the session stops
+// calling tools except a commit, the agent writes where it stopped, and the mod schedules the resume for
+// the time the window resets, unless `resume` is off. A prompt the user types during the pause gets one turn without subagents, spent from
 // the reserve. An automatic prompt (routine, another session, task notification) is held and goes into
 // the resume.
 //
@@ -14,10 +15,15 @@ import {
   type BandRow,
   bandRows,
   classify,
+  commitDue,
+  commitKey,
+  commitText,
   DEFAULTS,
+  droppedText,
   fullest,
   heldText,
   isAutomatic,
+  isCommitCommand,
   limitReport,
   msUntilReset,
   type Options,
@@ -45,6 +51,8 @@ let reserveTurn = false
 // Automatic prompts that arrived during the pause.
 const queue: string[] = []
 let resume: { cancel(): void } | null = null
+// The windows, by `commitKey`, for which this conversation was already asked to commit.
+const commitAsked = new Set<string>()
 let diary = ''
 // The subagents this mod let start that have not finished yet. Claude Code's list takes a while to
 // show a subagent that was just requested.
@@ -119,6 +127,10 @@ async function expire($: Api) {
 // Schedules a single resume, for the time the full window resets.
 async function scheduleResume($: Api, window: Window, reason: string) {
   if (resume !== null) return
+  if (!o.resume) {
+    await log($, { event: 'resume-off', reason, window })
+    return
+  }
   const wait = msUntilReset(window, await $.clock.now())
   if (wait === null) {
     await log($, { event: 'no-reset-time', reason, window })
@@ -137,6 +149,16 @@ async function scheduleResume($: Api, window: Window, reason: string) {
     await log($, { event: 'resuming' })
     await $.prompt.submit({ text })
   })
+}
+
+// The request to commit, once per window, or null when it is not due or was already made.
+async function commitRequest($: Api, where: string): Promise<string | null> {
+  const due = commitDue(windows, o)
+  if (due === null || commitAsked.has(commitKey(due))) return null
+  commitAsked.add(commitKey(due))
+  countAction(tally, 'commit-asked')
+  await log($, { event: 'commit-asked', where, window: due })
+  return commitText(due, o)
 }
 
 // Runs the tool.call hook's body and adds its own wall time, outside `next`, to the session tally.
@@ -216,12 +238,20 @@ export function register(on: On, values: PluginOptions) {
     await expire($)
     // Logs the origin of each prompt, to confirm in real sessions that the user arrives as `bridge`.
     await log($, { event: 'prompt', origin: e.origin.kind, zone: zone.kind })
-    if (zone.kind !== 'paused') return next(e)
+    if (zone.kind !== 'paused') {
+      const ask = await commitRequest($, 'prompt')
+      return next(ask === null ? e : { ...e, context: [...(e.context ?? []), ask] })
+    }
     if (!isAutomatic(e.origin)) {
       reserveTurn = true
       countAction(tally, 'reserve-turn')
       await log($, { event: 'reserve-turn', origin: e.origin.kind })
       return next({ ...e, context: [...(e.context ?? []), reserveTurnText(zone.window)] })
+    }
+    if (!o.resume) {
+      countAction(tally, 'prompt-dropped')
+      await log($, { event: 'prompt-dropped', origin: e.origin.kind })
+      return { drop: droppedText() }
     }
     queue.push(e.text)
     countAction(tally, 'prompt-held')
@@ -239,7 +269,28 @@ export function register(on: On, values: PluginOptions) {
   on('tool.call', async ($, e, next) =>
     timed($, next, async (pass) => {
       await expire($)
-      if (zone.kind !== 'paused' || reserveTurn) return pass(e)
+      if (zone.kind !== 'paused') {
+        // Only the main conversation commits: a subagent would commit half of someone else's work.
+        const ask = e.agentId === undefined ? await commitRequest($, 'tool') : null
+        if (ask === null) return pass(e)
+        const r = await pass(e)
+        // A call another mod refused carries no context, so the request waits for the next call.
+        if ('deny' in r && r.deny !== undefined) {
+          const due = commitDue(windows, o)
+          if (due !== null) commitAsked.delete(commitKey(due))
+          return r
+        }
+        return { ...r, context: [...(r.context ?? []), ask] }
+      }
+      if (reserveTurn) return pass(e)
+      const command: unknown = Reflect.get(e, 'command')
+      if (e.tool === 'Bash' && typeof command === 'string' && isCommitCommand(command)) {
+        countAction(tally, 'commit-passed')
+        await log($, { event: 'commit-passed', agentId: e.agentId })
+        // The turn may end after the commit without any refused call, so the resume is scheduled here too.
+        await scheduleResume($, zone.window, 'commit during the pause')
+        return pass(e)
+      }
       countAction(tally, 'tool-refused')
       await log($, { event: 'tool-refused', tool: e.tool, agentId: e.agentId })
       await scheduleResume($, zone.window, 'work interrupted by the pause')
@@ -281,6 +332,7 @@ export function register(on: On, values: PluginOptions) {
     resume = null
     reserveTurn = false
     alive.clear()
+    commitAsked.clear()
     const lost = queue.splice(0)
     const t = tally
     tally = newTally()
@@ -296,8 +348,8 @@ export function register(on: On, values: PluginOptions) {
   on('classic.StopFailure', async ($, e, next) => {
     if (Reflect.get(e, 'error') === 'rate_limit') {
       countAction(tally, 'hit-100')
-      await log($, { event: 'hit-100', resumeOnError: o.resumeOnError })
-      if (o.resumeOnError) {
+      await log($, { event: 'hit-100', resume: o.resume })
+      if (o.resume) {
         const full = fullest((await $.session.usage()).rateLimits)
         if (full !== null) await scheduleResume($, full, 'limit error')
       }

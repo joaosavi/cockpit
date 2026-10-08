@@ -1,7 +1,7 @@
 {
   "name": "usage-limit",
-  "version": "1.4.1",
-  "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a pause that keeps the last 2% for you, and an automatic resume when the window resets.",
+  "version": "1.5.0",
+  "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a commit of the work in progress at 97%, a pause that keeps the last 2% for you, and an automatic resume when the window resets.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
@@ -40,10 +40,18 @@
       "description": "IANA time zone for the times shown, such as America/New_York. Empty uses the system time zone.",
       "default": ""
     },
-    "resumeOnError": {
+    "commitAt": {
+      "type": "number",
+      "title": "Commit from (%)",
+      "description": "From this share of the usage limit, the agent is asked once per window to commit its work in progress, without pushing. 0 turns it off.",
+      "default": 97,
+      "min": 0,
+      "max": 99
+    },
+    "resume": {
       "type": "boolean",
-      "title": "Resume after a limit error",
-      "description": "Also resume a session that hit 100% with the limit error, at the time the window resets.",
+      "title": "Resume when the window resets",
+      "description": "Resume the session on its own when the window resets, after the pause or after the limit error. Off, you resume it.",
       "default": true
     },
     "bandFrom": {

@@ -18,14 +18,17 @@ export type Options = {
   alert: number
   // Time zone of the times the agent and the user read.
   timeZone: string
-  // Also resumes a session that hit 100% with the limit error, when the pause at the reserve came
-  // too late (a burst of parallel requests can jump past it).
-  resumeOnError: boolean
+  // From this percentage, the agent is asked once per window to commit its work in progress, without
+  // pushing, before the pause. 0 turns it off.
+  commitAt: number
+  // Resumes the session when the window resets, after the pause or after the limit error (a burst of
+  // parallel requests can jump past the pause). Off, the user resumes it.
+  resume: boolean
   // From this percentage of the fullest window, the band above the prompt shows the windows.
   bandFrom: number
 }
 
-export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: '', resumeOnError: true, bandFrom: 75 }
+export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: '', commitAt: 97, resume: true, bandFrom: 75 }
 
 // Margin after the reset time, because the server can release the limit a few seconds late.
 export const MARGIN_MS = 2 * 60_000
@@ -37,12 +40,14 @@ export function options(values: unknown): Options {
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback
   }
   const timeZone: unknown = Reflect.get(values, 'timeZone')
-  const resume: unknown = Reflect.get(values, 'resumeOnError')
+  // `resumeOnError` is the option's name before 1.5, kept so older settings still apply.
+  const resume: unknown = Reflect.get(values, 'resume') ?? Reflect.get(values, 'resumeOnError')
   return {
     reserve: number('reserve', DEFAULTS.reserve),
     alert: number('alert', DEFAULTS.alert),
     timeZone: typeof timeZone === 'string' ? validTimeZone(timeZone.trim()) : DEFAULTS.timeZone,
-    resumeOnError: typeof resume === 'boolean' ? resume : DEFAULTS.resumeOnError,
+    commitAt: number('commitAt', DEFAULTS.commitAt),
+    resume: typeof resume === 'boolean' ? resume : DEFAULTS.resume,
     bandFrom: number('bandFrom', DEFAULTS.bandFrom),
   }
 }
@@ -58,6 +63,18 @@ export function classify(windows: readonly Window[], o: Pick<Options, 'reserve' 
   if (full.percentUsed >= 100 - o.reserve) return { kind: 'paused', window: full }
   if (full.percentUsed >= o.alert) return { kind: 'throttled', window: full }
   return { kind: 'free' }
+}
+
+// The window to commit before, when the fullest one is past `commitAt` and short of the pause.
+export function commitDue(windows: readonly Window[], o: Pick<Options, 'commitAt' | 'reserve'>): Window | null {
+  const full = fullest(windows)
+  if (full === null || o.commitAt <= 0) return null
+  return full.percentUsed >= o.commitAt && full.percentUsed < 100 - o.reserve ? full : null
+}
+
+// One request to commit per window and reset time: the next cycle of the same window asks again.
+export function commitKey(window: Window): string {
+  return `${window.kind}@${window.resetsAt ?? ''}`
 }
 
 const NAMES: Record<string, string> = { five_hour: '5-hour window', seven_day: '7-day window' }
@@ -93,11 +110,40 @@ export function msUntilReset(window: Window, now: number): number | null {
   return Math.max(0, Date.parse(window.resetsAt) - now) + MARGIN_MS
 }
 
-export function pauseText(window: Window, o: Options): string {
+export function commitText(window: Window, o: Pick<Options, 'reserve'>): string {
+  return (
+    `usage-limit: the ${windowName(window.kind)} is at ${window.percentUsed}%, and the session pauses at ${100 - o.reserve}%. ` +
+    'At the next safe point, commit the work in progress in each git repository you changed in this session, ' +
+    'with a message that starts with `wip:`. Stage only the files you changed, by name, not `git add -A`: another ' +
+    'session may be editing the same repository. Do not push. If a pre-commit hook fails on the unfinished work, ' +
+    'commit with `--no-verify`. If you changed nothing, skip it. Then carry on.'
+  )
+}
+
+// A command that only stages and commits, chained with `&&`: the one Bash call the pause lets through, so
+// the work gets committed even when a burst of requests jumps from below `commitAt` straight to the pause.
+// Anything that pushes, pipes, substitutes or runs another program is refused like any other tool.
+const COMMIT_STEP = /^(cd [^\s;&|`$()<>]+|git( -C [^\s;&|`$()<>]+)? (add|commit|status)( [^;&|`$<>]*)?)$/
+
+export function isCommitCommand(command: string): boolean {
+  if (/\bpush\b/.test(command) || command.includes('\n')) return false
+  const steps = command.split('&&').map((p) => p.trim())
+  return steps.some((p) => /^git\b/.test(p) && / commit\b/.test(p)) && steps.every((p) => COMMIT_STEP.test(p))
+}
+
+// When the session comes back, in the agent's words.
+function backText(window: Window, o: Pick<Options, 'timeZone' | 'resume'>): string {
+  if (!o.resume) return 'The session does not resume on its own: the user resumes it.'
   const back = window.resetsAt === undefined ? 'when the limit resets' : `at ${formatTime(window.resetsAt, o.timeZone)}`
+  return `The session resumes ${back}.`
+}
+
+export function pauseText(window: Window, o: Options): string {
   return (
     `usage-limit: paused at ${window.percentUsed}% of the ${windowName(window.kind)}, to keep the user's ${o.reserve}% reserve. ` +
-    `Stop calling tools and write in up to 3 lines where you stopped and what is left. The session resumes ${back}.`
+    'Stop calling tools. If the work in progress is not committed yet, commit it first in each git repository you ' +
+    'changed (`git add` of the files you changed and `git commit` only, message starting with `wip:`, `--no-verify` if a hook fails; do not push). ' +
+    `Then write in up to 3 lines where you stopped and what is left. ${backText(window, o)}`
   )
 }
 
@@ -124,6 +170,11 @@ export function heldText(window: Window, o: Pick<Options, 'timeZone'>): string {
   return `usage-limit: held during the reserve, delivered when the session resumes ${back}.`
 }
 
+// An automatic prompt during the pause when resume is off: nothing would ever deliver it.
+export function droppedText(): string {
+  return 'usage-limit: paused, and resume is off, so this message was not delivered.'
+}
+
 export function resumeText(window: Window, queue: readonly string[]): string {
   const base =
     `usage-limit: the limit reset. This session paused at ${window.percentUsed}% of the ${windowName(window.kind)}. ` +
@@ -142,7 +193,7 @@ export function stateText(zone: Zone, o: Options): string {
   switch (zone.kind) {
     case 'paused': {
       const at = zone.window.resetsAt
-      const back = at === undefined ? 'no reset time' : `resumes ${formatTime(at, o.timeZone)}`
+      const back = !o.resume ? 'resume off' : at === undefined ? 'no reset time' : `resumes ${formatTime(at, o.timeZone)}`
       return `paused at ${zone.window.percentUsed}% (${o.reserve}% reserve), ${back}`
     }
     case 'throttled':
@@ -292,8 +343,9 @@ export function bandRows(windows: readonly Window[], columns: number, o: Options
 }
 
 // The band's last row while paused.
-export function pausedText(zone: Zone, o: Pick<Options, 'timeZone'>): string | null {
+export function pausedText(zone: Zone, o: Pick<Options, 'timeZone' | 'resume'>): string | null {
   if (zone.kind !== 'paused') return null
+  if (!o.resume) return 'Paused: resume off'
   const at = zone.window.resetsAt
   return at === undefined ? 'Paused: no reset time' : `Paused: resumes ${formatTime(at, o.timeZone)}`
 }
