@@ -23,7 +23,7 @@ On a Team or Enterprise plan, the built-in guard `sec-default@builtin` skips mod
 }
 ```
 
-For the same reason, the `cockpit` bundle does not list it as a dependency. On a personal plan, `claude plugin install global-memory@cockpit` is enough.
+The `cockpit` bundle installs it on every plan. On a personal plan it works as installed; on a Team or Enterprise plan it does nothing until these settings are in place.
 
 ## Commands
 

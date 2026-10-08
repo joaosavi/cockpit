@@ -42,7 +42,7 @@ Ask the questions in one AskUserQuestion call, each with a recommended first opt
 2. **Icons.** You cannot write Nerd Font glyphs yourself: they come out blank. Before the questions, print them with Bash, `printf '\uf418 branch   \uf407 pull request   \U000f06a9 robot\n'`, so the person sees them in the tool output, and ask whether the three symbols in that output show as small icons. Options: "I see three icons" (Nerd Font glyphs) and "I see boxes, question marks or blanks" (plain arrows and marks, which work in every terminal). Recommend the second when unsure.
 3. **Time zone**, for the clock times the mods show and for what counts as today. Ask only when the system time zone is `UTC`, `Etc/UTC` or empty; otherwise use the system's and write nothing. Recommend the zone the conversation points to, if any, and let the person type another IANA name as their own answer.
 4. **When to compact.** Claude Code summarizes the conversation when it gets close to full, to free room. Options: "Earlier, at about 70% of a 1M model" (recommended, `733000`: long sessions stay sharper, at the cost of more summaries), "Claude Code's default, near the end" (writes nothing; about 967K on a 1M model), "Even earlier, at about half" (`500000`). Skip it when the model's window is under 200K.
-5. **Where to keep the ratings.** The rating mod saves each answer, its score and its signals to a folder, for reviewing with `/ratings` later. Options: "In `~/datasets/agent-ratings`" (recommended, the default, writes nothing), "In a folder I choose" (the person types the path as their own answer; suggest a git repo they back up, since the files hold prompts and answers in plain text), "Don't keep ratings" (turns the rating mod off). Make sure the chosen folder exists with `mkdir -p`, and say you created it only when it was not there before.
+5. **Where to keep the ratings.** The rating mod saves each answer, its score and its signals to a folder, for reviewing with `/ratings` later. Options: "In `~/datasets/agent-ratings`" (recommended, the default, writes nothing), "In a folder I choose" (the person types the path as their own answer; suggest a git repo they back up, since the files hold prompts and answers in plain text), "Don't keep ratings" (turns the rating mod off with its Enabled option; disabling the plugin would break the bundle). Make sure the chosen folder exists with `mkdir -p`, and say you created it only when it was not there before.
 
 Ask about these only when the user asked, or the setup calls for them:
 
@@ -64,7 +64,7 @@ Merge exactly what the user chose:
 | Time zone | `timeZone` under the `hud@cockpit`, `audit@cockpit` and `usage-limit@cockpit` options |
 | Spinner tip | `spinnerTipsEnabled: false` whenever `spinner-status@cockpit` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | When to compact | top-level `autoCompactWindow: <tokens>` |
-| Ratings folder | `datasetDir` under `pluginConfigs["rating@cockpit"].options` for a folder they chose; `enabledPlugins["rating@cockpit"]: false` for no ratings |
+| Ratings folder | `datasetDir` under `pluginConfigs["rating@cockpit"].options` for a folder they chose; `enabled: false` under `pluginConfigs["rating@cockpit"].options` for no ratings |
 
 Keep every other key and every other plugin's options as they were.
 

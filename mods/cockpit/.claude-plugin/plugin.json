@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, audit, loop, secret, collision and pipefail guards, the mod report, turn ratings, /wtf, the HUD and the spinner status line.",
   "author": {
     "name": "João Savi",
@@ -29,6 +29,7 @@
     "wtf",
     "hud",
     "spinner-status",
-    "collision-guard"
+    "collision-guard",
+    "global-memory"
   ]
 }

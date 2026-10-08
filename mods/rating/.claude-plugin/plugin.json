@@ -1,6 +1,6 @@
 {
   "name": "rating",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Records every agent turn as a dataset with your 1-5 ratings and automatic weak labels, for analysis and fine-tuning: rate with /rate or the band above the prompt, review with /ratings.",
   "author": {
     "name": "João Savi",
@@ -23,6 +23,12 @@
     "skill-loader"
   ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Record turns and ratings, and show the rating band. Off, the mod records nothing; /ratings still reads the dataset.",
+      "default": true
+    },
     "datasetDir": {
       "type": "string",
       "title": "Dataset folder",

@@ -2,7 +2,7 @@
 
 Mods for Claude Code. The guards keep the agent out of trouble: secrets in tool output, a pipe that hides a failed test, a memory limit that kills the build, a second session's edits swept into your commit. The instruments show where the session stands: a status line under the prompt, a one-line summary under the spinner, and `/wtf` when you come back to a session you forgot.
 
-Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The `cockpit` plugin installs all of them at once.
+Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The `cockpit` plugin installs all fourteen at once.
 
 ## Requirements
 
@@ -55,8 +55,11 @@ To turn on updates, open `/plugin`, go to **Marketplaces**, and turn on auto-upd
 | `rating` | Records every turn with your 1 to 5 rating and automatic signals, as a dataset you can review. |
 | `audit` | Records every MCP call that writes on your behalf, one file per day. |
 | `mod-report` | Shows what each mod did and what it cost per tool call. |
+| `global-memory` | Adds a machine-wide memory folder beside the per-project memory, so facts about the machine reach every session. It starts once you create `~/.claude/global-memory/MEMORY.md`. |
 
-`global-memory` is in the marketplace but not in the bundle. It adds a machine-wide memory folder beside the per-project memory. On a Team or Enterprise plan it must run as an organization plugin, so read its README before you install it.
+On a Team or Enterprise plan, `global-memory` installs but does nothing until your organization lists it in managed settings: the plan's built-in guard skips plugins you install yourself on the hooks it needs. Its README shows the two settings to add.
+
+To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `rating` and `spinner-status` also have an **Enabled** option in `/config`.
 
 ## Commands
 

@@ -444,3 +444,15 @@ test('in a temporary session, /rate says why nothing is recorded and /ratings st
   const report = await $.command.run({ command: 'ratings', args: '' })
   expect(report.text).not.toContain('HOME is not set')
 })
+
+test('turned off, the mod records nothing, shows no band, and /rate says how to turn it on', { options: { enabled: false } }, async ($, on) => {
+  const s: Scene = { appends: [], surfaces: ['terminal'] }
+  prepare(on, s)
+  on('ui.render', () => OTHER_MODS)
+  await $.session.start(start)
+  await turn($, 't1', 'responda só ok', 'ok')
+  expect(lines(s, 'turns')).toEqual([])
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'rate-1' })).toBeUndefined()
+  expect((await $.command.run({ command: 'rate', args: '4' })).text).toContain('turned off')
+})

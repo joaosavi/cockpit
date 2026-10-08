@@ -26,6 +26,7 @@ The mod lists secret-guard, loop-breaker and skill-loader as dependencies, so it
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod records nothing and shows no band. `/ratings` still reads the dataset. Use this instead of disabling the plugin, which the `cockpit` bundle requires. |
 | `datasetDir` | `~/datasets/agent-ratings` | Folder of the turns, ratings and signals files. |
 | `skipTemporary` | `true` | Sessions opened in a temporary folder (`/tmp`, `TMPDIR`) or run with a temporary `CLAUDE_CONFIG_DIR` are tests: they write nothing to the dataset and show no band. |
 | `band` | `true` | Show the rating row above the prompt after each answer. |

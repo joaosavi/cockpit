@@ -88,8 +88,7 @@ def meta(name):
 GROUPS = [
     ('Guards', 'Stop a mistake before it lands.', ['secret-guard', 'collision-guard', 'pipefail', 'memory-guard', 'loop-breaker', 'usage-limit']),
     ('Instruments', 'Show where the session stands.', ['hud', 'spinner-status', 'wtf', 'skill-loader']),
-    ('Records', 'Keep what happened, for later.', ['rating', 'audit', 'mod-report']),
-    ('Outside the bundle', 'Install on its own.', ['global-memory']),
+    ('Records', 'Keep what happened, for later.', ['rating', 'audit', 'mod-report', 'global-memory']),
 ]
 COMMANDS = {'hud': ['/hud'], 'wtf': ['/wtf'], 'usage-limit': ['/limit'], 'memory-guard': ['/ram'], 'rating': ['/rate', '/ratings'],
             'audit': ['/audit'], 'mod-report': ['/mods']}
@@ -123,14 +122,14 @@ def intro():
     cards = ''.join(
         f'<a class="pillar" href="#group-{g.split()[0].lower()}"><h3>{g}</h3><p>{d}</p><ul>' +
         ''.join(f'<li><code>{m}</code></li>' for m in ms[:4]) + ('<li class="more">and more</li>' if len(ms) > 4 else '') + '</ul></a>'
-        for g, d, ms in GROUPS[:3])
+        for g, d, ms in GROUPS)
     return f'''
 <p class="lead">Cockpit is a set of mods for Claude Code. Guards catch the mistakes an agent makes when nobody is watching. Instruments show you where a session stands at a glance. Records keep what happened, so you can look back.</p>
 {hero}
 <p class="caption">A turn in progress: the spinner line from <code>spinner-status</code>, then the prompt, then the <code>hud</code> status line. Real output from the mods, in the <code>refined</code> style.</p>
 <h2 id="intro-what">What is in the box</h2>
 <div class="pillars">{cards}</div>
-<p>Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The <code>cockpit</code> plugin lists them all as dependencies, so one install brings the whole set. Every mod is optional: turn any of them off in <code>/plugin</code>.</p>
+<p>Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The <code>cockpit</code> plugin lists them all as dependencies, so one install brings the whole set. To leave one out, see <a href="#configuration-off">Turn one mod off</a>.</p>
 <h2 id="intro-how">How a mod works</h2>
 <p>Claude Code raises events as it works: a tool call, a prompt, a turn ending, a screen being drawn. A mod hooks those events in TypeScript and can change what happens. <code>secret-guard</code> rewrites a tool result before the agent reads it. <code>pipefail</code> rewrites a command before it runs. <code>hud</code> draws rows that Claude Code does not draw. Nothing runs outside Claude Code: no daemon, no server, no account.</p>
 <h2 id="intro-next">Next steps</h2>
@@ -153,16 +152,20 @@ def install():
 <h2 id="install-steps">Install</h2>
 <ol class="steps">
 <li><p>Add the marketplace and install the bundle:</p>{code(f"claude plugin marketplace add {REPO}{chr(10)}claude plugin install cockpit@cockpit")}
-<p>The second command lists every mod it installs, as <code>+ 13 dependencies</code>.</p></li>
+<p>The second command lists every mod it installs, as <code>+ 14 dependencies</code>.</p></li>
 <li><p>Restart Claude Code, so the new session loads the mods.</p></li>
 <li><p>Run the setup inside Claude Code:</p>{code('/cockpit:setup', 'text')}
 <p>It asks four questions in one round, with a preview of each status line style drawn by the real script. Then it writes your settings, keeps a backup of the file it changed, and tells you what you will notice.</p></li>
 </ol>
 <h2 id="install-check">Check the install</h2>
 {code('claude plugin list')}
-<p>You should see 14 entries ending in <code>@cockpit</code>, each marked <code>enabled</code>. An entry marked <code>failed to load</code> points to a version mismatch; see <a href="#troubleshooting">Troubleshooting</a>.</p>
+<p>You should see 15 entries ending in <code>@cockpit</code>, each marked <code>enabled</code>. An entry marked <code>failed to load</code> points to a version mismatch; see <a href="#troubleshooting">Troubleshooting</a>.</p>
 <h2 id="install-auto">Turn on automatic updates</h2>
 <p>Open <code>/plugin</code>, go to <b>Marketplaces</b>, select <code>cockpit</code>, and choose <b>Enable auto-update</b>. A new version then installs when Claude Code starts, and a mod added to the bundle installs with it.</p>
+<h2 id="install-team">On a Team or Enterprise plan</h2>
+<p>Every mod works the same on every plan, except <code>global-memory</code>. Team and Enterprise plans run a built-in guard that skips plugins you install yourself on the two hooks it needs, so it installs and does nothing. To use it, your organization adds it to managed settings, ahead of the guard:</p>
+{code(json.dumps({'enabledPlugins': {'global-memory@cockpit': True}, 'prependPlugins': ['global-memory@cockpit', 'sec-default@builtin']}, indent=2), 'json')}
+<p>Without those settings, nothing breaks: the other mods run as usual.</p>
 {note('info', 'Coming from the agent marketplace', '<p>Cockpit was called <code>agent</code> before October 2026. Rename every <code>@agent</code> key to <code>@cockpit</code> in <code>~/.claude/settings.json</code>, then run <code>claude plugin marketplace remove agent</code> before the steps above. Removing a marketplace deletes the saved options of its plugins, so rename the keys first, or run <code>/cockpit:setup</code> again afterwards.</p>')}
 '''
 
@@ -223,10 +226,14 @@ def configuration():
 <tr><td><code>autoCompactWindow</code></td><td><code>733000</code> on a 1M model, if you choose it</td><td>Claude Code summarizes the conversation at about 70% instead of near the end.</td></tr>
 <tr><td><code>pluginConfigs</code></td><td>style, icons, time zone, ratings folder</td><td>Your answers to the setup questions.</td></tr>
 </tbody></table>
-<p>Run <code>/cockpit:setup</code> again at any time to change your answers. It reads what is set and asks only about what you want to change.</p>'''
+<p>Run <code>/cockpit:setup</code> again at any time to change your answers. It reads what is set and asks only about what you want to change.</p>
+<h2 id="configuration-off">Turn one mod off</h2>
+<p>Claude Code refuses to disable a plugin that an enabled plugin requires, and the <code>cockpit</code> bundle requires every mod. Disable the bundle first, then the mod:</p>
+{code('claude plugin disable cockpit@cockpit' + chr(10) + 'claude plugin disable pipefail@cockpit')}
+<p>The other mods stay on. Enabling the bundle again turns the mod back on. <code>rating</code> and <code>spinner-status</code> also have an <b>Enabled</b> option in <code>/config</code>, which turns them off without touching the bundle.</p>'''
 
 def mods_index():
-    out = '<p class="lead">Fourteen mods in three groups. The bundle installs the first thirteen; <code>global-memory</code> installs on its own.</p>'
+    out = '<p class="lead">Fourteen mods in three groups. The <code>cockpit</code> bundle installs all of them.</p>'
     for g, d, ms in GROUPS:
         gid = g.split()[0].lower()
         out += f'<h2 id="group-{gid}">{g}</h2><p>{d}</p><div class="modgrid">'

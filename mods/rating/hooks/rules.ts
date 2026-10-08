@@ -10,9 +10,12 @@ export type Options = {
   configRepo: string
   // Leave out sessions opened in a temporary folder or with a temporary CLAUDE_CONFIG_DIR (tests).
   skipTemporary: boolean
+  // Off, the mod records nothing and shows no band. The plugin stays enabled, so the cockpit bundle
+  // that requires it still loads.
+  enabled: boolean
 }
 
-export const DEFAULTS: Options = { datasetDir: '~/datasets/agent-ratings', band: true, configRepo: '', skipTemporary: true }
+export const DEFAULTS: Options = { datasetDir: '~/datasets/agent-ratings', band: true, configRepo: '', skipTemporary: true, enabled: true }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -24,6 +27,7 @@ export function options(values: unknown): Options {
     band: typeof band === 'boolean' ? band : DEFAULTS.band,
     configRepo: typeof repo === 'string' ? repo.trim() : DEFAULTS.configRepo,
     skipTemporary: Reflect.get(values, 'skipTemporary') !== false,
+    enabled: Reflect.get(values, 'enabled') !== false,
   }
 }
 

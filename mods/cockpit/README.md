@@ -22,13 +22,18 @@ claude plugin install cockpit@cockpit
 - `mod-report`: `/mods`, what each mod did and what it cost per tool call.
 - `rating`: records every turn as a dataset with your 1-5 ratings and weak labels. `/rate`, `/ratings` and a band above the prompt.
 - `wtf`: `/wtf`, a cheap Haiku summary of where the session is and what it needs from you.
+- `global-memory`: a machine-wide memory folder beside the per-project auto memory. It starts once you create `~/.claude/global-memory/MEMORY.md`.
 - `spinner-status`: replaces the tip under the spinner with one Haiku line: where the session stands, or a tip about these mods. Needs `"spinnerTipsEnabled": false` in settings.
 
 Each mod has its own README with its options, what it records and what it costs.
 
-## Not in the bundle: global-memory
+## Team and Enterprise plans
 
-`global-memory` adds a machine-wide memory folder beside the per-project auto memory. On a Team or Enterprise plan the built-in guard skips it unless it runs as an organization mod, listed in `prependPlugins` in managed settings, so it is not a dependency of this bundle. Its README shows the settings. On a personal plan, install it with `claude plugin install global-memory@cockpit`.
+On a Team or Enterprise plan, `global-memory` installs but does nothing until your organization lists it in managed settings: the plan's built-in guard skips plugins you install yourself on the hooks it needs. Its README shows the two settings to add.
+
+## Turn one mod off
+
+To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `rating` and `spinner-status` also have an **Enabled** option in `/config`.
 
 ## Where the mods write
 
