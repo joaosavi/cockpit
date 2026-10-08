@@ -1,0 +1,101 @@
+# Cockpit
+
+Mods for Claude Code. The guards keep the agent out of trouble: secrets in tool output, a pipe that hides a failed test, a memory limit that kills the build, a second session's edits swept into your commit. The instruments show where the session stands: a status line under the prompt, a one-line summary under the spinner, and `/wtf` when you come back to a session you forgot.
+
+Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The `cockpit` plugin installs all of them at once.
+
+## Requirements
+
+- Claude Code 2.1.287 or later. Mods use Claude Code's function hooks, which are in early access and may change between releases.
+- Node 22.18 or later, for the status line script.
+- A [Nerd Font](https://www.nerdfonts.com/) in your terminal, for the status line icons. Without one, choose the `unicode` icons during setup.
+
+The mods are tested on Linux. `memory-guard` reads Linux memory files, so it does nothing useful on other systems.
+
+## Install
+
+1. Add the marketplace and install the bundle:
+
+	```sh
+	claude plugin marketplace add joaosavi/cockpit
+	claude plugin install cockpit@cockpit
+	```
+
+2. Restart Claude Code.
+3. Run `/cockpit:setup`. It asks four or five questions, with previews, and writes what a plugin cannot set by itself: the status line, the spinner tip, when to compact, and where to keep ratings. It shows the result and tells you what changed.
+
+To turn on updates, open `/plugin`, go to **Marketplaces**, and turn on auto-update for `cockpit`. A new mod added to the bundle then installs on the next start.
+
+## The mods
+
+### Guards
+
+| Mod | What it does |
+| :- | :- |
+| `secret-guard` | Replaces every secret value in tool output with `<hidden:NAME>` before the agent reads it, and writes the real value back when the agent edits a `.env` file. |
+| `collision-guard` | Warns when another session on this machine edited the same file, and holds a git command once when it would stage, commit, stash or discard that session's uncommitted edits. |
+| `pipefail` | Adds `set -o pipefail;` to a test, typecheck or lint run piped into `tail`, `head` or `grep`, so a failed run cannot exit 0. |
+| `memory-guard` | Keeps typecheck, build, test and Playwright runs under the memory limit: it runs them with one process, waits, or refuses, and reruns a command killed with exit 137. |
+| `loop-breaker` | Tells the agent to stop and change approach when it repeats the same error, the same fix or the same call. |
+| `usage-limit` | Allows one subagent at a time from 90% of the plan's usage limit, asks for a work-in-progress commit at 97%, pauses at 98%, and resumes when the window resets. |
+
+### Instruments
+
+| Mod | What it does |
+| :- | :- |
+| `hud` | Model, project, git branch and PR, context window, plan limits and memory, in a status line under the prompt. Four styles. |
+| `spinner-status` | Replaces the tip under the spinner with one line from Haiku: where the session stands, or a tip about these mods. |
+| `wtf` | `/wtf [question]`: a short Haiku summary of where the session stands and what it needs from you. |
+| `skill-loader` | Delivers the right skill when the agent touches a matching file or writes a commit, and reminds it to diagnose before fixing when you paste an error. |
+
+### Records
+
+| Mod | What it does |
+| :- | :- |
+| `rating` | Records every turn with your 1 to 5 rating and automatic signals, as a dataset you can review. |
+| `audit` | Records every MCP call that writes on your behalf, one file per day. |
+| `mod-report` | Shows what each mod did and what it cost per tool call. |
+
+`global-memory` is in the marketplace but not in the bundle. It adds a machine-wide memory folder beside the per-project memory. On a Team or Enterprise plan it must run as an organization plugin, so read its README before you install it.
+
+## Commands
+
+| Command | What it shows |
+| :- | :- |
+| `/wtf [question]` | Where this session stands and what it needs from you. |
+| `/hud` | The full heads-up display in a pane. |
+| `/limit` | The 5-hour and 7-day usage limits, and what the mod holds back. |
+| `/ram` | Memory headroom per group, and the measured peak of each heavy command. |
+| `/rate 1-5 [tags] [-- note]` | Rates the last answer. While the rating band shows, the digits 1 to 5 do the same. |
+| `/ratings [days]` | Ratings, scores per project and per skill, and the lowest-rated turns. |
+| `/mods [days]` | What each mod did and its time cost per tool call. |
+| `/audit [count] [filter]` | The latest MCP calls that wrote on your behalf. |
+| `/cockpit:setup` | Runs the setup again, to change the style or any other choice. |
+
+Every command also answers in plain text, so it works over Remote Control.
+
+## Configure
+
+Each mod's options are rows in `/config`. Each mod's README lists its options, what it records, and what it costs.
+
+## What leaves your machine
+
+`wtf` and `spinner-status` send an excerpt of the session to Haiku through your own Claude account. `wtf` sends at most 12,000 characters, one call per `/wtf`. `spinner-status` sends the last few prompts and the agent's last text, at most 3,000 characters, one call per turn in its default mode and none in `tips` mode. No other mod calls a model. The `hud` status line runs `gh pr view` to show the branch's pull request, so it reaches GitHub when `gh` is installed.
+
+## What stays on your machine
+
+- Every mod writes a diary under `~/.local/state/mods/<mod>/`, one line per action and one summary per session. A diary never holds a secret value or a file's content.
+- `rating` keeps its dataset in `~/datasets/agent-ratings`. The dataset holds prompts, answers and tool output in plain text, so keep that folder private.
+
+## Uninstall
+
+```sh
+claude plugin uninstall cockpit@cockpit
+claude plugin prune
+```
+
+Uninstalling the bundle leaves the mods installed. `claude plugin prune` removes them. The setup wrote `statusLine`, `spinnerTipsEnabled` and `autoCompactWindow` to your settings file, and kept a backup of the file it changed. Remove those keys by hand, or restore the backup.
+
+## License
+
+MIT. `skill-loader` ships skills by Matt Pocock under the MIT license. See `skill-loader/skills/NOTICE.md`.
