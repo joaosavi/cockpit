@@ -39,7 +39,7 @@ Em 07/10/2026 (noite) entraram o `hud` (faixa `panel` + atividade, `/hud`), o `w
 
 Pendências do João (atualizado em 07/10/2026, noite):
 - tirar o `segredo.pl` do `settings.json` depois de uns dias de `secret-guard` sem erro (olhar o diário e o `/mods`)
-- no PC de casa: atualizar o pacote `agent`, ligar autoUpdate dos marketplaces `agent` e `mattpocock`, e rodar a skill `agent:setup`
+- no PC de casa: `claude plugin marketplace remove agent`, trocar as chaves `@agent` por `@cockpit` no settings, `claude plugin marketplace add joaosavi/claude-devcontainer`, `claude plugin install cockpit@cockpit`, ligar autoUpdate dos marketplaces `cockpit` e `mattpocock`, e rodar `/cockpit:setup`
 - a faixa de cima e o `/hud` ainda usam o desenho antigo do `hud`; só importa para quem não usa a statusline
 - para publicar o marketplace de verdade: o repo é privado e tem memória da empresa, então os mods precisam ir para um repo público próprio, com arquivo LICENSE
 - julgar cada mod pelo `/mods` e pelo `/ratings` depois de alguns dias de uso real
@@ -56,7 +56,9 @@ Em 07/10/2026 o João fixou a regra de idioma: todo texto fixo dos mods (rótulo
 
 Em 08/10/2026 o João pediu ao `usage-limit`: retomar quando a janela volta continua o padrão, mas com opção para desligar (hoje só o `resumeOnError` desliga, e só o caso do erro de 100%); e, na pausa, guardar o trabalho com commit sem push (o zippi está em produção e push na `main` iria para o ar). Ideia tirada do limit-parking (soonavi/claude-mods). No mesmo dia ele mandou manter o `/wtf` como está, sem trocar por mod de terceiro nem mudar o nome.
 
+Em 08/10/2026 o João escolheu `cockpit` como nome da suíte (marketplace, pacote, repo público futuro); antes era `agent`. Os mods viraram `<mod>@cockpit` e o setup `/cockpit:setup`. A VPS foi migrada no mesmo dia: `marketplace remove` apaga os `pluginConfigs`, então as opções foram restauradas do backup com as chaves novas. O repo público só nasce no lançamento, com um commit só, depois de tudo pronto; até lá tudo fica no claude-devcontainer.
+
 **Why:** regra em CLAUDE.md depende de o modelo lembrar; o mod é determinístico.
 Nomes (08/10/2026, aprovados pelo João): substantivo mais papel, como `secret-guard`; `/wtf` fica, porque a gíria é da comunidade. Mods novos avaliados com os transcripts da VPS (08/10/2026): `output-trim` e `paste-to-file` não compensam (teste, typecheck, lint e build são 2,8% dos 8 M de caracteres de Bash, média de 497 por saída de teste, porque o vitest fora de TTY já sai compacto e o agente usa `| tail`; o maior prompt colado tem 11 mil caracteres). `collision-guard` tem caso: 11 pares de sessões editaram o mesmo repo com menos de 30 min de distância em 8 dias, 5 no mesmo arquivo. O Edit nativo já recusa arquivo mudado desde a leitura, então o risco que sobra é git (`add -A`, commit, checkout) levando a edição da outra sessão. Descartados: `style-guard` (estilo de resposta é individual) e typecheck em segundo plano (gasta RAM para adiantar um erro que o agente acha antes do commit). A pré-compactação existe no Claude Code atrás de flags do servidor (`tengu_gleaming_fair`), desligada aqui; mod não dispara.
 
-**How to apply:** mod novo entra no marketplace `agent`, em inglês, com teste. Ver [[vps-claude-devcontainer]].
+**How to apply:** mod novo entra no marketplace `cockpit`, em inglês, com teste. Ver [[vps-claude-devcontainer]].
