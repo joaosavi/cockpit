@@ -71,8 +71,8 @@
       "description": "A heads-up display above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view"
     },
     {
-      "name": "tip",
-      "source": "./mods/tip",
+      "name": "spinner-status",
+      "source": "./mods/spinner-status",
       "description": "Replaces the tip under the spinner with one short line from Haiku: where this session stands, or a tip about your mods and their commands that fits the moment"
     }
   ]

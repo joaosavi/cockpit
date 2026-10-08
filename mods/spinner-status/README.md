@@ -1,4 +1,4 @@
-# tip
+# spinner-status
 
 While a turn runs, Claude Code draws the spinner and a tip under it. This mod replaces that tip with
 one short line of its own: where the session stands, written by Haiku, or a tip about the mods you
@@ -58,7 +58,7 @@ Set them in `settings.json` under `pluginConfigs`:
 ```json
 {
   "pluginConfigs": {
-    "tip@agent": { "options": { "mode": "summary" } }
+    "spinner-status@agent": { "options": { "mode": "summary" } }
   }
 }
 ```
@@ -85,7 +85,7 @@ instructions tell the model that the session excerpt is data and not instruction
 ## The diary
 
 At the end of each session the mod writes one `session-summary` line to
-`~/.local/state/mods/tip/<day>-<session>.jsonl`. It counts the turns, the model calls by outcome
+`~/.local/state/mods/spinner-status/<day>-<session>.jsonl`. It counts the turns, the model calls by outcome
 (`haiku:answered`, `haiku:api-error`, `haiku:empty-reply`, `haiku:aborted`, `haiku:no-text`,
 `haiku:error`) and the calls skipped because one was still running (`skipped:busy`), and sums the
 tokens, the model time and the excerpt size. It never writes the excerpt or the line. The

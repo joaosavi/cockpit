@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Set up or reconfigure the agent mods (hud, tip, wtf, rating, secret-guard and the rest) after installing the agent plugin. Use when the user asks to install, set up, configure, restyle or troubleshoot these mods, or when the hud status line or the spinner tip is missing.
+description: Set up or reconfigure the agent mods (hud, spinner-status, wtf, rating, secret-guard and the rest) after installing the agent plugin. Use when the user asks to install, set up, configure, restyle or troubleshoot these mods, or when the hud status line or the spinner tip is missing.
 ---
 
 # Set up the agent mods
@@ -62,7 +62,7 @@ Merge exactly what the user chose:
 | HUD above the prompt | `pluginConfigs["hud@agent"].options.band: "panel"`. Leave `statusLine` as it is. |
 | Style and icons | `style`, and `icons` (`nerd` or `unicode`), under `pluginConfigs["hud@agent"].options`; when chosen, `bar`, `barColor`, `colors` (space-separated) and `hide` (comma-separated) |
 | Time zone | `timeZone` under the `hud@agent`, `audit@agent` and `usage-limit@agent` options |
-| Spinner tip | `spinnerTipsEnabled: false` whenever `tip@agent` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
+| Spinner tip | `spinnerTipsEnabled: false` whenever `spinner-status@agent` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | When to compact | top-level `autoCompactWindow: <tokens>` |
 | Ratings folder | `datasetDir` under `pluginConfigs["rating@agent"].options` for a folder they chose; `enabledPlugins["rating@agent"]: false` for no ratings |
 

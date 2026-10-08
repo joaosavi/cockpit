@@ -1,4 +1,4 @@
-// The pure part of the tip mod: the options, the catalog of mod tips, the short excerpt of the session
+// The pure part of the spinner-status mod: the options, the catalog of mod tips, the short excerpt of the session
 // the model reads, the instructions it gets, how its reply becomes one safe line, and which line the
 // spinner shows at a given moment. Nothing here touches `$`, so the tests cover it without stubs.
 

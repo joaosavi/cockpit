@@ -1,4 +1,4 @@
-// The tip mod replaces the tip line under the spinner with one short line of its own: where the session
+// The spinner-status mod replaces the tip line under the spinner with one short line of its own: where the session
 // stands, written by a cheap model, or a tip about the user's mods.
 //
 // Each main-loop turn starts at most one model call, in the background, from `turn.start`. The model
@@ -135,7 +135,7 @@ export function register(on: On, values: PluginOptions) {
     const home = await $.env.get('HOME')
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
-      diary = `${home}/.local/state/mods/tip/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
+      diary = `${home}/.local/state/mods/spinner-status/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
     return next(e)
   })

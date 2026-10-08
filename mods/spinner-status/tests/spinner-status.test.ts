@@ -129,7 +129,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
 
 const start = { surface: 'terminal', isInteractive: true, cwd: '/home/me/work' } as const
 const SPINNER = {
-  plugin: 'tip',
+  plugin: 'spinner-status',
   surface: 'terminal',
   component: 'Spinner',
   requestId: 'main',
