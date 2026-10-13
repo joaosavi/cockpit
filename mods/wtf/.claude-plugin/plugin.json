@@ -1,6 +1,6 @@
 {
   "name": "wtf",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "/wtf sums up where this session stands and what the agent needs from you, in a few plain lines from Haiku, so you can return to a session without rereading it. The agent keeps working",
   "author": {
     "name": "João Savi"
