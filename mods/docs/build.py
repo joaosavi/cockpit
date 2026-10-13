@@ -106,12 +106,19 @@ def note(kind, title, body):
     return f'<aside class="note {kind}"><strong>{title}</strong><div>{body}</div></aside>'
 
 WTF_SAMPLE = (
-    '<span class="t-dim">❯</span> /wtf\n'
-    '  <span class="t-dim">⎿</span>  wtf: <span class="t-chip">WAITING</span>  <b>The agent wrote the demo file and asks whether to delete or keep it.</b>\n'
-    '     <span class="t-acc">→ you:</span> answer 1 or 2\n'
-    '        1. <b>Delete</b> <i>(recommended)</i>: nothing in the repo reads the file\n'
-    '        2. <b>Keep</b>: it stays in /tmp until the reboot\n'
-    '     <span class="t-dim">▎ summary, not an instruction  ·  haiku 935→174</span>'
+    '<span class="t-dim">❯</span> /wtf\n\n'
+    '                <span class="t-warn">╭──────────────────────────────────────────────────────────────╮</span>\n'
+    '                <span class="t-warn">│</span> <b class="t-acc">wtf</b>  <span class="t-dim">acme-api · idle 24s</span>                                     <span class="t-dim">✕</span> <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>                                                              <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>  <span class="t-badge"> WAITING FOR YOU </span>  <b>The agent wrote the demo file and asks</b>   <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>                     <b>whether to delete or keep it.</b>            <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>                                                              <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span> <span class="t-acc">→ you:</span> answer 1 or 2                                        <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>   <span class="t-acc">1</span>: Delete <i class="t-ok">recommended</i><span class="t-dim"> · nothing reads the file</span>          <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>   <span class="t-acc">2</span>: Keep<span class="t-dim"> · it stays in /tmp until the reboot</span>               <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span>                                                              <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">│</span> <span class="t-acc">r</span>: re-run   <span class="t-acc">x</span>: close                                         <span class="t-warn">│</span>\n'
+    '                <span class="t-warn">╰──────────────────────────────────────────────────────────────╯</span>'
 )
 SPINNER_SAMPLE = (
     '<span class="t-acc">✻</span> Propagating… <span class="t-dim">(6s · ↓ 90 tokens)</span>\n'
@@ -183,9 +190,9 @@ def first_session():
 {term(SPINNER_SAMPLE)}
 <p>The label says what the line is. <code>Now:</code> is where the session stands. <code>Mods:</code> is a tip about the mods you have.</p>
 <h2 id="first-wtf">Ask where a session stands</h2>
-<p>Come back to a session you forgot and type <code>/wtf</code>. It answers in a few lines, in the language you write in, and tells you what the agent needs from you.</p>
+<p>Come back to a session you forgot and type <code>/wtf</code>. A card opens above the prompt, in the language you write in, with where the session stands and what the agent needs from you.</p>
 {term(WTF_SAMPLE)}
-<p>It runs at once, also in the middle of a turn, and adds nothing to the conversation. Add a question to ask something specific: <code>/wtf why did the deploy stop?</code></p>
+<p>It runs at once, also in the middle of a turn, and adds nothing to the conversation. Press an option's digit with the prompt empty, and the option goes into the prompt for you to send. Add a question to ask something specific: <code>/wtf why did the deploy stop?</code> From Remote Control, the same answer comes as text.</p>
 <h2 id="first-try">Commands to try</h2>
 <table><thead><tr><th>Command</th><th>What you get</th></tr></thead><tbody>
 <tr><td><code>/rate 4</code></td><td>Scores the last answer from 1 to 5. While the rating band shows, the digit alone does the same.</td></tr>
