@@ -253,9 +253,18 @@ export function parseAnswer(text: string): Answer {
   return a
 }
 
-// The cost of this call as the pane's header and the reply's footer show it: `haiku 935→174`.
+// The cost of this call, `haiku 935→174`. Only the diary keeps it: on screen it took room and told
+// the user nothing they act on.
 export function costLine(used: Usage): string {
   return `${MODEL} ${used.input}→${used.output}`
+}
+
+// The model reads the state from the transcript, and at the end of a turn it sometimes still says
+// working. When the mod saw the turn end, the agent is not working: it waits for the user when it
+// asked something, and is done otherwise.
+export function settleState(a: Answer, isIdle: boolean): Answer {
+  if (!isIdle || a.state !== 'working') return a
+  return { ...a, state: a.you === null ? 'done' : 'waiting' }
 }
 
 const NBSP3 = '\u00a0\u00a0\u00a0'
@@ -272,10 +281,10 @@ function optionText(o: Option): string {
 // The text reply. Claude Code puts `wtf: ` before it, draws Markdown, and drops blank lines, so the
 // lines are joined by hard breaks. The first line is the state in a code span and the Now sentence
 // in bold, then the action when the agent needs one, then the options. The quoted footer, drawn
-// dim behind a bar, carries the note that keeps the main agent from acting on the reply, and the
-// cost. An answer that drifted from the shape shows its text as it came, with the footer.
-export function reply(a: Answer, used: Usage, t: Texts): string {
-  const footer: string[] = [t.note, costLine(used)]
+// dim behind a bar, carries the note that keeps the main agent from acting on the reply. An answer
+// that drifted from the shape shows its text as it came, with the footer.
+export function reply(a: Answer, t: Texts): string {
+  const footer: string[] = [t.note]
   let lines: string[]
   if (a.state === null) lines = a.body.split('\n').filter((l) => l.trim() !== '')
   else {

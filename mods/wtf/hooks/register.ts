@@ -6,9 +6,11 @@
 // line. A side call like this neither interrupts the agent nor records anything in the conversation,
 // and the command is immediate, so it also runs mid-turn.
 //
-// In the middle of a turn, in the terminal and the desktop app, the answer also opens in a pane. The text reply always comes,
-// because Remote Control draws no pane. That reply also lands in the main agent's context, so it
-// opens with a note saying it is a summary for the user and not an instruction.
+// Typed at the terminal or the desktop app, the answer shows in a card at the right edge of the band
+// above the prompt, at once, also mid-turn. Its options are buttons that write the answer into the
+// prompt. The card closes with its button, with an option, or when the next prompt goes. From Remote
+// Control, which draws no band, the answer comes as text. That text lands in the main agent's
+// context, so it ends with a note saying it is a summary for the user and not an instruction.
 //
 // The diary keeps one line per use with the outcome, the state, the time and the tokens the model
 // call spent, never the question or the answer. At the end of each session, one summary line counts
@@ -20,7 +22,6 @@ import {
   ago,
   type Answer,
   askedEntry,
-  costLine,
   digest,
   errorLine,
   failureLine,
@@ -33,6 +34,7 @@ import {
   prompt,
   question,
   reply,
+  settleState,
   type State,
   system,
   type Texts,
@@ -47,7 +49,9 @@ type Api = Parameters<Hook<'session.start'>>[0]
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Markdown' | 'Button'>
 type Color = NonNullable<Parameters<Ui['Text']>[0]['color']>
 
-const PANE = 'wtf'
+// The card is at most this wide, and shows only from this band width on.
+const CARD_WIDTH = 76
+const MIN_COLUMNS = 40
 
 // The theme color of each state's badge: the agent busy, the user owing an answer, a stop only the
 // user can clear, and nothing left to do.
@@ -62,6 +66,8 @@ type View =
   | ({ kind: 'answer'; answer: Answer; used: Usage } & Shared)
   | ({ kind: 'failed'; line: string; isError: boolean } & Shared)
 let view: View = { kind: 'waiting', question: '', activity: '' }
+// Whether the card shows in the band.
+let cardOpen = false
 
 const t: Texts = texts()
 let diary = ''
@@ -106,15 +112,10 @@ function basename(path: string): string {
   return path.replace(/\/+$/, '').split('/').at(-1) ?? ''
 }
 
-// Opens the pane where a surface draws one. A pane that fails to open leaves the text reply.
-async function openPane($: Api): Promise<void> {
-  const surfaces = await $.session.surfaces()
-  if (!surfaces.includes('terminal') && !surfaces.includes('desktop')) return
-  try {
-    await $.ui.open({ id: PANE, title: 'WTF', focus: true, closeOnEscape: true })
-  } catch (err) {
-    await log($, { event: 'pane-refused', error: String(err) })
-  }
+function closeCard($: Api) {
+  if (!cardOpen) return
+  cardOpen = false
+  $.ui.invalidate('ui.render')
 }
 
 // One use of /wtf: read the session, ask the model, fill the pane, write the diary line. Every path
@@ -134,9 +135,6 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
   let text: string
   try {
     showIfLatest({ kind: 'waiting', ...shared })
-    // Claude Code prints a command's text only when the turn ends, so mid-turn the pane is the one
-    // place the answer shows at once.
-    if (trigger === 'command' && turnRunning) await openPane($)
     const messages = await $.session.messages()
     const d = messages.length === 0 ? '' : digest(messages)
     digestChars = d.length
@@ -149,9 +147,9 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
       used = usage(r.usage)
       if (r.isAnswered) {
         outcome = 'answered'
-        const answer = parseAnswer(r.text)
+        const answer = settleState(parseAnswer(r.text), !turnRunning && lastTurnEnd !== null)
         state = answer.state
-        text = reply(answer, used, t)
+        text = reply(answer, t)
         showIfLatest({ kind: 'answer', answer, used, ...shared })
       } else {
         outcome = r.reason
@@ -175,22 +173,25 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
   return text
 }
 
-// The header: the title, then the project, the turn state, the model and this call's cost, dim and
-// cut at the pane's width so it stays one row.
-function header(ui: Ui, v: View, width: number): RenderElement {
-  const meta = [project, v.activity, v.kind === 'answer' ? costLine(v.used) : MODEL].filter((s) => s !== '')
+// What the card's buttons do: write an option into the prompt, ask again, close.
+type Actions = { choose: (o: Option) => Promise<void>; rerun: () => Promise<void>; close: () => void }
+
+// The title row: `wtf`, then the project and the turn state, dim and cut to fit, then the close button.
+function header(ui: Ui, v: View, width: number, close: () => void): RenderElement {
+  const meta = [project, v.activity].filter((s) => s !== '')
   return ui.Box({
     flexDirection: 'row',
     width,
     children: [
-      ui.Text({ bold: true, children: ['WTF'] }),
-      ui.Box({ flexShrink: 1, children: [ui.Text({ dimColor: true, wrap: 'truncate-end', children: [`  ${meta.join(' · ')}`] })] }),
+      ui.Text({ bold: true, color: 'claude', children: ['wtf'] }),
+      ui.Box({ flexGrow: 1, flexShrink: 1, children: [ui.Text({ dimColor: true, wrap: 'truncate-end', children: [meta.length > 0 ? `  ${meta.join(' · ')}` : ''] })] }),
+      ui.Button({ key: 'wtf-close', label: '✕', plain: true, dimColor: true, onPress: close }),
     ],
   })
 }
 
 // A row with a fixed lead, such as the state badge, and text that wraps in the columns left after
-// it, so a long sentence continues under itself and never pushes the pane's border out.
+// it, so a long sentence continues under itself and never pushes the card's border out.
 function leadRow(ui: Ui, width: number, leadWidth: number, lead: RenderElement, text: RenderElement, key: string): RenderElement {
   return ui.Box({
     key,
@@ -203,30 +204,36 @@ function leadRow(ui: Ui, width: number, leadWidth: number, lead: RenderElement, 
   })
 }
 
-const OPTION_INDENT = 3
+const OPTION_INDENT = 2
 
-// An option: indented, its number dim, its name bold, its mark italic, then its cost.
-function optionRow(ui: Ui, o: Option, width: number): RenderElement {
-  const number = `${o.number}. `
-  const parts: (RenderElement | string)[] =
-    o.name === null
-      ? [o.text]
-      : [
-          ui.Text({ bold: true, children: [o.name] }),
-          ...(o.mark === null ? [] : [' ', ui.Text({ italic: true, children: [`(${o.mark})`] })]),
-          ...(o.cost === null ? [] : [`: ${o.cost}`]),
-        ]
-  const inner = width - OPTION_INDENT
+// An option as a button: its number is the key that presses it, drawn like Claude Code's own
+// choices (`1: Delete`), then the mark and the cost, dim. Pressing it writes the option into the
+// prompt for the user to send.
+function optionRow(ui: Ui, o: Option, width: number, choose: (o: Option) => Promise<void>): RenderElement {
+  const label = o.name ?? o.text
+  const tail: (RenderElement | string)[] = [
+    ...(o.mark === null ? [] : [' ', ui.Text({ italic: true, color: 'success', children: [o.mark] })]),
+    ...(o.cost === null ? [] : [ui.Text({ dimColor: true, children: [` · ${o.cost}`] })]),
+  ]
+  const isNumber = /^[1-9]$/.test(o.number)
   return ui.Box({
+    key: `option-${o.number}`,
+    flexDirection: 'row',
     paddingLeft: OPTION_INDENT,
     width,
-    children: [leadRow(ui, inner, number.length, ui.Text({ dimColor: true, children: [number] }), ui.Text({ wrap: 'wrap', children: parts }), `option-${o.number}`)],
+    children: [
+      ui.Box({
+        flexShrink: 0,
+        children: [ui.Button({ key: `wtf-option-${o.number}`, label, plain: true, ...(isNumber ? { hotkey: o.number } : {}), onPress: () => choose(o) })],
+      }),
+      ui.Box({ flexShrink: 1, children: [ui.Text({ wrap: 'wrap', children: tail })] }),
+    ],
   })
 }
 
 // The answer: the state badge and the Now sentence beside it, the action the agent expects, the
 // options, then any line in no known shape. An answer that drifted from the shape shows as it came.
-function answerRows(ui: Ui, a: Answer, width: number): RenderElement[] {
+function answerRows(ui: Ui, a: Answer, width: number, choose: (o: Option) => Promise<void>): RenderElement[] {
   if (a.state === null) return [ui.Text({ wrap: 'wrap', children: [a.body] })]
   const badge = ` ${t.badges[a.state]} `
   const rows: RenderElement[] = [
@@ -240,40 +247,39 @@ function answerRows(ui: Ui, a: Answer, width: number): RenderElement[] {
     ),
   ]
   const you: RenderElement[] = []
-  if (a.you !== null) you.push(leadRow(ui, width, t.you.length + 1, ui.Text({ color: 'cyan', children: [t.you] }), ui.Text({ wrap: 'wrap', children: [a.you] }), 'you'))
-  you.push(...a.options.map((o) => optionRow(ui, o, width)), ...a.rest.map((line) => ui.Text({ wrap: 'wrap', children: [line] })))
+  if (a.you !== null) you.push(leadRow(ui, width, t.you.length + 1, ui.Text({ color: 'suggestion', children: [t.you] }), ui.Text({ wrap: 'wrap', children: [a.you] }), 'you'))
+  you.push(...a.options.map((o) => optionRow(ui, o, width, choose)), ...a.rest.map((line) => ui.Text({ wrap: 'wrap', children: [line] })))
   if (you.length > 0) rows.push(ui.Box({ flexDirection: 'column', marginTop: 1, width, children: you }))
   return rows
 }
 
-function body(ui: Ui, v: View, width: number): RenderElement[] {
+function body(ui: Ui, v: View, width: number, choose: (o: Option) => Promise<void>): RenderElement[] {
   if (v.kind === 'waiting') return [ui.Text({ dimColor: true, children: [t.reading] })]
   if (v.kind === 'failed') return [ui.Text({ wrap: 'wrap', ...(v.isError ? { color: 'error' } : { dimColor: true }), children: [v.line] })]
-  return answerRows(ui, v.answer, width)
+  return answerRows(ui, v.answer, width, choose)
 }
 
-function key(ui: Ui, name: string, label: string): RenderElement {
-  // Drawn like the native Button beside it: `esc: close`, the key in the theme's suggestion color.
-  return ui.Text({ children: [ui.Text({ color: 'suggestion', children: [name] }), ui.Text({ children: [`: ${label}`] })] })
-}
-
-// The keys: re-run, hidden while a call is in flight, and Esc, which the pane was opened to honor.
-function footer(ui: Ui, v: View, rerun: () => Promise<void>): RenderElement {
+// The keys under the answer: re-run, hidden while a call is in flight, and close.
+function footer(ui: Ui, v: View, a: Actions): RenderElement {
   const keys: RenderElement[] = []
-  if (v.kind !== 'waiting') {
-    // The native Button, so a mouse click re-runs too. Claude Code draws it as `r: re-run`.
-    keys.push(ui.Button({ key: 'rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: rerun }))
-  }
-  keys.push(key(ui, 'esc', t.close))
+  if (v.kind !== 'waiting') keys.push(ui.Button({ key: 'wtf-rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: a.rerun }))
+  keys.push(ui.Button({ key: 'wtf-close-key', label: t.close, hotkey: 'x', plain: true, onPress: a.close }))
   return ui.Box({ flexDirection: 'row', columnGap: 3, children: keys })
 }
 
-function pane(ui: Ui, v: View, width: number, rerun: () => Promise<void>): RenderElement {
-  const rows: RenderElement[] = [header(ui, v, width)]
+// The card: a rounded border in the state's color, at the right edge of the band.
+function card(ui: Ui, v: View, columns: number, a: Actions): RenderElement {
+  const outer = Math.min(CARD_WIDTH, columns - 2)
+  const width = outer - 4
+  const rows: RenderElement[] = [header(ui, v, width, a.close)]
   if (v.question !== '') rows.push(ui.Text({ dimColor: true, wrap: 'wrap', children: [`> ${v.question}`] }))
-  const main = ui.Box({ flexDirection: 'column', width, children: body(ui, v, width) })
-  rows.push(main, footer(ui, v, rerun))
-  return ui.Box({ flexDirection: 'column', gap: 1, width, children: rows })
+  rows.push(ui.Box({ flexDirection: 'column', width, children: body(ui, v, width, a.choose) }), footer(ui, v, a))
+  const border: Color = v.kind === 'answer' && v.answer.state !== null ? STATE_COLOR[v.answer.state] : 'claude'
+  return ui.Box({
+    justifyContent: 'flex-end',
+    paddingRight: 1,
+    children: [ui.Box({ width: outer, flexDirection: 'column', gap: 1, borderStyle: 'round', borderColor: border, paddingX: 1, children: rows })],
+  })
 }
 
 export function register(on: On, values: PluginOptions) {
@@ -301,9 +307,10 @@ export function register(on: On, values: PluginOptions) {
     return next(e)
   })
 
-  // The turn hooks only feed the header's "turn running" / "idle 4m".
+  // The turn hooks feed the header's "turn running" / "idle 4m". A new prompt makes the card stale.
   on('turn.start', async ($, e, next) => {
     turnRunning = true
+    closeCard($)
     return next(e)
   })
 
@@ -313,15 +320,35 @@ export function register(on: On, values: PluginOptions) {
     return next(e)
   })
 
-  on('command.run', { command: 'wtf' }, async ($, e) => ({ text: await summarize($, question(e.args), 'command') }))
+  // Typed at a terminal or the desktop app, the answer goes to the card and no text is printed, so
+  // nothing shows twice and nothing reaches the agent. Any other origin, such as Remote Control,
+  // gets the text.
+  on('command.run', { command: 'wtf' }, async ($, e) => {
+    const surfaces = await $.session.surfaces()
+    const hasBand = surfaces.includes('terminal') || surfaces.includes('desktop')
+    if (e.origin?.kind !== 'composer' || !hasBand) return { text: await summarize($, question(e.args), 'command') }
+    cardOpen = true
+    await summarize($, question(e.args), 'command')
+    return {}
+  })
 
-  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
-    if (e.requestId !== PANE) return next(e)
-    // The re-run answers in the pane only: a button press has no transcript to reply to.
-    const rerun = async () => {
-      await summarize($, view.question, 'rerun')
+  // The card sits under what the other mods draw in the band, and steps aside for a survey.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (!cardOpen || e.props.hasSurvey || e.props.bodyColumns < MIN_COLUMNS) return next(e)
+    const ui = $.ui.resolve(e)
+    const below = await next(e).catch(() => null)
+    const actions: Actions = {
+      choose: async (o) => {
+        await $.prompt.fill({ text: o.name ?? o.text })
+        closeCard($)
+      },
+      rerun: async () => {
+        await summarize($, view.question, 'rerun')
+      },
+      close: () => closeCard($),
     }
-    return pane($.ui.resolve(e), view, e.props.bodyColumns, rerun)
+    const ours = card(ui, view, e.props.bodyColumns, actions)
+    return below ? ui.Box({ flexDirection: 'column', children: [below, ours] }) : ours
   })
 
   // One summary line per session. `/clear`, `/resume` and `/branch` end a session without reloading

@@ -11,56 +11,55 @@ agent keeps working while you ask, and the model call adds nothing to the conver
 /wtf why did the deploy stop?
 ```
 
-The command runs at once, also in the middle of a turn. When the agent needs something from you,
-the answer has this shape:
+The command runs at once, also in the middle of a turn.
+
+## The card
+
+Typed at the terminal or in the desktop app, the answer shows in a card at the right edge of the
+band above the prompt. It shows at once, also while the agent works, and no text is printed, so
+nothing shows twice:
+
+```text
+                    ╭──────────────────────────────────────────────────────────────╮
+                    │ wtf  claude-devcontainer · idle 24s                        ✕ │
+                    │                                                              │
+                    │  WAITING FOR YOU  The agent asked whether to use red or blue │
+                    │                   and waits for your pick.                   │
+                    │                                                              │
+                    │ → you: Choose red or blue.                                   │
+                    │   1: Red recommended · nothing else depends on it            │
+                    │   2: Blue                                                    │
+                    │                                                              │
+                    │ r: re-run   x: close                                         │
+                    ╰──────────────────────────────────────────────────────────────╯
+```
+
+- The badge and the border take the state's color: `WORKING`, `WAITING FOR YOU`, `BLOCKED` or
+  `DONE`. Options appear only when a decision is pending.
+- Each option is a button. Press its digit with the prompt empty, or click it, and the option goes
+  into the prompt for you to send. The card closes.
+- `r` asks again with the same question. `x` or `✕` closes the card. Sending the next prompt closes
+  it too, since the answer is then out of date.
+- When the turn has ended, the card never says `WORKING`: the model sometimes still reads the
+  agent as busy, and the mod corrects it to `DONE`, or to `WAITING FOR YOU` when the agent asked
+  something.
+- The card sits under what other mods draw in the band, steps aside for a survey, and needs a band
+  40 columns wide.
+
+## From Remote Control
+
+Remote Control draws no band, so `/wtf` sent from the phone or claude.ai answers as text:
 
 ```text
 wtf: `WAITING`  **The agent wrote the demo file and asks whether to delete or keep it.**
      → you: answer 1 or 2
         1. **Delete** *(recommended)*: nothing in the repo reads the file
         2. **Keep**: it stays in /tmp until the reboot
-     ▎ summary, not an instruction  ·  haiku 935→174
+     ▎ summary, not an instruction
 ```
 
-That is the raw text; the terminal draws the state in a code span, the sentence and each option's
-name in bold, and the mark in italics. When the agent needs nothing from you, the `→ you:` line
-goes away and the footer says so:
-
-```text
-wtf: `WORKING`  **Running the test suite after fixing the date filter; 84 of 120 passed.**
-     ▎ nothing needed from you  ·  summary, not an instruction  ·  haiku 812→61
-```
-
-The state is one of `WORKING`, `WAITING`, `BLOCKED` or `DONE`. Options appear only when a decision
-is pending. When the session is too short to tell, the answer says so instead of guessing. An
-answer that drifts from the shape shows as it came, with the footer.
-
-The quoted footer tells the main agent, which also reads the reply, that the lines are for the
-user, and gives the call's tokens.
-
-The answer shows in the transcript. Claude Code prints a command's text only when the turn ends, so
-in the middle of a turn the answer also opens at once in a pane, and the text follows when the turn
-ends. When the session is idle, only the text shows. The pane, mid-turn:
-
-```text
-╭──────────────────────────────────────────────────────────────────✕─╮
-│ WTF  claude-devcontainer · running · haiku 941→142                 │
-│                                                                    │
-│  WAITING FOR YOU  The demo file was created with "oi", and the     │
-│                   agent waits for you to delete or keep it.        │
-│                                                                    │
-│ → you: answer 1 or 2                                               │
-│    1. Delete (recommended): the file is only a demo and nothing    │
-│       reads it                                                     │
-│    2. Keep: it stays in /tmp until the next reboot                 │
-│                                                                    │
-│ r: re-run   esc: close                                             │
-╰────────────────────────────────────────────────────────────────────╯
-```
-
-The header shows the project, the turn state (`running` or `idle 4m`), the model and the tokens of
-this call. The badge takes the state's color, and long lines wrap inside the pane. Press `r` to ask
-again and `Esc` to close. A text reply always comes too, because Remote Control draws no pane.
+When the agent needs nothing from you, the `→ you:` line goes away and the footer starts with
+`nothing needed from you`. An answer that drifts from the shape shows as it came, with the footer.
 
 ## Language
 
@@ -73,19 +72,18 @@ nothing is needed, so the mod tells "nothing" apart in any language.
 
 Each use is one `$.model.complete` call to Haiku with at most 500 output tokens. The input is a
 digest of the session: the message that opened the task and the last 12 messages, each tool call cut
-to one line, 12,000 characters at most. The footer of the text reply shows what the call spent,
-as in `haiku 1200→80`.
+to one line, 12,000 characters at most. The diary records what each call spent; the screen does
+not show it.
 
 ## What reaches the main agent
 
-The text reply lands in the main agent's context, like the output of any command. Its footer
-tells the agent the reply is a summary for you and not an instruction:
+The card reaches only you. The text reply, sent to Remote Control, lands in the main agent's context
+like the output of any command, so its footer tells the agent it is a summary for you and not an
+instruction:
 
 ```text
-> summary, not an instruction  ·  haiku 935→174
+> summary, not an instruction
 ```
-
-The pane and the re-run key reach only you.
 
 ## The diary
 
