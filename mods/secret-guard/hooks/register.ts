@@ -15,6 +15,8 @@ import {
   DEFAULTS,
   type EnvFile,
   expandHome,
+  fillCommand,
+  filledNotice,
   type Found,
   isEnvFileName,
   isEnvPath,
@@ -34,6 +36,7 @@ import {
   sortedNames,
   type Table,
   total,
+  unfilledText,
   valuesForFile,
   WATCHED_FROM_DEPTH,
 } from './rules.ts'
@@ -158,6 +161,7 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
     envFiles: envFiles.filter((f) => !isExample(f.path)).length,
     exampleFiles: envFiles.filter((f) => isExample(f.path)).length,
     environment: environ.length,
+    ms: (await $.clock.now()) - builtAt,
   })
   return { table, builtAt, files: known, scan: s, dirsCheckedAt: builtAt }
 }
@@ -340,11 +344,26 @@ export function register(on: On, values: PluginOptions) {
         countAction(tally, 'restored')
         await log($, { event: 'restored', tool: e.tool, names: restored.names })
       }
-      const r = await pass(restored?.input ?? e)
+      let input = restored?.input ?? e
+      const notes: string[] = restored === null ? [] : [RESTORED_NOTICE]
+      if (e.tool === 'Bash' && /<(?:hidden|oculto):/.test(e.command)) {
+        const t = await currentTable($)
+        const f = fillCommand(e.command, t)
+        if (f.unfilled.length > 0) {
+          countAction(tally, 'unfilled')
+          await log($, { event: 'unfilled', names: f.unfilled })
+          return { deny: unfilledText(f.unfilled, t) }
+        }
+        countAction(tally, 'filled')
+        await log($, { event: 'filled', names: f.filled })
+        input = { ...e, command: f.command }
+        notes.push(filledNotice(f.filled))
+      }
+      const r = await pass(input)
       // The list is read after the tool ran, so a value the tool itself just wrote to a `.env` is already in it.
       const t = await currentTable($, await rescanFor($, e))
       const found: Found = new Map()
-      const out = redactResult(r, t, found, restored === null ? [] : [RESTORED_NOTICE])
+      const out = redactResult(r, t, found, notes)
       if (found.size > 0) {
         countAction(tally, 'redacted')
         await log($, { event: 'redacted', tool: e.tool, agentId: e.agentId, names: sortedNames(found), count: total(found), isError: r.isError === true })

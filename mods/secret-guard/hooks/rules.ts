@@ -45,6 +45,12 @@ export const FORMATS: ReadonlyArray<readonly [string, RegExp]> = [
   ['anthropic', /\bsk-ant-[A-Za-z0-9_-]{20,}/g],
   ['aws', /\bAKIA[0-9A-Z]{16}\b/g],
   ['slack', /\bxox[bp]-[A-Za-z0-9-]{10,}/g],
+  // After `anthropic`, which already turned `sk-ant-` keys into placeholders.
+  ['openai', /\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{32,}/g],
+  ['google', /\bAIza[0-9A-Za-z_-]{35}\b/g],
+  ['stripe', /\b[rs]k_(?:live|test)_[0-9A-Za-z]{24,}/g],
+  ['jwt', /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g],
+  ['private-key', /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g],
 ]
 
 export const SKIPPED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.next', '.turbo', '.yarn', 'dist', 'build', 'coverage'])
@@ -149,6 +155,9 @@ export type Table = {
   valueOf: ReadonlyMap<string, string>
   // Every value, longest first, so a value that contains another wins.
   pattern: RegExp | null
+  // Names assigned two different values (the same DATABASE_URL in two projects): a placeholder of
+  // one of them cannot be filled in a command, because the mod cannot tell which value is meant.
+  ambiguous: ReadonlySet<string>
 }
 
 export type EnvFile = { path: string; text: string }
@@ -180,6 +189,18 @@ export function buildTable(s: Sources): Table {
   const environ = s.environ.filter(([n]) => !n.startsWith(IGNORED_ENV_PREFIX)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   for (const [n, v] of environ) pairs.push(...candidates(n, v, false))
 
+  // The whole value of each assignment, before the pieces `candidates` adds.
+  const wholes = new Map<string, Set<string>>()
+  const whole = (n: string, v: string, anyName: boolean) => {
+    const first = candidates(n, v, anyName)[0]
+    if (first === undefined || published.has(first[1]) || !accepts(first[1], s.minLength)) return
+    wholes.set(first[0], (wholes.get(first[0]) ?? new Set()).add(first[1]))
+  }
+  if (s.secrets !== null) for (const [n, v] of assignments(s.secrets)) whole(n, v, true)
+  for (const f of s.envFiles.filter((f) => !isExample(f.path))) for (const [n, v] of assignments(f.text)) whole(n, v, false)
+  for (const [n, v] of environ) whole(n, v, false)
+  const ambiguous = new Set([...wholes].filter(([, vs]) => vs.size > 1).map(([n]) => n))
+
   const nameOf = new Map<string, string>()
   const valueOf = new Map<string, string>()
   for (const [name, value] of pairs) {
@@ -187,7 +208,7 @@ export function buildTable(s: Sources): Table {
     if (!nameOf.has(value)) nameOf.set(value, name)
     if (!valueOf.has(name)) valueOf.set(name, value)
   }
-  return { nameOf, valueOf, pattern: patternOf([...nameOf.keys()]) }
+  return { nameOf, valueOf, pattern: patternOf([...nameOf.keys()]), ambiguous }
 }
 
 function patternOf(values: readonly string[]): RegExp | null {
@@ -260,6 +281,39 @@ export function restoreText(text: string, valueOf: ReadonlyMap<string, string>, 
     restored.add(name)
     return v
   })
+}
+
+// A Bash command with each `<hidden:NAME>` filled in with its value, so the agent can use a secret it
+// never sees: the transcript keeps the command as written, and the output is redacted as usual. A
+// placeholder the mod cannot fill (a token known only by its format, or a name with two values)
+// lands in `unfilled`, and the caller refuses the command instead of running it half filled.
+export type Filled = { command: string; filled: string[]; unfilled: string[] }
+
+export function fillCommand(command: string, t: Table): Filled {
+  const filled = new Set<string>()
+  const unfilled = new Set<string>()
+  const out = command.replace(/<(?:hidden|oculto):([A-Za-z0-9_-]+)>/g, (whole, name: string) => {
+    const v = t.valueOf.get(name)
+    if (v === undefined || t.ambiguous.has(name)) {
+      unfilled.add(name)
+      return whole
+    }
+    filled.add(name)
+    return v
+  })
+  return { command: out, filled: [...filled].sort(), unfilled: [...unfilled].sort() }
+}
+
+export function unfilledText(names: readonly string[], t: Table): string {
+  const why = names.map((n) => (t.ambiguous.has(n) ? `${n} has two different values in your files` : `the value of ${n} is not known, only its format`))
+  return (
+    `secret-guard: did not run the command, because it cannot fill in ${names.map(placeholder).join(', ')}: ${why.join('; ')}. ` +
+    'Read the value inside the command instead, from its variable or .env file (for example `set -a; . ./.env; set +a` before the command), so it never shows in the transcript.'
+  )
+}
+
+export function filledNotice(names: readonly string[]): string {
+  return `secret-guard: filled in the real value of ${names.join(', ')} in the command. The transcript keeps the placeholder, and the output is hidden as usual.`
 }
 
 // The name-to-value map for restoring in one file: the file's own assignments win, because the same

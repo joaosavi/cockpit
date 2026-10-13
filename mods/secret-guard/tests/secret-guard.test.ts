@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { accepts, buildTable, candidates, expandHome, options, redactedNotice } from '../hooks/rules.ts'
+import { accepts, buildTable, candidates, expandHome, fillCommand, type Found, options, redactedNotice, redactText } from '../hooks/rules.ts'
 
 // Every secret here is fake and assembled at run time, so no file of the mod holds a string that looks
 // like a real token, and the tests never touch the real filesystem or environment.
@@ -543,4 +543,50 @@ test('the list is built in the background when the session starts, before any to
   // The build scanned the repos folder for .env files with no tool call yet.
   expect(w.lists > 0).toBe(true)
   expect(w.calls.length).toBe(0)
+})
+
+// --- token formats, and placeholders inside a command ---------------------------------------------------
+
+const FAKE_OPENAI = 'sk-' + 'proj-' + 'Fake'.repeat(9)
+const FAKE_GOOGLE = 'AI' + 'za' + 'Fake_'.repeat(7)
+const FAKE_STRIPE = 'sk' + '_live_' + 'Fake0'.repeat(5)
+const FAKE_JWT = 'ey' + 'J' + 'hbGciOiJIUzI1NiJ9' + '.' + 'ey' + 'J' + 'zdWIiOiIxMjM0NTY3ODkwIn0' + '.' + 'FakeSignature_0123456789'
+const FAKE_PEM = '-----BEGIN ' + 'RSA PRIVATE KEY-----\nMIIEfake\n-----END ' + 'RSA PRIVATE KEY-----'
+
+test('the new token formats are hidden by kind, and a plain sk- word or a short eyJ is left alone', () => {
+  const t = buildTable({ secrets: null, envFiles: [], environ: [], minLength: 12 })
+  const found: Found = new Map()
+  const out = redactText([FAKE_OPENAI, FAKE_GOOGLE, FAKE_STRIPE, FAKE_JWT, FAKE_PEM, FAKE_ANTHROPIC].join('\n'), t, found)
+  expect(out).toBe(['<hidden:openai>', '<hidden:google>', '<hidden:stripe>', '<hidden:jwt>', '<hidden:private-key>', '<hidden:anthropic>'].join('\n'))
+  expect(redactText('use sk-learn and eyJhbGc in docs', t, new Map())).toBe('use sk-learn and eyJhbGc in docs')
+})
+
+test('a name with two different values is ambiguous, and a token known only by its format cannot be filled', () => {
+  const t = buildTable({
+    secrets: null,
+    envFiles: [{ path: '/a/.env', text: `API_TOKEN=${FAKE_AUTH}\n` }, { path: '/b/.env', text: `API_TOKEN=${FAKE_NEW}\nOTHER_TOKEN=${FAKE_API}\n` }],
+    environ: [],
+    minLength: 12,
+  })
+  expect([...t.ambiguous]).toEqual(['API_TOKEN'])
+  expect(fillCommand('curl -H "X: <hidden:OTHER_TOKEN>" x', t)).toEqual({ command: `curl -H "X: ${FAKE_API}" x`, filled: ['OTHER_TOKEN'], unfilled: [] })
+  expect(fillCommand('echo <hidden:API_TOKEN> <hidden:github>', t).unfilled).toEqual(['API_TOKEN', 'github'])
+})
+
+test('a Bash command with a placeholder runs with the real value, and its output is hidden again', REPOS, async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`authorized as ${FAKE_GH}\n`))
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'curl -H "Authorization: token <hidden:GITHUB_TOKEN>" api' })
+  expect(w.calls[0]?.command).toBe(`curl -H "Authorization: token ${FAKE_GH}" api`)
+  expect(stdoutOf(r)).toBe('authorized as <hidden:GITHUB_TOKEN>\n')
+  expect(dump(r)).toContain('filled in the real value of GITHUB_TOKEN')
+})
+
+test('a Bash command with a placeholder the mod cannot fill does not run', REPOS, async ($, on) => {
+  const w = freshWorld()
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'echo <hidden:openai>' })
+  expect(w.calls).toEqual([])
+  expect(r).toMatchObject({ deny: expect.stringContaining('the value of openai is not known, only its format') })
 })

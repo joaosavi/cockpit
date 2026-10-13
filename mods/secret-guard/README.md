@@ -8,9 +8,11 @@ A secret that reaches the transcript is sent to the model and kept in the sessio
 
 ## What it does
 
-- The values come from the secrets file, from every `.env*` file under the `.env` root (5 levels deep) when you set one, from environment variables with a secret-looking name (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH` and others), and from the password of every `scheme://user:password@` URL. Known token formats (GitHub, Anthropic, AWS, Slack) are hidden even when no list has them.
+- The values come from the secrets file, from every `.env*` file under the `.env` root (5 levels deep) when you set one, from environment variables with a secret-looking name (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH` and others), and from the password of every `scheme://user:password@` URL. Known token formats are hidden even when no list has them: GitHub, Anthropic, OpenAI, AWS, Google, Stripe, Slack, JWT and private key blocks. They show as `<hidden:github>`, `<hidden:jwt>` and so on.
 - A value that also appears in a `.example` file is already public and stays visible.
 - When the agent writes `<hidden:NAME>` into a `.env` file or the secrets file, the mod writes the real value in its place. The agent can edit those files without ever seeing a value.
+- When the agent writes `<hidden:NAME>` in a Bash command, the mod runs the command with the real value, and the output comes back hidden as usual. The transcript keeps the command as written. The agent can call an API with a token it never sees.
+- A placeholder the mod cannot fill stops the command instead: a token known only by its format, or a name with two different values in your files, such as the same `DATABASE_URL` in two projects. The agent is told to read the value inside the command, from its variable or `.env` file.
 - If the mod itself fails, it withholds the output instead of passing it unchecked.
 
 ## Commands
@@ -29,7 +31,7 @@ By default the mod reads no `.env` files: the list holds the secrets file, the e
 
 ## What it records
 
-`~/.local/state/mods/secret-guard/<day>-<session>.jsonl`: one line each time the list is rebuilt, a result is redacted or a placeholder is restored, with secret names and counts only, plus one `session-summary` line. Each line has `at`, `session` and `event`. The values live only in the mod's memory, never on disk.
+`~/.local/state/mods/secret-guard/<day>-<session>.jsonl`: one line each time the list is rebuilt (with how long it took), a result is redacted, a placeholder is restored or filled in a command, or a command is stopped, with secret names and counts only, plus one `session-summary` line. Each line has `at`, `session` and `event`. The values live only in the mod's memory, never on disk.
 
 ## Cost
 
@@ -40,6 +42,7 @@ The hook added about 64 ms per tool call on the author's VPS (60 calls measured 
 - A secret shorter than `minLength` that matches no known format stays visible.
 - A secret that the agent already saw before this mod loaded is still in the transcript.
 - A `.env` file outside `envRoot` is not read, so its values stay visible unless another source has them.
+- Filling a placeholder in a command lets the agent use a secret, including sending it to a server. It cannot do more than it already could with `source .env`, but the command runs without a prompt of its own.
 - The mod also restores `<oculto:NAME>`, the placeholder an earlier Perl hook wrote.
 
 ## Install
