@@ -6,9 +6,12 @@
 // line. A side call like this neither interrupts the agent nor records anything in the conversation,
 // and the command is immediate, so it also runs mid-turn.
 //
-// Typed at the terminal or the desktop app, the answer shows in a card at the right edge of the band
-// above the prompt, at once, also mid-turn. Its options are buttons that write the answer into the
-// prompt. The card closes with its button, with an option, or when the next prompt goes. From Remote
+// Typed at the terminal or the desktop app, the answer shows in a card centered in the band above the
+// prompt, at once, also mid-turn. Its options are buttons that write the answer into the prompt. Their
+// keys are digits, because a bare digit in an empty prompt is the only key that reaches the band
+// without focusing it first; a letter would land in the prompt. The card closes with `0`, with an
+// option, or when the next prompt goes. A survey (Claude Code's own feedback question) answers to the
+// same digits, so while one shows the card stays but its buttons turn to plain text. From Remote
 // Control, which draws no band, the answer comes as text. That text lands in the main agent's
 // context, so it ends with a note saying it is a summary for the user and not an instruction.
 //
@@ -39,7 +42,6 @@ import {
   system,
   type Texts,
   texts,
-  type Trigger,
   type Usage,
   usage,
 } from './rules.ts'
@@ -57,7 +59,7 @@ const MIN_COLUMNS = 40
 // user can clear, and nothing left to do.
 const STATE_COLOR: Record<State, Color> = { working: 'suggestion', waiting: 'warning', blocked: 'error', done: 'success' }
 
-// What the pane draws. The command and the re-run key fill it; the render hook only reads it.
+// What the card draws. The command fills it; the render hook only reads it.
 // `activity` is the turn state at the moment of the call, frozen, since the pane does not redraw on a
 // timer and a live "idle 4m" would go stale anyway.
 type Shared = { question: string; activity: string }
@@ -118,9 +120,9 @@ function closeCard($: Api) {
   $.ui.invalidate('ui.render')
 }
 
-// One use of /wtf: read the session, ask the model, fill the pane, write the diary line. Every path
+// One use of /wtf: read the session, ask the model, fill the card, write the diary line. Every path
 // returns the text reply, so a failure reaches Remote Control as one plain line too.
-async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
+async function summarize($: Api, q: string): Promise<string> {
   latestRun += 1
   const run = latestRun
   const started = await $.clock.now()
@@ -166,18 +168,19 @@ async function summarize($: Api, q: string, trigger: Trigger): Promise<string> {
   spent = addUsage(spent, used)
   modelMs += ms
   try {
-    await log($, askedEntry({ trigger, hasQuestion: q !== '', outcome, state, ms, usage: used, digestChars }))
+    await log($, askedEntry({ hasQuestion: q !== '', outcome, state, ms, usage: used, digestChars }))
   } catch {
     // a diary that cannot be written does not hold up the answer
   }
   return text
 }
 
-// What the card's buttons do: write an option into the prompt, ask again, close.
-type Actions = { choose: (o: Option) => Promise<void>; rerun: () => Promise<void>; close: () => void }
+// What the card's buttons do: write an option into the prompt, close. Null while a survey holds the
+// digits, so the card draws no button.
+type Actions = { choose: (o: Option) => Promise<void>; close: () => void } | null
 
-// The title row: `wtf`, then the project and the turn state, dim and cut to fit, then the close button.
-function header(ui: Ui, v: View, width: number, close: () => void): RenderElement {
+// The title row: `wtf`, then the project and the turn state, dim and cut to fit.
+function header(ui: Ui, v: View, width: number): RenderElement {
   const meta = [project, v.activity].filter((s) => s !== '')
   return ui.Box({
     flexDirection: 'row',
@@ -185,7 +188,6 @@ function header(ui: Ui, v: View, width: number, close: () => void): RenderElemen
     children: [
       ui.Text({ bold: true, color: 'claude', children: ['wtf'] }),
       ui.Box({ flexGrow: 1, flexShrink: 1, children: [ui.Text({ dimColor: true, wrap: 'truncate-end', children: [meta.length > 0 ? `  ${meta.join(' · ')}` : ''] })] }),
-      ui.Button({ key: 'wtf-close', label: '✕', plain: true, dimColor: true, onPress: close }),
     ],
   })
 }
@@ -208,8 +210,8 @@ const OPTION_INDENT = 2
 
 // An option as a button: its number is the key that presses it, drawn like Claude Code's own
 // choices (`1: Delete`), then the mark and the cost, dim. Pressing it writes the option into the
-// prompt for the user to send.
-function optionRow(ui: Ui, o: Option, width: number, choose: (o: Option) => Promise<void>): RenderElement {
+// prompt for the user to send. Without `a`, the same row as plain text.
+function optionRow(ui: Ui, o: Option, width: number, a: Actions): RenderElement {
   const label = o.name ?? o.text
   const tail: (RenderElement | string)[] = [
     ...(o.mark === null ? [] : [' ', ui.Text({ italic: true, color: 'success', children: [o.mark] })]),
@@ -224,7 +226,11 @@ function optionRow(ui: Ui, o: Option, width: number, choose: (o: Option) => Prom
     children: [
       ui.Box({
         flexShrink: 0,
-        children: [ui.Button({ key: `wtf-option-${o.number}`, label, plain: true, ...(isNumber ? { hotkey: o.number } : {}), onPress: () => choose(o) })],
+        children: [
+          a === null
+            ? ui.Text({ children: [ui.Text({ dimColor: true, children: [`${o.number}: `] }), label] })
+            : ui.Button({ key: `wtf-option-${o.number}`, label, plain: true, ...(isNumber ? { hotkey: o.number } : {}), onPress: () => a.choose(o) }),
+        ],
       }),
       ui.Box({ flexShrink: 1, children: [ui.Text({ wrap: 'wrap', children: tail })] }),
     ],
@@ -233,7 +239,7 @@ function optionRow(ui: Ui, o: Option, width: number, choose: (o: Option) => Prom
 
 // The answer: the state badge and the Now sentence beside it, the action the agent expects, the
 // options, then any line in no known shape. An answer that drifted from the shape shows as it came.
-function answerRows(ui: Ui, a: Answer, width: number, choose: (o: Option) => Promise<void>): RenderElement[] {
+function answerRows(ui: Ui, a: Answer, width: number, actions: Actions): RenderElement[] {
   if (a.state === null) return [ui.Text({ wrap: 'wrap', children: [a.body] })]
   const badge = ` ${t.badges[a.state]} `
   const rows: RenderElement[] = [
@@ -248,36 +254,38 @@ function answerRows(ui: Ui, a: Answer, width: number, choose: (o: Option) => Pro
   ]
   const you: RenderElement[] = []
   if (a.you !== null) you.push(leadRow(ui, width, t.you.length + 1, ui.Text({ color: 'suggestion', children: [t.you] }), ui.Text({ wrap: 'wrap', children: [a.you] }), 'you'))
-  you.push(...a.options.map((o) => optionRow(ui, o, width, choose)), ...a.rest.map((line) => ui.Text({ wrap: 'wrap', children: [line] })))
+  you.push(...a.options.map((o) => optionRow(ui, o, width, actions)), ...a.rest.map((line) => ui.Text({ wrap: 'wrap', children: [line] })))
   if (you.length > 0) rows.push(ui.Box({ flexDirection: 'column', marginTop: 1, width, children: you }))
   return rows
 }
 
-function body(ui: Ui, v: View, width: number, choose: (o: Option) => Promise<void>): RenderElement[] {
+function body(ui: Ui, v: View, width: number, a: Actions): RenderElement[] {
   if (v.kind === 'waiting') return [ui.Text({ dimColor: true, children: [t.reading] })]
   if (v.kind === 'failed') return [ui.Text({ wrap: 'wrap', ...(v.isError ? { color: 'error' } : { dimColor: true }), children: [v.line] })]
-  return answerRows(ui, v.answer, width, choose)
+  return answerRows(ui, v.answer, width, a)
 }
 
-// The keys under the answer: re-run, hidden while a call is in flight, and close.
-function footer(ui: Ui, v: View, a: Actions): RenderElement {
-  const keys: RenderElement[] = []
-  if (v.kind !== 'waiting') keys.push(ui.Button({ key: 'wtf-rerun', label: t.rerun, hotkey: 'r', plain: true, onPress: a.rerun }))
-  keys.push(ui.Button({ key: 'wtf-close-key', label: t.close, hotkey: 'x', plain: true, onPress: a.close }))
-  return ui.Box({ flexDirection: 'row', columnGap: 3, children: keys })
+// The line under the answer: the close key, and how to ask again. While a survey shows, a dim line
+// in its place.
+function footer(ui: Ui, a: Actions): RenderElement {
+  if (a === null) return ui.Text({ dimColor: true, children: [t.afterSurvey] })
+  return ui.Box({
+    flexDirection: 'row',
+    columnGap: 3,
+    children: [ui.Button({ key: 'wtf-close', label: t.close, hotkey: '0', plain: true, onPress: a.close }), ui.Text({ dimColor: true, children: [t.again] })],
+  })
 }
 
-// The card: a rounded border in the state's color, at the right edge of the band.
+// The card: a rounded border in the state's color, centered in the band.
 function card(ui: Ui, v: View, columns: number, a: Actions): RenderElement {
-  const outer = Math.min(CARD_WIDTH, columns - 2)
+  const outer = Math.min(CARD_WIDTH, columns)
   const width = outer - 4
-  const rows: RenderElement[] = [header(ui, v, width, a.close)]
+  const rows: RenderElement[] = [header(ui, v, width)]
   if (v.question !== '') rows.push(ui.Text({ dimColor: true, wrap: 'wrap', children: [`> ${v.question}`] }))
-  rows.push(ui.Box({ flexDirection: 'column', width, children: body(ui, v, width, a.choose) }), footer(ui, v, a))
+  rows.push(ui.Box({ flexDirection: 'column', width, children: body(ui, v, width, a) }), footer(ui, a))
   const border: Color = v.kind === 'answer' && v.answer.state !== null ? STATE_COLOR[v.answer.state] : 'claude'
   return ui.Box({
-    justifyContent: 'flex-end',
-    paddingRight: 1,
+    justifyContent: 'center',
     children: [ui.Box({ width: outer, flexDirection: 'column', gap: 1, borderStyle: 'round', borderColor: border, paddingX: 1, children: rows })],
   })
 }
@@ -326,27 +334,26 @@ export function register(on: On, values: PluginOptions) {
   on('command.run', { command: 'wtf' }, async ($, e) => {
     const surfaces = await $.session.surfaces()
     const hasBand = surfaces.includes('terminal') || surfaces.includes('desktop')
-    if (e.origin?.kind !== 'composer' || !hasBand) return { text: await summarize($, question(e.args), 'command') }
+    if (e.origin?.kind !== 'composer' || !hasBand) return { text: await summarize($, question(e.args)) }
     cardOpen = true
-    await summarize($, question(e.args), 'command')
+    await summarize($, question(e.args))
     return {}
   })
 
-  // The card sits under what the other mods draw in the band, and steps aside for a survey.
+  // The card sits under what the other mods draw in the band. A survey leaves it up, without buttons.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (!cardOpen || e.props.hasSurvey || e.props.bodyColumns < MIN_COLUMNS) return next(e)
+    if (!cardOpen || e.props.bodyColumns < MIN_COLUMNS) return next(e)
     const ui = $.ui.resolve(e)
     const below = await next(e).catch(() => null)
-    const actions: Actions = {
-      choose: async (o) => {
-        await $.prompt.fill({ text: o.name ?? o.text })
-        closeCard($)
-      },
-      rerun: async () => {
-        await summarize($, view.question, 'rerun')
-      },
-      close: () => closeCard($),
-    }
+    const actions: Actions = e.props.hasSurvey
+      ? null
+      : {
+          choose: async (o) => {
+            await $.prompt.fill({ text: o.name ?? o.text })
+            closeCard($)
+          },
+          close: () => closeCard($),
+        }
     const ours = card(ui, view, e.props.bodyColumns, actions)
     return below ? ui.Box({ flexDirection: 'column', children: [below, ours] }) : ours
   })

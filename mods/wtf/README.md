@@ -15,13 +15,13 @@ The command runs at once, also in the middle of a turn.
 
 ## The card
 
-Typed at the terminal or in the desktop app, the answer shows in a card at the right edge of the
-band above the prompt. It shows at once, also while the agent works, and no text is printed, so
+Typed at the terminal or in the desktop app, the answer shows in a card centered in the band above
+the prompt. It shows at once, also while the agent works, and no text is printed, so
 nothing shows twice:
 
 ```text
                     ╭──────────────────────────────────────────────────────────────╮
-                    │ wtf  claude-devcontainer · idle 24s                        ✕ │
+                    │ wtf  claude-devcontainer · idle 24s                          │
                     │                                                              │
                     │  WAITING FOR YOU  The agent asked whether to use red or blue │
                     │                   and waits for your pick.                   │
@@ -30,7 +30,7 @@ nothing shows twice:
                     │   1: Red recommended · nothing else depends on it            │
                     │   2: Blue                                                    │
                     │                                                              │
-                    │ r: re-run   x: close                                         │
+                    │ 0: close   /wtf to ask again                                 │
                     ╰──────────────────────────────────────────────────────────────╯
 ```
 
@@ -38,13 +38,15 @@ nothing shows twice:
   `DONE`. Options appear only when a decision is pending.
 - Each option is a button. Press its digit with the prompt empty, or click it, and the option goes
   into the prompt for you to send. The card closes.
-- `r` asks again with the same question. `x` or `✕` closes the card. Sending the next prompt closes
-  it too, since the answer is then out of date.
+- `0` closes the card, and `/wtf` again asks again. Sending the next prompt closes it too, since the
+  answer is then out of date. The keys are digits because a digit typed in an empty prompt is the
+  only key that reaches the card; a letter would go into the prompt.
 - When the turn has ended, the card never says `WORKING`: the model sometimes still reads the
   agent as busy, and the mod corrects it to `DONE`, or to `WAITING FOR YOU` when the agent asked
   something.
-- The card sits under what other mods draw in the band, steps aside for a survey, and needs a band
-  40 columns wide.
+- While Claude Code shows its own feedback survey, the card stays, but its options and keys turn to
+  plain text, because the survey answers to the same digits. They come back once you answer it.
+- The card sits under what other mods draw in the band, and needs a band 40 columns wide.
 
 ## From Remote Control
 
@@ -88,7 +90,7 @@ instruction:
 ## The diary
 
 The mod writes one JSON line per use to `~/.local/state/mods/wtf/<day>-<session>.jsonl`: the
-trigger (`command` or `rerun`), the outcome, the state, the time, the tokens, and the size of the
+outcome, the state, the time, the tokens, and the size of the
 digest. It never writes your question, the session content, or the answer. At the end of each
 session, one `session-summary` line counts the uses by outcome and sums their tokens. Each line
 has `at`, `session` and `event`. The `mod-report` mod reads these lines for `/mods`.

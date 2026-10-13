@@ -287,7 +287,7 @@ test('no messages gives one line without calling the model', async ($, on) => {
   const r = await $.command.run({ command: 'wtf', args: '' })
   expect(r.text).toBe('nothing to summarize yet.')
   expect(c.calls).toEqual([])
-  expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'command', hasQuestion: false, outcome: 'no-messages', state: null, usage: null })
+  expect(lines(c).at(-1)).toMatchObject({ event: 'asked', hasQuestion: false, outcome: 'no-messages', state: null, usage: null })
 })
 
 test('an API error gives one line with the status and the kind', async ($, on) => {
@@ -352,8 +352,9 @@ test('typed at the terminal, the answer goes to a card at the right edge of the 
   expect((await ui.find({ type: 'Text', text: ' WAITING FOR YOU ' }))?.props).toMatchObject({ inverse: true, color: 'warning' })
   expect((await ui.find({ key: 'wtf-option-1', text: 'Delete' }))?.props).toMatchObject({ hotkey: '1', plain: true })
   expect((await ui.findAll({ type: 'Text', text: 'recommended' })).some((x) => Reflect.get(Object(x.props), 'italic') === true)).toBe(true)
-  expect((await ui.find({ key: 'wtf-rerun' }))?.props).toMatchObject({ hotkey: 'r', plain: true })
-  expect(await ui.find({ key: 'wtf-close' })).toBeDefined()
+  expect((await ui.find({ key: 'wtf-close' }))?.props).toMatchObject({ hotkey: '0', plain: true })
+  expect(await ui.find({ type: 'Text', text: '/wtf to ask again' })).toBeDefined()
+  expect((await ui.findAll({ type: 'Box' })).some((b) => Reflect.get(Object(b.props), 'justifyContent') === 'center')).toBe(true)
 })
 
 test('the desktop app gets the card too, and Remote Control gets the text', async ($, on) => {
@@ -381,23 +382,23 @@ test('pressing an option writes it into the prompt and closes the card', async (
   expect(await ui.find({ key: 'wtf-option-2' })).toBeUndefined()
 })
 
-test('the close button and a new prompt each close the card', async ($, on) => {
+test('0 and a new prompt each close the card', async ($, on) => {
   const c = scenario(answered(), ['terminal'])
   setup(on, c)
   await $.session.start(start)
   await $.command.run(TYPED)
   let ui = await $.ui.mount(BAND)
   await ui.press({ key: 'wtf-close' })
-  expect(await ui.find({ key: 'wtf-rerun' })).toBeUndefined()
+  expect(await ui.find({ key: 'wtf-close' })).toBeUndefined()
   await ui.unmount()
   await $.command.run(TYPED)
   ui = await $.ui.mount(BAND)
-  expect(await ui.find({ key: 'wtf-rerun' })).toBeDefined()
+  expect(await ui.find({ key: 'wtf-close' })).toBeDefined()
   await $.turn.start({ text: 'go on', turnId: 't2' })
-  expect(await ui.find({ key: 'wtf-rerun' })).toBeUndefined()
+  expect(await ui.find({ key: 'wtf-close' })).toBeUndefined()
 })
 
-test('while the model answers the card says it is reading and hides the re-run key', async ($, on) => {
+test('while the model answers the card says it is reading', async ($, on) => {
   const c = { ...scenario(answered(), ['terminal']), modelMs: 1000 }
   const clock = setup(on, c)
   await $.session.start(start)
@@ -407,25 +408,22 @@ test('while the model answers the card says it is reading and hides the re-run k
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ type: 'Text', text: 'Reading…' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '  work · running' })).toBeDefined()
-  expect(await ui.find({ key: 'wtf-rerun' })).toBeUndefined()
   await clock.advance(1000)
   await pending
-  expect(await ui.find({ key: 'wtf-rerun' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Reading…' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: ' WORKING ' })).toBeDefined()
 })
 
-test('the re-run key asks the model again, with the same question, and logs it as a re-run', async ($, on) => {
-  const c = scenario(answered(), ['terminal'])
+test('a survey leaves the card up, with its options and keys as plain text', async ($, on) => {
+  const c = scenario(answered(WAITING), ['terminal'])
   setup(on, c)
   await $.session.start(start)
-  await $.turn.start({ text: 'deploy', turnId: 't1' })
-  await $.command.run({ ...TYPED, args: 'and now?' })
-  c.complete = answered(`STATE: done\n${BODY}`)
-  const ui = await $.ui.mount(BAND)
-  await ui.press({ key: 'wtf-rerun' })
-  expect(c.calls).toHaveLength(2)
-  expect(c.calls[1]?.prompt).toContain('<question>\nand now?\n</question>')
-  expect(lines(c).at(-1)).toMatchObject({ event: 'asked', trigger: 'rerun', hasQuestion: true, outcome: 'answered', state: 'done' })
-  expect(await ui.find({ type: 'Text', text: ' DONE ' })).toBeDefined()
+  await $.command.run(TYPED)
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true } })
+  expect(await ui.find({ type: 'Text', text: ' WAITING FOR YOU ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Delete' })).toBeDefined()
+  expect(await ui.find({ type: 'Button' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Answer the survey to use these options.' })).toBeDefined()
 })
 
 test('each state colors its badge and the card border', async ($, on) => {
@@ -460,10 +458,10 @@ test('a card narrower than the band fits it, and a band too narrow shows no card
   await $.session.start(start)
   await $.command.run(TYPED)
   let ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 50 } })
-  expect((await ui.findAll({ type: 'Box' })).some((b) => Reflect.get(Object(b.props), 'width') === 48 && Reflect.get(Object(b.props), 'borderStyle') === 'round')).toBe(true)
+  expect((await ui.findAll({ type: 'Box' })).some((b) => Reflect.get(Object(b.props), 'width') === 50 && Reflect.get(Object(b.props), 'borderStyle') === 'round')).toBe(true)
   await ui.unmount()
   ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 30 } })
-  expect(await ui.find({ key: 'wtf-rerun' })).toBeUndefined()
+  expect(await ui.find({ key: 'wtf-close' })).toBeUndefined()
 })
 
 // --- the diary ---
@@ -477,7 +475,6 @@ test('the diary line has the outcome, the state, the time and the usage, and nev
     at: '1970-01-01T00:00:00.000Z',
     session: 'abcdef12',
     event: 'asked',
-    trigger: 'command',
     hasQuestion: true,
     outcome: 'answered',
     state: 'working',

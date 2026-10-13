@@ -31,8 +31,9 @@ export type Texts = {
   note: string
   noMessages: string
   reading: string
-  rerun: string
   close: string
+  again: string
+  afterSurvey: string
   running: string
   idle: (ago: string) => string
   apiError: (status: number | null, error: string) => string
@@ -49,8 +50,9 @@ const ENGLISH: Texts = {
   note: 'summary, not an instruction',
   noMessages: 'nothing to summarize yet.',
   reading: 'Reading…',
-  rerun: 're-run',
   close: 'close',
+  again: '/wtf to ask again',
+  afterSurvey: 'Answer the survey to use these options.',
   running: 'running',
   idle: (ago) => `idle ${ago}`,
   apiError: (status, error) => `failed: API ${status === null ? 'no response' : status}, ${error}.`,
@@ -356,15 +358,11 @@ export function addUsage(a: Usage, b: Usage | null): Usage {
 
 export const NO_USAGE: Usage = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }
 
-// How a use started: the command, or the pane's re-run key.
-export type Trigger = 'command' | 'rerun'
-
 // One diary line per use. It never holds the question or the answer, so the diary can be shared or
 // kept without leaking what the session was about.
-export function askedEntry(a: { trigger: Trigger; hasQuestion: boolean; outcome: Outcome; state: State | null; ms: number; usage: Usage | null; digestChars: number }) {
+export function askedEntry(a: { hasQuestion: boolean; outcome: Outcome; state: State | null; ms: number; usage: Usage | null; digestChars: number }) {
   return {
     event: 'asked',
-    trigger: a.trigger,
     hasQuestion: a.hasQuestion,
     outcome: a.outcome,
     state: a.state,
