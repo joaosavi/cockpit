@@ -15,4 +15,3 @@
 - [Tela sem texto explicativo](tela-sem-texto-explicativo.md) — nada de subtítulo, nota ou legenda que explica o óbvio; fonte de 13px no mínimo e espaço medido
 - [Sessões combinam a vez](sessoes-combinam-a-vez.md) — com outra sessão na máquina, avisar "vou rodar X" e "liberado" antes e depois de push, typecheck e teste
 - [Seguir até acabar](seguir-ate-acabar.md) — com trabalho autônomo pedido, não parar para relatar marco; só no fim ou travado no que só o João faz
-- [Sessões combinam a vez](sessoes-combinam-a-vez.md) — com outra sessão na máquina, avisar "vou rodar X" e "liberado" antes e depois de push, typecheck e teste
