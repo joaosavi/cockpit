@@ -12,3 +12,5 @@
 - [Resolver de forma definitiva](resolver-de-forma-definitiva.md) — bug se resolve na causa; gambiarra só quando o João pedir explicitamente
 - [Prévia no terminal](previa-no-terminal.md) — mudança visual de terminal: mandar comando para o João rodar no terminal dele antes de publicar
 - [Swap do container](swap-do-container.md) — getdemo-dev com 7 GiB de RAM e 14 GiB de swap pelo raw.lxc; mudar limits.memory ao vivo desfaz o swap
+- [Tela sem texto explicativo](tela-sem-texto-explicativo.md) — nada de subtítulo, nota ou legenda que explica o óbvio; fonte de 13px no mínimo e espaço medido
+- [Sessões combinam a vez](sessoes-combinam-a-vez.md) — com outra sessão na máquina, avisar "vou rodar X" e "liberado" antes e depois de push, typecheck e teste
