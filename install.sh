@@ -69,5 +69,5 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now getdemo-rc.service zippi-rc.service esag-rc.service resgate-rc.service \
   getdemo-faxina.timer sessoes-esquecidas.timer sessoes-reinicio.timer cockpit-panel.service
 
-[ -f "$HOME/getdemo/.env.bw-agente" ] || echo "Falta o ~/getdemo/.env.bw-agente. Copie o .env.bw-agente.example e preencha." >&2
+grep -q '^BW_PASSWORD=' "$HOME/getdemo/.env" 2>/dev/null || echo "Falta a seção BW_ no ~/getdemo/.env. Copie as linhas do .env.bw-agente.example e preencha." >&2
 perl "$R/hooks/segredo.pl" --teste

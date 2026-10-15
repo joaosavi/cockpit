@@ -19,7 +19,7 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | `ambientes/` | O `CLAUDE.md` de cada pasta que um serviço `*-rc` abre, como `getdemo` e `esag` | `~/<pasta>/CLAUDE.md` |
 | `memorias/` | A memória automática do Claude Code de cada projeto, como `getdemo` e `esag`, e a `vps`, com o que vale para qualquer pasta. O `CLAUDE.md` global importa o índice da `vps` e diz quando salvar em cada uma | `~/.claude/projects/<projeto>/memory/`; a `vps` fica no repo |
 | `docs/always-on.html` | O guia "Claude Code Always-On", exportado do claude.ai | |
-| `.env.bw-agente.example` | Modelo das credenciais da conta do agente no Vaultwarden | `~/getdemo/.env.bw-agente` |
+| `.env.bw-agente.example` | Modelo das credenciais da conta do agente no Vaultwarden | seção `BW_` do `~/getdemo/.env` |
 
 ## Mude a máquina e o repo junto
 
@@ -49,8 +49,8 @@ O guia em `docs/always-on.html` cobre a máquina: o usuário, o SSH, o Docker, o
 2. Pelo SSH, crie as credenciais da conta do agente:
 
 	```sh
-	cp ~/claude-devcontainer/.env.bw-agente.example ~/getdemo/.env.bw-agente
-	chmod 600 ~/getdemo/.env.bw-agente
+	cat ~/claude-devcontainer/.env.bw-agente.example >> ~/getdemo/.env
+	chmod 600 ~/getdemo/.env
 	```
 
 3. Confira os nomes de segredo que o agente recebe, sem os valores:
@@ -126,4 +126,4 @@ Limites conhecidos:
 
 - O `browser_evaluate` devolve sem máscara qualquer transformação do valor, como o tamanho.
 - A máscara troca por valor. Dois logins com o mesmo usuário aparecem com o nome de um deles.
-- O usuário que roda as sessões lê o `.env.bw-agente` e tem sudo. O conjunto evita vazamento por acidente e não segura um agente que queira a senha.
+- O usuário que roda as sessões lê o `~/getdemo/.env` e tem sudo. O conjunto evita vazamento por acidente e não segura um agente que queira a senha.

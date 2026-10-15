@@ -5,7 +5,7 @@
 #   navegador-cofre          inicia o MCP
 #   navegador-cofre --nomes  lista só os nomes das variáveis, sem valor
 set -euo pipefail
-CRED="$HOME/getdemo/.env.bw-agente"
+CRED="$HOME/getdemo/.env"   # só as linhas BW_ são lidas
 FORA='paypal\.com'   # domínios que nunca entram
 
 MCP='@playwright/mcp@0.0.83'   # versão fixa: @latest baixa código novo a cada partida
@@ -14,7 +14,8 @@ MCP='@playwright/mcp@0.0.83'   # versão fixa: @latest baixa código novo a cada
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/navegador-cofre.lock"
 flock -w 120 9
 
-set -a; . "$CRED"; set +a
+# Só as BW_: o resto do arquivo é credencial de outros serviços e não entra no ambiente do MCP.
+set -a; . <(grep -E '^BW_[A-Z]+=' "$CRED"); set +a
 bw login --apikey </dev/null >/dev/null 2>&1 || true
 # A chave vai por variável de ambiente: em --session ela aparece no `ps` de qualquer processo.
 export BW_SESSION
