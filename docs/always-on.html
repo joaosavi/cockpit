@@ -764,8 +764,8 @@ OOMPolicy=continue
 [Unit]
 Description=Reserva de memória do servidor de resgate
 [Slice]
-MemoryMin=1G
-MemoryMax=1536M
+MemoryMin=512M
+MemoryMax=1G
 CPUWeight=1000
    Crie a pasta com mkdir -p ~/resgate e o script ~/.local/bin/resgate-rc, com chmod 755. Use o mesmo --permission-mode de &lt;flags&gt;:
 #!/bin/sh
@@ -777,7 +777,7 @@ done
    Grave ~/resgate/CLAUDE.md:
 # Servidor de resgate
 
-Esta sessão roda em resgate.slice, com 1 GiB reservado, para responder quando as sessões do projeto estão no teto de memória. Rode `memoria` primeiro.
+Esta sessão roda em resgate.slice, com 512 MB reservados, para responder quando as sessões do projeto estão no teto de memória. Rode `memoria` primeiro.
 
 Libere do menos destrutivo para o mais destrutivo, e rode `memoria` depois de cada passo:
 1. Mate o comando pesado (tsc, vitest, build, navegador) com kill. A sessão que o rodou continua viva.
@@ -825,7 +825,7 @@ Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e pa
 | Grupo systemd | Quem roda lá | Alto | Teto |
 |---|---|---|---|
 | `agentes.slice` | as sessões do projeto | &lt;alto&gt; | &lt;teto&gt; |
-| `resgate.slice` | o servidor de resgate | 1 GiB reservado | 1,5 GiB |
+| `resgate.slice` | o servidor de resgate | 512 MB reservados | 1 GiB |
 
 Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado.
 
@@ -1630,7 +1630,7 @@ sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now agente-rc</p
 <article class="page" id="memoria" data-title="Limites de memória" hidden>
   <div class="crumb">Montar à mão · passo 7 de 8</div>
   <h1>Limites de memória</h1>
-  <p class="lead">Sem limite, um comando pesado de uma sessão enche a memória da máquina, e as outras sessões e o SSH param junto. Com swap e um teto para as sessões, só o comando pesado morre, e um servidor de resgate com 1 GiB reservado continua abrindo sessão pelo celular. No mesmo grupo do resgate, um job retoma as sessões que pararam por limite de uso.</p>
+  <p class="lead">Sem limite, um comando pesado de uma sessão enche a memória da máquina, e as outras sessões e o SSH param junto. Com swap e um teto para as sessões, só o comando pesado morre, e um servidor de resgate com 512 MB reservados continua abrindo sessão pelo celular. No mesmo grupo do resgate, um job retoma as sessões que pararam por limite de uso.</p>
   <p>Na nossa montagem, num container com 2 núcleos e 7 GB e sem swap, um typecheck com dois <code>tsc</code> de 1 GB cada levou a memória ao limite. Cada conexão SSH passou de 1 segundo para 20 a 77 segundos, e as sessões do app pararam de responder. Esta página monta o swap, o teto das sessões, o servidor de resgate e os limites escritos onde as sessões leem.</p>
 
   <h2>Swap</h2>
@@ -1660,8 +1660,8 @@ cat /proc/swaps</pre></div>
   <p>O serviço do Remote Control entra num grupo do systemd com teto de memória, e tudo o que as sessões dele disparam entra junto: MCP, testes, build e navegador. Passou do alto, o grupo fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado, e a sessão que o rodou continua viva.</p>
   <div class="table-wrap"><table>
     <tr><th>Valor</th><th>Conta</th><th>Na nossa máquina de 7 GB</th></tr>
-    <tr><td>Teto, <code>MemoryMax</code></td><td>O total do <code>free -m</code>, menos 1 GiB do resgate e 1 GiB do sistema e do Docker</td><td><code>5G</code></td></tr>
-    <tr><td>Alto, <code>MemoryHigh</code></td><td>O teto menos 512 MiB</td><td><code>4608M</code></td></tr>
+    <tr><td>Teto, <code>MemoryMax</code></td><td>O total do <code>free -m</code>, menos 512 MB do resgate e 1 GiB do sistema e do Docker</td><td><code>5632M</code></td></tr>
+    <tr><td>Alto, <code>MemoryHigh</code></td><td>O teto menos 512 MiB</td><td><code>5120M</code></td></tr>
     <tr><td>Swap do grupo, <code>MemorySwapMax</code></td><td>Metade do swap</td><td><code>4G</code></td></tr>
   </table></div>
   <p>Cada sessão parada ocupou de 200 a 500 MB, contando o MCP do navegador, e um <code>tsc --noEmit</code> do nosso app web chegou a 1 GB. Troque os três valores pelos da sua conta:</p>
@@ -1687,14 +1687,14 @@ systemctl show -p OOMPolicy agente-rc</pre></div>
   <p>Com mais de um projeto, cada um com o seu serviço do Remote Control, ponha o mesmo drop-in em cada serviço e acrescente nele um teto próprio, para um projeto não ocupar o grupo inteiro. Usamos <code>MemoryHigh=3G</code> e <code>MemoryMax=3584M</code> em cada um de dois projetos, dentro do teto de 5 GB.</p>
 
   <h2>O servidor de resgate</h2>
-  <p>É um segundo servidor do Remote Control, numa pasta própria e fora do teto, com 1 GiB reservado. Quando as sessões do projeto estão no teto, você abre uma sessão nele pelo celular, e ela tem memória para ver o que está acontecendo. O <code>--capacity 2</code> segura o resgate em duas sessões, e o <code>OOMScoreAdjust</code> faz o kernel escolher outro processo antes dele se a máquina inteira ficar sem memória.</p>
+  <p>É um segundo servidor do Remote Control, numa pasta própria e fora do teto, com 512 MB reservados. Quando as sessões do projeto estão no teto, você abre uma sessão nele pelo celular, e ela tem memória para ver o que está acontecendo. O <code>--capacity 2</code> segura o resgate em duas sessões, e o <code>OOMScoreAdjust</code> faz o kernel escolher outro processo antes dele se a máquina inteira ficar sem memória.</p>
   <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>sudo tee /etc/systemd/system/resgate.slice &gt; /dev/null &lt;&lt;'EOF'
 [Unit]
 Description=Reserva de memória do servidor de resgate
 
 [Slice]
-MemoryMin=1G
-MemoryMax=1536M
+MemoryMin=512M
+MemoryMax=1G
 CPUWeight=1000
 EOF
 mkdir -p ~/resgate ~/.local/bin &amp;&amp; cat &gt; ~/.local/bin/resgate-rc &lt;&lt;'EOF'
@@ -1710,7 +1710,7 @@ chmod 755 ~/.local/bin/resgate-rc</pre></div>
   <div class="code"><div class="code-head"><span>bash, na máquina</span><button class="copy">Copiar</button></div><pre>cat &gt; ~/resgate/CLAUDE.md &lt;&lt;'EOF'
 # Servidor de resgate
 
-Esta sessão roda em resgate.slice, com 1 GiB reservado, para responder quando as sessões do projeto estão no teto de memória. Rode `memoria` primeiro.
+Esta sessão roda em resgate.slice, com 512 MB reservados, para responder quando as sessões do projeto estão no teto de memória. Rode `memoria` primeiro.
 
 Libere do menos destrutivo para o mais destrutivo, e rode `memoria` depois de cada passo:
 1. Mate o comando pesado (tsc, vitest, build, navegador) com kill. A sessão que o rodou continua viva.
@@ -1775,7 +1775,7 @@ Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e pa
 | Grupo systemd | Quem roda lá | Alto | Teto |
 |---|---|---|---|
 | `agentes.slice` | as sessões do projeto | 4,5 GiB | 5 GiB |
-| `resgate.slice` | o servidor de resgate | 1 GiB reservado | 1,5 GiB |
+| `resgate.slice` | o servidor de resgate | 512 MB reservados | 1 GiB |
 
 Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado.
 
@@ -2156,7 +2156,7 @@ journalctl -u retomar-limite -n 20 --no-pager</pre></div>
     <tr><td>Ver as sessões em segundo plano</td><td><code>claude agents</code> lista, <code>claude attach &lt;id&gt;</code> entra, <code>claude logs &lt;id&gt;</code> mostra sem entrar</td></tr>
     <tr><td>Ver o painel do servidor</td><td><code>tmux -L rc attach -t rc</code>, e saio com Ctrl+b e depois d</td></tr>
     <tr><td>Ver quanto as sessões usam de memória</td><td><code>memoria</code></td></tr>
-    <tr><td>Abrir uma sessão com as do projeto no teto</td><td>Abro a sessão <code>resgate</code> no claude.ai/code ou no app. Ela roda com 1 GiB reservado fora do teto</td></tr>
+    <tr><td>Abrir uma sessão com as do projeto no teto</td><td>Abro a sessão <code>resgate</code> no claude.ai/code ou no app. Ela roda com 512 MB reservados fora do teto</td></tr>
     <tr><td>Saber se alguma sessão parou por limite de uso e quando volta</td><td><code>journalctl -u retomar-limite</code>. O job retoma sozinho depois do horário de volta, e <code>retomar-limite --detectar</code> lista as paradas sem mandar nada</td></tr>
     <tr><td>Atualizar o Claude Code</td><td>Ele baixa a versão nova sozinho, mas cada sessão roda a versão em que nasceu. <code>sudo systemctl restart agente-rc resgate-rc</code> aplica, e as sessões voltam em uns 20 segundos</td></tr>
     <tr><td>Renovar o login do Claude</td><td>Quando o app parar de abrir sessão, entro com <code>ssh agente</code>, rodo <code>tmux new -s login 'claude auth login'</code> e depois <code>sudo systemctl restart agente-rc resgate-rc</code>. Três dias antes de vencer, uma sessão aberta no terminal avisa</td></tr>

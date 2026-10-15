@@ -194,8 +194,8 @@ Cada sessão roda dentro de um teto de memória. O teto vale para a sessão e pa
 | `agentes.slice/esag-rc.service` | sessões do esag | 1 GiB | 1,5 GiB |
 | `agentes.slice/getdemo-rc.service` | sessões da Getdemo, em `~/getdemo` | 2,5 GiB | 3 GiB |
 | `agentes.slice/zippi-rc.service` | sessões do zippi-datawarehouse | 4,5 GiB | 5 GiB |
-| `agentes.slice` | os três somados | 5 GiB | 5,5 GiB |
-| `resgate.slice` | o agente de resgate | 1 GiB reservado | 1,5 GiB |
+| `agentes.slice` | os três somados | 5,5 GiB | 6 GiB |
+| `resgate.slice` | o agente de resgate | 512 MB reservados | 1 GiB |
 
 Passou do alto, o grupo inteiro fica lento e empurra memória para o swap. Bateu no teto, o kernel mata o maior processo do grupo, que quase sempre é o comando pesado. Uma sessão parada ocupa de 200 a 500 MB, e um `tsc --noEmit` do zippi-datawarehouse ocupa 1 GB.
 
