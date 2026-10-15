@@ -2,6 +2,6 @@
 Description=Agentes do Claude Code (esag, getdemo e zippi-datawarehouse), com teto de memória somado
 
 [Slice]
-MemoryHigh=4608M
-MemoryMax=5G
+MemoryHigh=5G
+MemoryMax=5632M
 MemorySwapMax=4G
