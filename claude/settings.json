@@ -1,7 +1,5 @@
 {
   "env": {
-    "GITHUB_TOKEN": "",
-    "BI_MCP_PG_URL": "",
     "CLAUDE_CODE_ARTIFACT": "1"
   },
   "attribution": {

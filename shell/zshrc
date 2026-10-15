@@ -175,31 +175,10 @@ if [[ -o login ]] && [[ -t 1 ]] && command -v fastfetch >/dev/null; then
   fastfetch
 fi
 
-# --- Credenciais — ÚNICO lugar onde elas vivem ---
-# ~/.secrets vem cifrado com age no repo (encrypted_private_dot_secrets.age).
-# Exporta GITHUB_TOKEN (usado pelo npm do datalake) e BI_MCP_PG_URL.
-#
-# O shell que o Claude Code abre tem CLAUDECODE=1 e não carrega o arquivo: o
-# segredo no ambiente do agente sai no primeiro `env`, como saiu em 02/10/2026.
-# O claude lançado daqui herda o token mesmo assim, e quem o tira do Bash do
-# agente é o "env" do ~/.claude/settings.json. Ver o CLAUDE.md do dotfiles.
+# --- ~/.secrets: só o que o shell carrega ao abrir ---------------------------
+# Fora do chezmoi e do git desde 14/10/2026. O shell que o Claude Code abre tem
+# CLAUDECODE=1 e não carrega o arquivo. O GitHub autentica pelo `gh`.
 [ -z "$CLAUDECODE" ] && [ -f "$HOME/.secrets" ] && . "$HOME/.secrets"
-
-# --- gh: ignora o GITHUB_TOKEN do ambiente ----------------------------------
-# O gh dá precedência ao GITHUB_TOKEN sobre o ~/.config/gh/hosts.yml. Como o
-# token do ~/.secrets é um PAT fixo de uma conta só, o `gh auth switch` vira
-# no-op e o `gh auth status` acusa "sobrescrito por GITHUB_TOKEN".
-#
-# A var não pode simplesmente sumir: o .npmrc versionado do datalake referencia
-# ${GITHUB_TOKEN} para os pacotes @Get-Demo. Então quem cede é o gh — e só ele.
-#
-# Efeito: gh passa a usar os tokens gho_ do hosts.yml (que têm read:org,
-# workflow e gist, escopos que o PAT não tem) e o `gh auth switch` volta a
-# funcionar. `command gh` continua acessível se algum dia precisar do PAT.
-#
-# Sem `command` aqui: o env exec o binário direto do PATH, então não recursa —
-# e `env -u X command gh` falharia, porque command é builtin e o env não o vê.
-gh() { env -u GITHUB_TOKEN -u GH_TOKEN gh "$@" }
 
 # --- Prompt: Starship -------------------------------------------------------
 export STARSHIP_CONFIG="$HOME/.config/starship.toml"
