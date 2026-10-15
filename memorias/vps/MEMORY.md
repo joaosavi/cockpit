@@ -11,3 +11,4 @@
 - [Testar no PC](testar-no-pc.md) — mudou algo para o João testar: push e comandos para atualizar no PC dele
 - [Resolver de forma definitiva](resolver-de-forma-definitiva.md) — bug se resolve na causa; gambiarra só quando o João pedir explicitamente
 - [Prévia no terminal](previa-no-terminal.md) — mudança visual de terminal: mandar comando para o João rodar no terminal dele antes de publicar
+- [Swap do container](swap-do-container.md) — getdemo-dev com 7 GiB de RAM e 14 GiB de swap pelo raw.lxc; mudar limits.memory ao vivo desfaz o swap
