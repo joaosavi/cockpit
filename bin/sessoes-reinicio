@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Reinicia o serviço de sessão que ficou com biblioteca velha, e retoma as sessões dele.
+
+Roda pelo sessoes-reinicio.timer, depois do unattended-upgrade. O needrestart deixa os
+*-rc de fora (needrestart/sessoes.conf), porque reiniciar derruba a sessão no meio do
+trabalho. Aqui o reinício vem com a volta: cada sessão aberta é retomada pelo id na mesma
+pasta, e a que estava no meio de um turno recebe a mensagem para seguir.
+  sessoes-reinicio            reinicia o que estiver com biblioteca apagada
+  sessoes-reinicio --simular  só lista
+  sessoes-reinicio --teste    prova a volta numa sessão descartável, num tmux à parte
+
+Rode o --teste fora do grupo de uma sessão, que perto do teto deixa a sessão de teste
+lenta demais para os prazos dele:
+  sudo systemd-run --uid=sv --gid=sv --slice=resgate.slice --wait --pipe \\
+    -E HOME=$HOME -E PATH=$PATH -E TERM=xterm-256color sessoes-reinicio --teste
+"""
+
+import json
+import os
+import signal
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+CASA = Path.home()
+SESSOES = CASA / ".claude" / "sessions"
+SERVICOS = ["zippi-rc", "getdemo-rc", "esag-rc", "resgate-rc"]
+ESPERA_PRONTA = 120
+
+MENSAGEM = (
+    "Esta sessão foi reiniciada às {hora} UTC porque o serviço {servico} estava com uma "
+    "biblioteca do sistema desatualizada. O comando que estava rodando morreu no reinício. "
+    "Confira o git status e o último passo, e continue de onde parou."
+)
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def inicio_do_processo(pid):
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+def biblioteca_apagada(maps):
+    """Os caminhos de sistema que o processo mapeia e que já sumiram do disco."""
+    achados = set()
+    for linha in maps.splitlines():
+        if not linha.endswith(" (deleted)"):
+            continue
+        caminho = linha.split(None, 5)[-1][: -len(" (deleted)")]
+        if caminho.startswith(("/usr/", "/lib")):
+            achados.add(caminho)
+    return achados
+
+
+def processos(servico):
+    grupo = subprocess.run(["systemctl", "show", "-P", "ControlGroup", f"{servico}.service"],
+                           capture_output=True, text=True).stdout.strip()
+    try:
+        return [int(p) for p in Path(f"/sys/fs/cgroup{grupo}/cgroup.procs").read_text().split()]
+    except (OSError, ValueError):
+        return []
+
+
+def velhas(pids):
+    achados = set()
+    for pid in pids:
+        try:
+            achados |= biblioteca_apagada(Path(f"/proc/{pid}/maps").read_text())
+        except OSError:
+            continue
+    return achados
+
+
+def sessoes_vivas(pids=None):
+    """As sessões cujo processo ainda é o que gravou o registro."""
+    vivas = []
+    for arquivo in SESSOES.glob("*.json"):
+        try:
+            s = json.loads(arquivo.read_text())
+        except (ValueError, OSError):
+            continue
+        if pids is not None and s.get("pid") not in pids:
+            continue
+        if s.get("sessionId") and inicio_do_processo(s.get("pid")) == str(s.get("procStart")):
+            vivas.append(s)
+    return vivas
+
+
+def tmux(socket, *args):
+    return subprocess.run(["tmux", "-L", socket, *args], capture_output=True, text=True)
+
+
+def esperar(condicao, prazo):
+    fim = time.time() + prazo
+    while time.time() < fim:
+        achado = condicao()
+        if achado:
+            return achado
+        time.sleep(2)
+    return None
+
+
+def historico_de(sessao_id):
+    return next((CASA / ".claude" / "projects").glob(f"*/{sessao_id}.jsonl"), None)
+
+
+def turno_aberto(historico):
+    """A última fala é um pedido de ferramenta ou o resultado dela, e o turno não fechou.
+
+    O status do registro atrasa: num teste ele ficou idle por 60s com o turno rodando.
+    O histórico grava end_turn quando o turno fecha, e é ele que decide."""
+    ultima = None
+    with open(historico, encoding="utf-8", errors="replace") as f:
+        for linha in f:
+            try:
+                e = json.loads(linha)
+            except ValueError:
+                continue
+            if e.get("type") in ("user", "assistant") and not e.get("isSidechain"):
+                ultima = e
+    if not ultima or ultima.get("isApiErrorMessage"):
+        return False
+    if ultima["type"] == "assistant":
+        return ultima.get("message", {}).get("stop_reason") == "tool_use"
+    conteudo = ultima.get("message", {}).get("content")
+    return isinstance(conteudo, list) and any(
+        isinstance(c, dict) and c.get("type") == "tool_result" for c in conteudo)
+
+
+def retomar(socket, s, mensagem, ponte=True):
+    """Abre a sessão pelo id numa janela nova e, se o turno ficou aberto, manda seguir.
+
+    A mensagem vai como argumento do claude, e não por send-keys: a caixa de texto de
+    uma sessão recém-aberta perdeu tecla mesmo 18s depois de a tela aparecer."""
+    nome = s.get("name") or s["sessionId"][:8]
+    historico = historico_de(s["sessionId"])
+    aberto = bool(historico) and turno_aberto(historico)
+    marca = f"[reinicio {s['sessionId'][:8]} {int(time.time())}]"
+    cmd = ["claude", "--resume", s["sessionId"], "--permission-mode", "bypassPermissions"]
+    if ponte:
+        cmd += ["--remote-control", nome]
+    if aberto:
+        cmd.append(f"{mensagem} {marca}")
+    janela = tmux(socket, "new-window", "-d", "-P", "-F", "#{pane_id}", "-n", nome[:20], "-c", s["cwd"],
+                  shlex.join(cmd)).stdout.strip()
+    if not esperar(lambda: any(v["sessionId"] == s["sessionId"] for v in sessoes_vivas()), ESPERA_PRONTA):
+        tela = [l for l in tmux(socket, "capture-pane", "-p", "-t", janela).stdout.splitlines() if l.strip()]
+        log(f"  {nome}: não voltou em {ESPERA_PRONTA}s. A tela:\n    " + "\n    ".join(tela[-12:]))
+        return False
+    if not aberto:
+        log(f"  {nome}: voltou parada, como estava")
+        return True
+    if esperar(lambda: marca in historico.read_text(errors="replace"), 60):
+        log(f"  {nome}: voltou e recebeu a mensagem para seguir")
+        return True
+    log(f"  {nome}: voltou, mas a mensagem não chegou ao histórico")
+    return False
+
+
+def reiniciar(servico, simular):
+    pids = processos(servico)
+    libs = velhas(pids)
+    if not libs:
+        return
+    abertas = sessoes_vivas(set(pids))
+    log(f"{servico}: {len(libs)} bibliotecas apagadas ({', '.join(sorted(libs)[:3])}), "
+        f"{len(abertas)} sessões abertas")
+    for s in abertas:
+        log(f"  {s.get('name')}: {s['sessionId']} {s.get('status')}")
+    if simular:
+        return
+    socket = servico.removesuffix("-rc")
+    subprocess.run(["sudo", "-n", "systemctl", "restart", f"{servico}.service"], check=True)
+    if not esperar(lambda: tmux(socket, "has-session").returncode == 0, 60):
+        log(f"{servico}: o tmux não voltou, as sessões ficam para o app")
+        return
+    mensagem = MENSAGEM.format(hora=time.strftime("%H:%M", time.gmtime()), servico=servico)
+    for s in abertas:
+        retomar(socket, s, mensagem)
+
+
+def teste():
+    """Sessão descartável: cai no meio de um comando, volta pelo id e recebe a mensagem."""
+    socket = "teste-reinicio"
+    pasta = str(CASA / ".local" / "state" / "sessoes-reinicio" / "teste")
+    Path(pasta).mkdir(parents=True, exist_ok=True)
+    falhas = []
+
+    def abrir(*args):
+        tmux(socket, "kill-server")
+        tmux(socket, "new-session", "-d", "-s", "t", "-x", "120", "-y", "40", "-c", pasta,
+             shlex.join(["claude", "--permission-mode", "bypassPermissions", "--model", "sonnet", *args]))
+        # A pasta fixa pede confiança só na primeira vez que o teste roda nesta máquina.
+        if esperar(lambda: "trust this folder" in tmux(socket, "capture-pane", "-p", "-t", "t").stdout, 10):
+            tmux(socket, "send-keys", "-t", "t", "Down")
+            tmux(socket, "send-keys", "-t", "t", "Enter")
+
+    def derrubar(sessao_id):
+        # Como o systemctl restart: o processo da sessão sai antes de ela ser retomada.
+        tmux(socket, "kill-server")
+        for v in sessoes_vivas():
+            if v["sessionId"] == sessao_id:
+                os.kill(v["pid"], signal.SIGTERM)
+        if esperar(lambda: not any(v["sessionId"] == sessao_id for v in sessoes_vivas()), 30) is None:
+            falhas.append("o processo da sessão não saiu")
+        tmux(socket, "new-session", "-d", "-s", "t", "-c", pasta, "sh")
+
+    sem = biblioteca_apagada("7f00-7f01 r-xp 0 08:01 1 /usr/lib/aarch64-linux-gnu/libsystemd.so.0 (deleted)\n"
+                             "7f02-7f03 rw-s 0 00:01 2 /memfd:x (deleted)\n"
+                             "7f04-7f05 r-xp 0 08:01 3 /home/sv/.local/share/claude/versions/2 (deleted)\n")
+    if sem != {"/usr/lib/aarch64-linux-gnu/libsystemd.so.0"}:
+        falhas.append(f"biblioteca_apagada leu {sem}")
+    try:
+        abrir("Use a ferramenta Bash agora, sem comentar e sem rodar em segundo plano: timeout 200 tail -f /dev/null")
+        s = esperar(lambda: next((v for v in sessoes_vivas() if v["cwd"] == pasta), None), 90)
+        if not s:
+            raise SystemExit("FALHOU: a sessão de teste não abriu")
+        historico = esperar(lambda: historico_de(s["sessionId"]), 60)
+        if not historico or not esperar(lambda: turno_aberto(historico), 150) \
+                or esperar(lambda: not turno_aberto(historico), 5):
+            falhas.append("o comando rodando não deixou o turno aberto no histórico")
+        derrubar(s["sessionId"])
+        if not retomar(socket, s, "O comando foi interrompido. Não rode de novo, responda só VOLTEI.",
+                       ponte=False):
+            falhas.append("a sessão não voltou com a mensagem")
+        if historico and not esperar(lambda: "VOLTEI" in historico.read_text()
+                                     and not turno_aberto(historico), 120):
+            falhas.append("a resposta da sessão retomada não fechou o turno")
+        derrubar(s["sessionId"])
+        if not retomar(socket, s, "não devia chegar", ponte=False):
+            falhas.append("a sessão parada não voltou")
+        if historico and "não devia chegar" in historico.read_text():
+            falhas.append("a sessão parada recebeu mensagem")
+    finally:
+        tmux(socket, "kill-server")
+    for f in falhas:
+        log(f"FALHOU: {f}")
+    log("ok" if not falhas else f"{len(falhas)} falhas")
+    return 1 if falhas else 0
+
+
+def main():
+    if "--teste" in sys.argv:
+        return teste()
+    for servico in SERVICOS:
+        reiniciar(servico, "--simular" in sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

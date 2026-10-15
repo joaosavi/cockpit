@@ -1,0 +1,12 @@
+[Unit]
+Description=Reinicia o serviço de sessão com biblioteca velha e retoma as sessões dele
+
+[Service]
+Type=oneshot
+User=sv
+Slice=resgate.slice
+MemoryMax=256M
+Environment=PATH=/home/sv/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TERM=xterm-256color
+ExecStart=/usr/bin/python3 /home/sv/.local/bin/sessoes-reinicio
+TimeoutStartSec=30min

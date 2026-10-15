@@ -1,0 +1,9 @@
+[Unit]
+Description=Procura serviço de sessão com biblioteca velha depois do unattended-upgrade
+
+[Timer]
+# O apt-daily-upgrade.timer dispara às 6:00 UTC com até 60 minutos de atraso sorteado.
+OnCalendar=*-*-* 07:40 UTC
+
+[Install]
+WantedBy=timers.target
