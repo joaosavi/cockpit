@@ -12,6 +12,7 @@ Running several sessions at once is common, and two of them often land in the sa
 - After an edit, when another live session also edited that file and git still shows its change, the agent reads a note naming the session and how long ago, and you see a toast. Outside any git repo, the other edit counts for `windowMinutes`. Each edit of the other session warns once.
 - Before a git command that would stage, commit, stash, switch away from or discard another session's uncommitted edits, the mod holds it and lists those files. The agent can name its own files instead, or run the same command again within 2 minutes to let it through.
 - It reads `cd` earlier in the line and `git -C <dir>` to find the repo. Quoted text, such as a commit message, is not read as a command.
+- A command that names paths, such as `git add -A mods/` or `git checkout -- src/a.ts`, is held only for the other session's edits under those paths. A wildcard or `:/` counts as the whole repo.
 - Ended sessions mark their record, and records older than `expireHours` are removed when a session starts.
 
 ## Commands

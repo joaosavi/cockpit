@@ -8,6 +8,7 @@ import {
   gitTargets,
   hitsForPath,
   hitsInRepo,
+  inScope,
   isChanged,
   isStale,
   liveOthers,
@@ -90,6 +91,24 @@ test('the git commands that touch other edits are found, with their folder', () 
   expect(ops('git clean -fd')).toEqual([`clean@${REPO}`])
   expect(ops('GIT_PAGER=cat git status && git log')).toEqual([])
   expect(ops('echo "git add -A"')).toEqual([])
+})
+
+test('a git command limited to paths only touches the edits under them', () => {
+  const scope = (line: string) => gitTargets(line, REPO, HOME).map((t) => t.scope)
+  expect(scope('git add -A mods/')).toEqual([[`${REPO}/mods`]])
+  expect(scope('git add -A')).toEqual([null])
+  expect(scope('git add .')).toEqual([[REPO]])
+  expect(scope('cd sub && git add -u .')).toEqual([[`${REPO}/sub`]])
+  expect(scope('git add -A :/')).toEqual([null])
+  expect(scope("git add -A 'src/*.ts'")).toEqual([null])
+  expect(scope('git checkout -- src/a.ts')).toEqual([[`${REPO}/src/a.ts`]])
+  expect(scope('git checkout main')).toEqual([null])
+  expect(scope('git stash push -m wip -- lib')).toEqual([[`${REPO}/lib`]])
+  expect(scope('git commit -am "fix" ')).toEqual([null])
+  expect(inScope(`${REPO}/mods/a.ts`, [`${REPO}/mods`])).toBe(true)
+  expect(inScope(`${REPO}/memorias/x.md`, [`${REPO}/mods`])).toBe(false)
+  expect(inScope(`${REPO}/modsx/a.ts`, [`${REPO}/mods`])).toBe(false)
+  expect(inScope(`${REPO}/anything`, null)).toBe(true)
 })
 
 test('the texts name the file, the session and how long ago', () => {

@@ -28,6 +28,7 @@ import {
   type Hit,
   hitsForPath,
   hitsInRepo,
+  inScope,
   isChanged,
   isStale,
   liveOthers,
@@ -196,7 +197,7 @@ async function guardGit($: Api, command: string, pass: () => Promise<ToolCallRes
   for (const t of targets) {
     const root = await rootOf($, t.dir)
     if (root === null) continue
-    const hits = await stillChanged($, hitsInRepo(root, others))
+    const hits = await stillChanged($, hitsInRepo(root, others).filter((h) => inScope(h.path, t.scope)))
     if (hits.length === 0) continue
     if (o.git === 'confirm') {
       const key = `${t.dir}|${command}`

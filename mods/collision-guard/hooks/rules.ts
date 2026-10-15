@@ -167,7 +167,8 @@ export function isChanged(path: string, changed: ReadonlySet<string>): boolean {
 // What a git command would do to the other sessions' edits in its work tree.
 export type GitOp = 'stage-all' | 'commit-all' | 'stash' | 'switch' | 'discard' | 'clean'
 
-export type GitTarget = { dir: string; op: GitOp; text: string }
+// `scope` holds the paths a command names, resolved, when it names any; null when it covers the whole work tree.
+export type GitTarget = { dir: string; op: GitOp; text: string; scope: string[] | null }
 
 // Splits a shell line on `&&`, `||`, `;`, `|` and newlines. Quotes are honored, so a separator inside
 // a commit message does not split it.
@@ -254,6 +255,34 @@ function classify(sub: string, args: readonly string[]): GitOp | null {
   }
 }
 
+// Options that take the next word as their value, so the value is not read as a path.
+const VALUED = new Set(['-m', '--message', '-F', '--file', '-s', '--source', '-C', '-c', '--pathspec-from-file', '-e', '--exclude'])
+
+// The paths a command names, resolved from the folder it runs in. A command that names none, names the
+// whole tree (`:/`) or uses a wildcard or a magic pathspec covers everything, and gets null. A checkout
+// names paths only after `--`, since before it a word is a branch.
+function scopeOf(sub: string, args: readonly string[], at: string, home: string): string[] | null {
+  if (!['add', 'stash', 'checkout', 'restore', 'clean'].includes(sub)) return null
+  const dash = args.indexOf('--')
+  let words: string[] = []
+  if (dash >= 0) words = args.slice(dash + 1)
+  else if (sub !== 'checkout') {
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i] ?? ''
+      if (VALUED.has(a)) i++
+      else if (!a.startsWith('-')) words.push(a)
+    }
+    if (sub === 'stash') words = words.slice(1)
+  }
+  if (words.length === 0 || words.some((w) => w.startsWith(':') || /[*?[]/.test(w))) return null
+  return words.map((w) => resolve(at, w, home).replace(/\/+$/, ''))
+}
+
+// Whether `path` is one of the paths a command named, or lies under one of them.
+export function inScope(path: string, scope: readonly string[] | null): boolean {
+  return scope === null || scope.some((s) => path === s || path.startsWith(`${s}/`))
+}
+
 // The git commands in a shell line that would touch other sessions' edits, each with the folder it
 // runs in: `cd` earlier in the line and `git -C <dir>` are followed.
 export function gitTargets(line: string, cwd: string, home: string): GitTarget[] {
@@ -286,7 +315,7 @@ export function gitTargets(line: string, cwd: string, home: string): GitTarget[]
     const sub = w[i]
     if (sub === undefined) continue
     const op = classify(sub, w.slice(i + 1))
-    if (op !== null) out.push({ dir: at, op, text: seg })
+    if (op !== null) out.push({ dir: at, op, text: seg, scope: scopeOf(sub, w.slice(i + 1), at, home) })
   }
   return out
 }
