@@ -1,6 +1,6 @@
 {
   "name": "hud",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.4",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
   "author": {
     "name": "João Savi"
@@ -40,12 +40,6 @@
       "title": "Memory",
       "description": "Show how much memory still fits before the tightest cgroup limit, or the machine's when there is none",
       "default": true
-    },
-    "datasetDir": {
-      "type": "string",
-      "title": "Ratings dataset",
-      "description": "Folder of the rating mod's dataset, read for the RATINGS row of /hud. The row hides when the folder is missing",
-      "default": "~/datasets/agent-ratings"
     },
     "timeZone": {
       "type": "string",

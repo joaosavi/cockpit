@@ -118,16 +118,12 @@ SESSION   Opus 5.5 · my-app  main● · 38m · 214 calls · ctx 42%
 LIMITS    5h 61% resets 2h30m · 7d 44% resets 3d20h
 MEMORY    session 1.5G · slice 3.0/5.0G · 1.9G fits
 NOW       Bash yarn turbo run test 0:42 · 2 subagents
-TODAY     2 skills · 1 loop nudge · 14 MCP writes · 0 refusals
-RATINGS   last 4/5 · today 3.8 (12 rated)
+TODAY     2 skills · 1 loop nudge · 0 refusals
 ```
 
 - `MEMORY` names the session's own cgroup and the group whose limit sets the headroom.
 - `TODAY` counts today's lines in the other mods' diaries under `~/.local/state/mods`: skill-loader
-  `loaded`, loop-breaker `nudge`, audit lines with an `action`, usage-limit `tool-refused` and
-  memory-guard `refused`.
-- `RATINGS` reads `ratings/<day>.jsonl` in the rating mod's dataset. The row hides when the folder
-  is missing.
+  `loaded`, loop-breaker `nudge`, usage-limit `tool-refused` and memory-guard `refused`.
 
 The pane refreshes every 2 seconds while it is open. Press `r` to refresh now and Esc to close it.
 
@@ -140,7 +136,6 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 | `band` | `panel` | `panel` draws the two rows above. `line` draws one row. `off` leaves the band to the other mods and to the activity row, and `/hud` still works. Use `off` with the status line. |
 | `activity` | `true` | Shows the activity row while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |
-| `datasetDir` | `~/datasets/agent-ratings` | The rating mod's dataset folder, for the `RATINGS` row |
 | `bar` | `dots` | The bar glyphs: `blocks` (`▰▱`), `solid` (`█░`), `line` (`━─`), `dots` (`●○`) or `squares` (`■□`) |
 | `barWidth` | `10` | Cells of a full-width bar, 4 to 30. A narrow terminal still shrinks the bars |
 | `colors` | empty | The colors for ok, warning and critical, separated by spaces. Each one is a name (`green`, `bright-cyan`), `#rrggbb` or a 256-color number. Empty uses green, yellow and red |
@@ -166,8 +161,6 @@ Opus 5.5 │ my-app  main● │ ctx 42% │ 5h 61% │ 7d 44% │ mem 1.9G
 
 With `activity` set to `false`, the band draws no activity row.
 
-With `datasetDir` set to `~/data/ratings`, `/hud` reads `~/data/ratings/ratings/<day>.jsonl`.
-
 ## Cost
 
 The band's render hook does no I/O. It lays out values that events and timers already read. The
@@ -179,12 +172,12 @@ work it causes:
   under `/sys/fs/cgroup`. The band redraws only when what it shows changed.
 - Each tool call adds two redraw requests, one at its start and one at its end. Claude Code throttles
   redraws to 10 a second and merges the rest.
-- `/hud` reads today's diaries and the newest two rating files. While the pane is open, it lists the
+- `/hud` reads today's diaries. While the pane is open, it lists the
   folders every 2 seconds and reads a file again only when its size changed.
 
 At the end of each session the mod writes one summary line to
 `~/.local/state/mods/hud/<day>-<session>.jsonl`: tool calls seen, the hook's own time per call, the
-number of band renders and the slowest one. `/mods` from the mod-report mod reads that line.
+number of band renders and the slowest one.
 
 ## Develop
 

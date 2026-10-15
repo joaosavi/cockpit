@@ -66,6 +66,39 @@ export const DIRS_CHECK_MS = 60 * 1000
 // folder deeper than the ones whose mtime is watched.
 export const MAX_AGE_MS = 10 * 60 * 1000
 
+// The `find` command that lists, in one process, what the folder scan needs under `root`: every folder
+// and every `.env*` file, each line `<level> <type> <path>`. One process takes about half a second over a
+// thousand folders, where one `$.fs.list` per folder took a median of one second and up to minutes on a
+// loaded machine.
+export function findArgs(root: string): string[] {
+  const prune = [...SKIPPED_DIRS].flatMap((name, i) => (i === 0 ? ['-name', name] : ['-o', '-name', name]))
+  return ['find', root, '-maxdepth', String(SCAN_DEPTH + 1), '(', ...prune, ')', '-prune', '-o', '(', '-type', 'd', '-o', '-name', '.env*', ')', '-printf', '%d %y %p\\n']
+}
+
+// The `.env*` files and the watched folders from `findArgs`' output, as the folder walk finds them: a
+// folder at level `SCAN_DEPTH - WATCHED_FROM_DEPTH` or above is watched, and a `.env*` counts when it is a
+// file or a link to one (`find` types a link `l`; its target is checked by the caller).
+export function parseFind(stdout: string): { files: string[]; links: string[]; dirs: string[] } {
+  const files: string[] = []
+  const links: string[] = []
+  const dirs: string[] = []
+  for (const line of stdout.split('\n')) {
+    const m = /^(\d+) (\w) (.+)$/.exec(line)
+    if (m === null) continue
+    const level = Number(m[1])
+    const type = m[2]
+    const path = m[3] ?? ''
+    const name = path.split('/').at(-1) ?? ''
+    if (type === 'd') {
+      if (level <= SCAN_DEPTH - WATCHED_FROM_DEPTH) dirs.push(path)
+    } else if (level <= SCAN_DEPTH + 1 && isEnvFileName(name)) {
+      if (type === 'f') files.push(path)
+      else if (type === 'l') links.push(path)
+    }
+  }
+  return { files, links, dirs }
+}
+
 // Environment variables the Perl hook's own tests set. Kept out as the Perl hook does.
 const IGNORED_ENV_PREFIX = 'SEGREDO_'
 

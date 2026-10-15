@@ -19,8 +19,13 @@ export const TRIGGERS: readonly Trigger[] = [
 export const READ_TOOLS = new Set(['Read'])
 export const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
+// Files no one writes by hand: installed packages, the types Claude Code lays for mods and skills. Reading
+// one is looking up an API, not working on the code.
+const GENERATED = /(^|\/)(node_modules|bundled-skills)\/|\/\.claude-plugin\/types\//
+
 export function byTool(tool: string, path: string): Trigger | null {
   if (!READ_TOOLS.has(tool) && !WRITE_TOOLS.has(tool)) return null
+  if (GENERATED.test(path)) return null
   return TRIGGERS.find((t) => t.path?.test(path) === true) ?? null
 }
 
@@ -46,14 +51,15 @@ export function byCommand(command: string): Trigger | null {
 }
 
 // Signs that the user pasted an error or said something broke. The user writes in Portuguese, so the
-// Portuguese phrases stay next to the English ones.
+// Portuguese phrases stay next to the English ones. A phrase in a question ("isso não funciona por
+// Remote Control?") asks whether something works, and does not count.
 const ERROR_SIGNS = [
   /\b\w*(Error|Exception):\s/,
   /Traceback \(most recent call last\)/,
   /^\s+at\s+\S+.*:\d+:\d+\)?$/m,
   /\bexit code [1-9]\d*\b/i,
-  /\b(quebrou|quebrado|parou de funcionar|não funciona|nao funciona|deu erro|tá dando erro|ta dando erro)\b/i,
-  /\b(broke|is broken|not working|stopped working)\b/i,
+  /\b(quebrou|quebrado|parou de funcionar|não funciona|nao funciona|deu erro|tá dando erro|ta dando erro)\b(?![^.!\n]*\?)/i,
+  /\b(broke|is broken|not working|stopped working)\b(?![^.!\n]*\?)/i,
 ]
 
 export function looksLikeError(text: string): boolean {
@@ -68,8 +74,8 @@ export function bareSkill(name: string): string {
   return name.slice(name.lastIndexOf(':') + 1)
 }
 
-// The context note that delivers a skill with a read. It starts with `The skill <name>`, which the
-// rating mod reads to record the skills a turn used.
+// The context note that delivers a skill with a read. It starts with `The skill <name>`, so the skills a
+// turn used can be counted from the transcript.
 export function loadedText(skill: string, body: string): string {
   return `The skill ${skill} follows in full, loaded by skill-loader. Follow it from here on.\n\n${body}`
 }

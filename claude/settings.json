@@ -48,30 +48,6 @@
     "artifact-capabilities": "name-only",
     "workflow-authoring": "name-only"
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "perl \"$HOME/.claude/hooks/segredo.pl\" pre"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "perl \"$HOME/.claude/hooks/segredo.pl\" post"
-          }
-        ]
-      }
-    ]
-  },
   "statusLine": {
     "type": "command",
     "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh",
@@ -92,16 +68,13 @@
     "usage-limit@cockpit": true,
     "memory-guard@cockpit": true,
     "skill-loader@cockpit": true,
-    "audit@cockpit": true,
     "loop-breaker@cockpit": true,
     "secret-guard@cockpit": true,
     "pipefail@cockpit": true,
-    "mod-report@cockpit": true,
-    "rating@cockpit": true,
-    "wtf@cockpit": true,
     "hud@cockpit": true,
     "spinner-status@cockpit": true,
-    "collision-guard@cockpit": true
+    "collision-guard@cockpit": true,
+    "panel@cockpit": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -145,11 +118,6 @@
         "timeZone": "America/Sao_Paulo"
       }
     },
-    "audit@cockpit": {
-      "options": {
-        "timeZone": "America/Sao_Paulo"
-      }
-    },
     "hud@cockpit": {
       "options": {
         "timeZone": "America/Sao_Paulo",
@@ -167,9 +135,9 @@
         ]
       }
     },
-    "rating@cockpit": {
+    "panel@cockpit": {
       "options": {
-        "configRepo": "~/claude-devcontainer"
+        "autostart": false
       }
     }
   },

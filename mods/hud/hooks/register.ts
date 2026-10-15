@@ -39,8 +39,6 @@ import {
   paneText,
   panelRows,
   parseGit,
-  parseRatings,
-  type Ratings,
   type Row,
   type RunningAgent,
   type RunningTool,
@@ -48,7 +46,6 @@ import {
   type Snapshot,
   type Style,
   styleOf,
-  summarizeRatings,
   type Today,
   TODAY_MODS,
   toolDetail,
@@ -95,10 +92,9 @@ const agents = new Map<string, RunningAgent>()
 let toolSeq = 0
 let tick: Timer | null = null
 
-// The pane, and the files it already read (diaries, ratings), by path and size.
+// The pane, and the diaries it already read, by path and size.
 let paneTimer: Timer | null = null
 let today: Today | null = null
-let ratings: Ratings | null = null
 const fileCache = new Map<string, { size: number; text: string }>()
 
 // What the last light refresh showed, so it redraws only on a change.
@@ -163,7 +159,7 @@ function activity(): Activity | null {
 }
 
 function paneData(): PaneData {
-  return { snapshot: snapshot(), activity: activity(), today, ratings }
+  return { snapshot: snapshot(), activity: activity(), today }
 }
 
 // A key of what the band shows that changes without an event: the minute, memory to 0.1 G, git.
@@ -340,7 +336,7 @@ async function readCached($: Api, path: string, size: number): Promise<string | 
   }
 }
 
-// Today's diaries and the newest ratings, through the cache above.
+// Today's diaries, through the cache above.
 async function readToday($: Api): Promise<Today | null> {
   if (home === undefined) return null
   const day = localDay(now, o.timeZone)
@@ -362,35 +358,10 @@ async function readToday($: Api): Promise<Today | null> {
   return countToday(files, day, o.timeZone)
 }
 
-async function readRatings($: Api): Promise<Ratings | null> {
-  const root = expandHome(o.datasetDir, home)
-  if (root === null) return null
-  const dir = `${root}/ratings`
-  let entries
-  try {
-    entries = await $.fs.list(dir)
-  } catch {
-    return null
-  }
-  const day = localDay(now, o.timeZone)
-  // The newest two day files hold the last rating and every rating of the local day.
-  const newest = entries
-    .filter((e) => e.kind === 'file' && /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(e.name))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(-2)
-  const list = []
-  for (const entry of newest) {
-    const text = await readCached($, `${dir}/${entry.name}`, entry.size)
-    if (text !== null) list.push(...parseRatings(text))
-  }
-  return list.length === 0 ? null : summarizeRatings(list, day, o.timeZone)
-}
-
 async function refreshPane($: Api) {
   now = await $.clock.now()
   mem = await readMemory($)
   today = await readToday($)
-  ratings = await readRatings($)
   redraw($)
 }
 
@@ -481,7 +452,7 @@ export function register(on: On, values: PluginOptions) {
       await lightRefresh($)
     })
     try {
-      await $.command.register({ name: 'hud', description: 'Show the full heads-up display: session, limits, memory, activity, today, ratings', immediate: true })
+      await $.command.register({ name: 'hud', description: 'Show the full heads-up display: session, limits, memory, activity, today', immediate: true })
     } catch (err) {
       await log($, { event: 'command-refused', error: String(err) })
     }

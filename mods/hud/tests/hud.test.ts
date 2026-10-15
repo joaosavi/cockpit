@@ -24,13 +24,11 @@ import {
   paneText,
   parseGit,
   parseLive,
-  parseRatings,
   resetIn,
   statusSession,
   statusSnapshot,
   rowText,
   type Snapshot,
-  summarizeRatings,
   toolDetail,
   toolName,
   width,
@@ -172,7 +170,7 @@ test('notes from other mods become a short notable', () => {
   expect(notableOf({ context: ['unrelated'] })).toBeNull()
 })
 
-test('git status, cgroup memory, diaries and ratings parse into what the rows show', () => {
+test('git status, cgroup memory and diaries parse into what the rows show', () => {
   expect(parseGit('# branch.oid abc\n# branch.head main\n1 .M N... 100644 100644 100644 a b src/x.ts\n')).toMatchObject({ branch: 'main', isDirty: true, modified: 1, staged: 0 })
   expect(parseGit('# branch.oid 0123456789\n# branch.head (detached)\n')).toMatchObject({ branch: '0123456', isDirty: false })
   expect(parseGit('')).toBeNull()
@@ -194,13 +192,9 @@ test('git status, cgroup memory, diaries and ratings parse into what the rows sh
   const files = [
     { mod: 'skill-loader', name: '2026-10-07-aaaa.jsonl', text: `{"at":"${at}","event":"loaded"}\n{"at":"${at}","event":"loaded"}\n` },
     { mod: 'loop-breaker', name: '2026-10-07-aaaa.jsonl', text: `{"at":"${at}","event":"nudge"}\n{"at":"2026-10-05T15:00:00Z","event":"nudge"}\n` },
-    { mod: 'audit', name: '2026-10-07.jsonl', text: `{"at":"${at}","server":"Slack","action":"send"}\n{"at":"${at}","event":"session-summary"}\n` },
     { mod: 'usage-limit', name: '2026-10-07-aaaa.jsonl', text: `{"at":"${at}","event":"tool-refused"}\nnot json\n` },
   ]
-  expect(countToday(files, '2026-10-07', TZ)).toEqual({ skills: 2, nudges: 1, writes: 1, refusals: 1 })
-
-  const list = parseRatings(`{"turn":"a","score":3,"at":"2026-10-07T12:00:00Z"}\n{"turn":"b","score":4,"at":"2026-10-07T19:00:00Z"}\n{"turn":"c","score":5,"at":"2026-10-06T12:00:00Z"}\n`)
-  expect(summarizeRatings(list, '2026-10-07', TZ)).toEqual({ last: 4, todayAverage: 3.5, todayCount: 2 })
+  expect(countToday(files, '2026-10-07', TZ)).toEqual({ skills: 2, nudges: 1, refusals: 1 })
 })
 
 test('the pane text lists every section with the labels aligned', () => {
@@ -208,8 +202,7 @@ test('the pane text lists every section with the labels aligned', () => {
     paneSections({
       snapshot: snap(),
       activity: ACTIVITY,
-      today: { skills: 2, nudges: 1, writes: 14, refusals: 0 },
-      ratings: { last: 4, todayAverage: 3.8, todayCount: 12 },
+      today: { skills: 2, nudges: 1, refusals: 0 },
     }),
   )
   expect(text.split('\n')).toEqual([
@@ -217,8 +210,7 @@ test('the pane text lists every section with the labels aligned', () => {
     'LIMITS    5h 61% resets 2h30m · 7d 44% resets 3d20h',
     'MEMORY    session 1.5G · slice 3.0/5.0G · 1.9G fits',
     'NOW       Bash yarn turbo run test 0:42 · 2 subagents',
-    'TODAY     2 skills · 1 loop nudge · 14 MCP writes · 0 refusals',
-    'RATINGS   last 4/5 · today 3.8 (12 rated)',
+    'TODAY     2 skills · 1 loop nudge · 0 refusals',
   ])
 })
 
@@ -241,12 +233,10 @@ const FILES: Record<string, string> = {
   '/sys/fs/cgroup/agents.slice/memory.high': String(Math.round(4.5 * GiB)),
   '/sys/fs/cgroup/agents.slice/memory.max': String(5 * GiB),
   '/home/.local/state/mods/skill-loader/2026-10-07-aaaa.jsonl': '{"at":"2026-10-07T15:00:00Z","event":"loaded"}\n',
-  '/home/datasets/agent-ratings/ratings/2026-10-07.jsonl': '{"turn":"a","score":4,"at":"2026-10-07T15:00:00Z"}\n',
 }
 
 const DIRS: Record<string, { name: string; kind: 'file'; size: number; isLink: boolean }[]> = {
   '/home/.local/state/mods/skill-loader': [{ name: '2026-10-07-aaaa.jsonl', kind: 'file', size: 48, isLink: false }],
-  '/home/datasets/agent-ratings/ratings': [{ name: '2026-10-07.jsonl', kind: 'file', size: 52, isLink: false }],
 }
 
 function setup(on: On, s: Setup = {}) {
@@ -433,12 +423,11 @@ test('/hud opens the pane with every section, and r refreshes it', async ($, on)
   expect(opened).toEqual(['hud'])
   const ui = await $.ui.mount(PANE)
   // Each label sits in a box of LABEL_WIDTH columns, so a wrapped row keeps its indent.
-  for (const label of ['SESSION', 'LIMITS', 'MEMORY', 'NOW', 'TODAY', 'RATINGS']) {
+  for (const label of ['SESSION', 'LIMITS', 'MEMORY', 'NOW', 'TODAY']) {
     expect(await segment(ui, label)).toMatchObject({ props: { dimColor: true } })
   }
   expect(await ui.findAll({ type: 'Box', text: 'SESSION' })).toContainEqual(expect.objectContaining({ props: expect.objectContaining({ width: 10, flexShrink: 0 }) }))
   expect(await ui.find({ type: 'Text', text: '1 skill' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '4/5' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'idle' })).toBeDefined()
   await ui.press({ key: 'refresh' })
   expect(await ui.find({ type: 'Text', text: 'Esc close' })).toBeDefined()
@@ -456,8 +445,7 @@ test('/hud in Remote Control answers with the same content as text', SAO_PAULO, 
     'LIMITS    5h 61% resets 2h30m · 7d 44% resets 3d20h',
     'MEMORY    session 1.5G · slice 3.0/5.0G · 1.9G fits',
     'NOW       idle',
-    'TODAY     1 skill · 0 loop nudges · 0 MCP writes · 0 refusals',
-    'RATINGS   last 4/5 · today 4.0 (1 rated)',
+    'TODAY     1 skill · 0 loop nudges · 0 refusals',
   ])
 })
 

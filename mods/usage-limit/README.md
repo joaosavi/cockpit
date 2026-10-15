@@ -38,7 +38,7 @@ When a 5-hour or 7-day window reaches 100%, the session stops wherever it is, of
 
 ## Cost
 
-The `tool.call` hook added about 6 ms per tool call on the author's VPS (60 calls measured in October 2026, an estimate). `/mods` shows the current figure.
+The `tool.call` hook added about 6 ms per tool call on the author's VPS (60 calls measured in October 2026, an estimate).
 
 ## Limits
 

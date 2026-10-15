@@ -11,6 +11,9 @@ test('each file calls for the right skill', () => {
   expect(byTool('Edit', '/w/README.md')?.skill).toBe('technical-writing')
   expect(byTool('Read', '/w/notes.md')).toBeNull()
   expect(byTool('Bash', '/w/a.ts')).toBeNull()
+  expect(byTool('Read', '/tmp/x/bundled-skills/2.1.296/abc/plugin-authoring/types/claude-code.d.ts')).toBeNull()
+  expect(byTool('Read', '/w/node_modules/zod/index.d.ts')).toBeNull()
+  expect(byTool('Read', '/w/mod/.claude-plugin/types/claude-code/index.d.ts')).toBeNull()
 })
 
 test('commits and PRs call for technical-writing, and a quote does not', () => {
@@ -25,6 +28,9 @@ test('recognizes a pasted error, "quebrou" and "is broken"', () => {
   expect(looksLikeError('o deploy quebrou de novo')).toBe(true)
   expect(looksLikeError('the deploy is broken again')).toBe(true)
   expect(looksLikeError('write the October report')).toBe(false)
+  expect(looksLikeError('por remote control isso nao funciona? como fazemos funcionar?')).toBe(false)
+  expect(looksLikeError('is it not working over SSH?')).toBe(false)
+  expect(looksLikeError('o card nao funciona no celular')).toBe(true)
 })
 
 type Scenario = { read: string[]; calls: string[]; missing?: string[]; written?: string[] }
@@ -166,7 +172,7 @@ test('the session ends with one summary line: loads by skill, refusals and calls
 })
 
 test('the agent texts say what the mod did and what to do next', () => {
-  // The rating mod reads the skill name from a note that starts with `The skill <name>`.
+  // The note starts with `The skill <name>`, so the transcript says which skills a turn used.
   expect(loadedText('domain-modeling', 'BODY')).toBe('The skill domain-modeling follows in full, loaded by skill-loader. Follow it from here on.\n\nBODY')
   expect(refusalText('technical-writing', '/w/README.md', 'BODY')).toBe(
     'skill-loader: the technical-writing skill applies to /w/README.md and follows in full. Read it, then repeat the call following it.\n\nBODY',

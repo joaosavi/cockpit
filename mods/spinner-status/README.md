@@ -40,8 +40,8 @@ The `mode` option picks what the line shows. The default is `mixed`.
 | `tips` | A tip from the catalog, a new one each turn | None |
 | `summary` | The session summary only. Before the first reply, the spinner shows nothing extra | One per turn |
 
-The catalog has one tip for each command and mod of the `cockpit` marketplace: `/wtf`, `/hud`,
-`/rate` and `/ratings`, `/mods`, `/limit`, `/ram`, `/audit`, and what `memory-guard`,
+The catalog has one tip for each command and mod of the `cockpit` marketplace: `/panel`, `/hud`,
+`/limit`, `/ram`, and what `memory-guard`,
 `loop-breaker`, `secret-guard`, `pipefail` and `usage-limit` do. It is a static list in
 `hooks/rules.ts`.
 
@@ -88,5 +88,4 @@ At the end of each session the mod writes one `session-summary` line to
 `~/.local/state/mods/spinner-status/<day>-<session>.jsonl`. It counts the turns, the model calls by outcome
 (`haiku:answered`, `haiku:api-error`, `haiku:empty-reply`, `haiku:aborted`, `haiku:no-text`,
 `haiku:error`) and the calls skipped because one was still running (`skipped:busy`), and sums the
-tokens, the model time and the excerpt size. It never writes the excerpt or the line. The
-`mod-report` mod reads it for `/mods`.
+tokens, the model time and the excerpt size. It never writes the excerpt or the line.

@@ -1,8 +1,8 @@
 # Cockpit
 
-Mods for Claude Code. The guards keep the agent out of trouble: secrets in tool output, a pipe that hides a failed test, a memory limit that kills the build, a second session's edits swept into your commit. The instruments show where the session stands: a status line under the prompt, a one-line summary under the spinner, and `/wtf` when you come back to a session you forgot.
+Mods for Claude Code. The guards keep the agent out of trouble: secrets in tool output, a pipe that hides a failed test, a memory limit that kills the build, a second session's edits swept into your commit. The instruments show where the session stands: a status line under the prompt, a one-line summary under the spinner, and a local web page with a card for every session on the machine.
 
-Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The `cockpit` plugin installs all fourteen at once.
+Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The `cockpit` plugin installs all eleven at once.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ The mods are tested on Linux. `memory-guard` reads Linux memory files, so it doe
 	```
 
 2. Restart Claude Code.
-3. Run `/cockpit:setup`. It asks four or five questions, with previews, and writes what a plugin cannot set by itself: the status line, the spinner tip, when to compact, and where to keep ratings. It shows the result and tells you what changed.
+3. Run `/cockpit:setup`. It asks four questions, with previews, and writes what a plugin cannot set by itself: the status line, the spinner tip, and when to compact. It shows the result and tells you what changed.
 
 The setup turns on auto-update for `cockpit`, so new versions install by themselves a few minutes after the first message of a session.
 
@@ -45,34 +45,27 @@ The setup turns on auto-update for `cockpit`, so new versions install by themsel
 | :- | :- |
 | `hud` | Model, project, git branch and PR, context window, plan limits and memory, in a status line under the prompt. Four styles. |
 | `spinner-status` | Replaces the tip under the spinner with one line from Haiku: where the session stands, or a tip about these mods. |
-| `wtf` | `/wtf [question]`: a short Haiku summary of where the session stands and what it needs from you. |
+| `panel` | A local web page with a card for every Claude Code session on this machine: its state, what it needs from you, the tool running now, what was done and the next step. `/panel` gives the address and the SSH tunnel. |
 | `skill-loader` | Delivers the right skill when the agent touches a matching file or writes a commit, and reminds it to diagnose before fixing when you paste an error. |
 
-### Records
+### Memory
 
 | Mod | What it does |
 | :- | :- |
-| `rating` | Records every turn with your 1 to 5 rating and automatic signals, as a dataset you can review. |
-| `audit` | Records every MCP call that writes on your behalf, one file per day. |
-| `mod-report` | Shows what each mod did and what it cost per tool call. |
 | `global-memory` | Adds a machine-wide memory folder beside the per-project memory, so facts about the machine reach every session. It starts once you create `~/.claude/global-memory/MEMORY.md`. |
 
 On a Team or Enterprise plan, `global-memory` installs but does nothing until your organization lists it in managed settings: the plan's built-in guard skips plugins you install yourself on the hooks it needs. Its README shows the two settings to add.
 
-To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `rating` and `spinner-status` also have an **Enabled** option in `/config`.
+To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `spinner-status` also has an **Enabled** option in `/config`.
 
 ## Commands
 
 | Command | What it shows |
 | :- | :- |
-| `/wtf [question]` | Where this session stands and what it needs from you. |
+| `/panel` | The address of the session page, and the SSH tunnel to reach it from another computer. |
 | `/hud` | The full heads-up display in a pane. |
 | `/limit` | The 5-hour and 7-day usage limits, and what the mod holds back. |
 | `/ram` | Memory headroom per group, and the measured peak of each heavy command. |
-| `/rate 1-5 [tags] [-- note]` | Rates the last answer. While the rating band shows, the digits 1 to 5 do the same. |
-| `/ratings [days]` | Ratings, scores per project and per skill, and the lowest-rated turns. |
-| `/mods [days]` | What each mod did and its time cost per tool call. |
-| `/audit [count] [filter]` | The latest MCP calls that wrote on your behalf. |
 | `/cockpit:setup` | Runs the setup again, to change the style or any other choice. |
 
 Every command also answers in plain text, so it works over Remote Control.
@@ -83,12 +76,11 @@ Each mod's options are rows in `/config`. Each mod's README lists its options, w
 
 ## What leaves your machine
 
-`wtf` and `spinner-status` send an excerpt of the session to Haiku through your own Claude account. `wtf` sends at most 12,000 characters, one call per `/wtf`. `spinner-status` sends the last few prompts and the agent's last text, at most 3,000 characters, one call per turn in its default mode and none in `tips` mode. No other mod calls a model. The `hud` status line runs `gh pr view` to show the branch's pull request, so it reaches GitHub when `gh` is installed.
+`panel` and `spinner-status` send an excerpt of the session to a model through your own Claude account. `panel` runs `claude -p` (`sonnet` by default) on each session's transcript when you press Refresh, when a session goes idle after a turn, and every 5 minutes for a session that changed. `spinner-status` sends the last few prompts and the agent's last text to Haiku, at most 3,000 characters, one call per turn in its default mode and none in `tips` mode. No other mod calls a model. The `hud` status line runs `gh pr view` to show the branch's pull request, so it reaches GitHub when `gh` is installed.
 
 ## What stays on your machine
 
 - Every mod writes a diary under `~/.local/state/mods/<mod>/`, one line per action and one summary per session. A diary never holds a secret value or a file's content.
-- `rating` keeps its dataset in `~/datasets/agent-ratings`. The dataset holds prompts, answers and tool output in plain text, so keep that folder private.
 
 ## Uninstall
 

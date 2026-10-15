@@ -1,6 +1,6 @@
 // The session summary each mod writes to its diary at session.end: how often the mod acted, what it
 // did, and what it cost per tool call. The same file sits in every mod, because a plugin cannot import
-// from another plugin's folder. `/mods`, from the mod-report mod, reads these lines.
+// from another plugin's folder. The session-summary line is what an audit of the mods reads.
 
 export type Tally = {
   // Tool calls the mod's tool.call hook saw.

@@ -47,9 +47,6 @@ done
 claude plugin marketplace add "$R" >/dev/null 2>&1 || claude plugin marketplace update cockpit
 claude plugin install cockpit@cockpit
 
-# O dataset do mod rating é um clone do repo privado joaosavi/agent-ratings, enviado todo dia pelo avaliacoes-backup.timer.
-[ -d "$HOME/datasets/agent-ratings/.git" ] || git clone git@github.com:joaosavi/agent-ratings.git "$HOME/datasets/agent-ratings"
-
 claude mcp remove -s user navegador >/dev/null 2>&1 || true
 claude mcp add -s user navegador -- "$HOME/.local/bin/navegador-cofre"
 
@@ -70,7 +67,7 @@ sudo cp "$R/needrestart/sessoes.conf" /etc/needrestart/conf.d/sessoes.conf
 sudo cp -r "$R"/systemd/* /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now getdemo-rc.service zippi-rc.service esag-rc.service resgate-rc.service \
-  getdemo-faxina.timer sessoes-esquecidas.timer sessoes-reinicio.timer avaliacoes-backup.timer
+  getdemo-faxina.timer sessoes-esquecidas.timer sessoes-reinicio.timer cockpit-panel.service
 
 [ -f "$HOME/getdemo/.env.bw-agente" ] || echo "Falta o ~/getdemo/.env.bw-agente. Copie o .env.bw-agente.example e preencha." >&2
 perl "$R/hooks/segredo.pl" --teste

@@ -1,9 +1,0 @@
-[Unit]
-Description=Envio diário do dataset de turnos avaliados para joaosavi/agent-ratings
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=sv
-ExecStart=/home/sv/.local/bin/avaliacoes-backup

@@ -1,0 +1,22 @@
+[Unit]
+Description=Painel do Cockpit: página local com um card por sessão do Claude Code, em 127.0.0.1:7777
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sv
+Slice=agentes.slice
+MemoryHigh=1G
+MemoryMax=1536M
+Environment=PANEL_PORT=7777
+Environment=PANEL_MODEL=sonnet
+Environment=PANEL_REFRESH_MINUTES=5
+Environment=PANEL_CLAUDE=/home/sv/.local/bin/claude
+Environment=PATH=/home/sv/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 -I /home/sv/claude-devcontainer/mods/panel/server/panel.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

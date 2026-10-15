@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Set up or reconfigure the Cockpit mods (hud, spinner-status, wtf, rating, secret-guard and the rest) after installing the cockpit plugin. Use when the user asks to install, set up, configure, restyle or troubleshoot these mods, or when the hud status line or the spinner tip is missing.
+description: Set up or reconfigure the Cockpit mods (hud, spinner-status, panel, secret-guard and the rest) after installing the cockpit plugin. Use when the user asks to install, set up, configure, restyle or troubleshoot these mods, or when the hud status line or the spinner tip is missing.
 ---
 
 # Set up the Cockpit mods
@@ -36,20 +36,18 @@ Done when you can say, for each section below, what is set today, and you hold t
 
 ## 2. Ask the user
 
-Ask the questions in one AskUserQuestion call, each with a recommended first option. Skip a question the current settings already answer, unless the user asked to change it. The call holds at most four, so when the time zone question is needed too, ask it alone in a second call. The questions:
+Ask the questions in one AskUserQuestion call, each with a recommended first option. Skip a question the current settings already answer, unless the user asked to change it. The questions:
 
 1. **Style** of the status line under the prompt. Options `refined` (recommended), `blocks`, `minimal`, `compact`, each with its preview from step 1, as printed, and a description of a few words: refined has bars, blocks paints each field's background, minimal spells the fields in words, compact is the shortest.
 2. **Icons.** You cannot write Nerd Font glyphs yourself: they come out blank. Before the questions, print them with Bash, `printf '\uf418 branch   \uf407 pull request   \U000f06a9 robot\n'`, so the person sees them in the tool output, and ask whether the three symbols in that output show as small icons. Options: "I see three icons" (Nerd Font glyphs) and "I see boxes, question marks or blanks" (plain arrows and marks, which work in every terminal). Recommend the second when unsure.
 3. **Time zone**, for the clock times the mods show and for what counts as today. Ask only when the system time zone is `UTC`, `Etc/UTC` or empty; otherwise use the system's and write nothing. Recommend the zone the conversation points to, if any, and let the person type another IANA name as their own answer.
 4. **When to compact.** Claude Code summarizes the conversation when it gets close to full, to free room. Options: "Earlier, at about 70% of a 1M model" (recommended, `733000`: long sessions stay sharper, at the cost of more summaries), "Claude Code's default, near the end" (writes nothing; about 967K on a 1M model), "Even earlier, at about half" (`500000`). Skip it when the model's window is under 200K.
-5. **Where to keep the ratings.** The rating mod saves each answer, its score and its signals to a folder, for reviewing with `/ratings` later. Options: "In `~/datasets/agent-ratings`" (recommended, the default, writes nothing), "In a folder I choose" (the person types the path as their own answer; suggest a git repo they back up, since the files hold prompts and answers in plain text), "Don't keep ratings" (turns the rating mod off with its Enabled option; disabling the plugin would break the bundle). Make sure the chosen folder exists with `mkdir -p`, and say you created it only when it was not there before.
 
 Ask about these only when the user asked, or the setup calls for them:
 
 - Placement above the prompt instead of under it. Ask it as part of the confirmation when another status line is already set.
 - Bars and colors: `bar` (`dots` `●○`, the default, `blocks` `▰▱`, `solid` `█░`, `line` `━─`, `squares` `■□`), `barColor` (`gradient`, the default, `solid` or `tone`), `colors` for ok, warning and critical, and fields to hide (`model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem`).
 - `secret-guard`: `secretsFile` (default `~/.secrets`) and `envRoot`, the folder whose `.env` files hold secrets.
-- `rating`: `configRepo`, the git repo whose settings a rating records.
 - `pipefail`: `extraRunners`, script names that run tests besides the usual ones.
 
 ## 3. Write the settings
@@ -61,11 +59,10 @@ Merge exactly what the user chose:
 | HUD under the prompt (the default) | `statusLine: { "type": "command", "command": "<installLocation>/mods/hud/statusline/statusline.sh", "refreshInterval": 5 }` and `pluginConfigs["hud@cockpit"].options.band: "off"`. If `claude-hud@claude-hud` is enabled, set it to `false`, because its status line is the one replaced. If another status line is set, show it to the user and confirm before you replace it. |
 | HUD above the prompt | `pluginConfigs["hud@cockpit"].options.band: "panel"`. Leave `statusLine` as it is. |
 | Style and icons | `style`, and `icons` (`nerd` or `unicode`), under `pluginConfigs["hud@cockpit"].options`; when chosen, `bar`, `barColor`, `colors` (space-separated) and `hide` (comma-separated) |
-| Time zone | `timeZone` under the `hud@cockpit`, `audit@cockpit` and `usage-limit@cockpit` options |
+| Time zone | `timeZone` under the `hud@cockpit` and `usage-limit@cockpit` options |
 | Spinner tip | `spinnerTipsEnabled: false` whenever `spinner-status@cockpit` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | When to compact | top-level `autoCompactWindow: <tokens>` |
 | Updates (always, no question) | `extraKnownMarketplaces.cockpit: { "source": <the source from known_marketplaces.json, copied exactly>, "autoUpdate": true }`. Claude Code refuses a marketplace whose settings entry names a different source, so copy it as it is. If the entry exists, set only `autoUpdate`. With this on, every mod updates by itself a few minutes after the first message of a session. |
-| Ratings folder | `datasetDir` under `pluginConfigs["rating@cockpit"].options` for a folder they chose; `enabled: false` under `pluginConfigs["rating@cockpit"].options` for no ratings |
 
 Keep every other key and every other plugin's options as they were.
 
@@ -73,6 +70,6 @@ Keep every other key and every other plugin's options as they were.
 
 1. Validate the file: `node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' <settings>`.
 2. If the status line was set, run the preview command of step 1 once more with the real settings (no temporary `CLAUDE_CONFIG_DIR`, `COLUMNS=120`, one pass) and check that two rows print in the chosen style.
-3. Close with a short message in plain words, in this order: the two rows as the person will see them, in a code block; one line per change, said as what they will notice (the status line under the prompt in the blocks style, times in São Paulo time, the conversation summarized at about 70%, the mod's tip line in place of Claude Code's, updates arriving by themselves); where the backup is; restart Claude Code so every change takes effect; to change any of it later, `/config` or `/cockpit:setup` again.
+3. Close with a short message in plain words, in this order: the two rows as the person will see them, in a code block; one line per change, said as what they will notice (the status line under the prompt in the blocks style, times in São Paulo time, the conversation summarized at about 70%, the mod's tip line in place of Claude Code's, updates arriving by themselves); if `panel@cockpit` is enabled, one line that a web page with every session on the machine starts by itself and `/panel` gives its address; where the backup is; restart Claude Code so every change takes effect; to change any of it later, `/config` or `/cockpit:setup` again.
 
 Done when the JSON parses, the status line printed its rows (if it was chosen), and the closing message names each change in plain words and the restart.

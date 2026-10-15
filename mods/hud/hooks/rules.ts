@@ -28,7 +28,6 @@ export type Options = {
   band: BandMode
   activity: boolean
   memory: boolean
-  datasetDir: string
   timeZone: string
   bar: BarStyle
   barWidth: number
@@ -44,7 +43,6 @@ export const DEFAULTS: Options = {
   band: 'panel',
   activity: true,
   memory: true,
-  datasetDir: '~/datasets/agent-ratings',
   timeZone: '',
   bar: 'dots',
   barWidth: 10,
@@ -77,7 +75,6 @@ export function options(values: unknown): Options {
     band: band === 'line' || band === 'off' ? band : 'panel',
     activity: flag('activity', DEFAULTS.activity),
     memory: flag('memory', DEFAULTS.memory),
-    datasetDir: text('datasetDir', DEFAULTS.datasetDir),
     timeZone: validTimeZone(text('timeZone', DEFAULTS.timeZone)),
     bar: bar === 'solid' || bar === 'line' || bar === 'blocks' || bar === 'squares' ? bar : 'dots',
     barWidth: Number.isFinite(barWidth) && barWidth >= 4 && barWidth <= 30 ? Math.round(barWidth) : DEFAULTS.barWidth,
@@ -694,10 +691,10 @@ export function activityRows(a: Activity, columns: number): Row[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Today's mod diaries and the ratings dataset
+// Today's mod diaries
 // ---------------------------------------------------------------------------------------------
 
-export type Today = { skills: number; nudges: number; writes: number; refusals: number }
+export type Today = { skills: number; nudges: number; refusals: number }
 
 export type DiaryFile = { mod: string; name: string; text: string }
 
@@ -715,7 +712,7 @@ function records(text: string): unknown[] {
 }
 
 // The diary folders the TODAY row reads.
-export const TODAY_MODS = ['skill-loader', 'loop-breaker', 'audit', 'usage-limit', 'memory-guard'] as const
+export const TODAY_MODS = ['skill-loader', 'loop-breaker', 'usage-limit', 'memory-guard'] as const
 
 // The day in a diary's name (UTC, as the mods name them).
 export function fileDay(name: string): string | null {
@@ -732,7 +729,7 @@ export function mayHoldToday(name: string, today: string): boolean {
 }
 
 export function countToday(files: readonly DiaryFile[], today: string, timeZone: string): Today {
-  const t: Today = { skills: 0, nudges: 0, writes: 0, refusals: 0 }
+  const t: Today = { skills: 0, nudges: 0, refusals: 0 }
   for (const f of files) {
     for (const r of records(f.text)) {
       if (typeof r !== 'object' || r === null) continue
@@ -741,34 +738,11 @@ export function countToday(files: readonly DiaryFile[], today: string, timeZone:
       const event: unknown = Reflect.get(r, 'event')
       if (f.mod === 'skill-loader' && event === 'loaded') t.skills += 1
       else if (f.mod === 'loop-breaker' && event === 'nudge') t.nudges += 1
-      else if (f.mod === 'audit' && typeof Reflect.get(r, 'action') === 'string') t.writes += 1
       else if (f.mod === 'usage-limit' && event === 'tool-refused') t.refusals += 1
       else if (f.mod === 'memory-guard' && event === 'refused') t.refusals += 1
     }
   }
   return t
-}
-
-export type Rating = { score: number; at: string }
-
-export function parseRatings(text: string): Rating[] {
-  const out: Rating[] = []
-  for (const r of records(text)) {
-    if (typeof r !== 'object' || r === null) continue
-    const score: unknown = Reflect.get(r, 'score')
-    const at: unknown = Reflect.get(r, 'at')
-    if (typeof score === 'number' && Number.isFinite(score) && typeof at === 'string') out.push({ score, at })
-  }
-  return out
-}
-
-export type Ratings = { last: number | null; todayAverage: number | null; todayCount: number }
-
-export function summarizeRatings(list: readonly Rating[], today: string, timeZone: string): Ratings {
-  const sorted = [...list].sort((a, b) => a.at.localeCompare(b.at))
-  const own = sorted.filter((r) => Number.isFinite(Date.parse(r.at)) && localDay(Date.parse(r.at), timeZone) === today)
-  const sum = own.reduce((n, r) => n + r.score, 0)
-  return { last: sorted.at(-1)?.score ?? null, todayAverage: own.length === 0 ? null : sum / own.length, todayCount: own.length }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -779,7 +753,6 @@ export type PaneData = {
   snapshot: Snapshot
   activity: Activity | null
   today: Today | null
-  ratings: Ratings | null
 }
 
 export type Section = { label: string; segs: Seg[] }
@@ -840,14 +813,7 @@ export function paneSections(d: PaneData): Section[] {
   const t = d.today
   if (t !== null) {
     const item = (n: number, one: string, many?: string): Seg[] => [{ text: plural(n, one, many), ...(n === 0 ? { dim: true } : {}) }]
-    out.push({ label: 'TODAY', segs: joined([item(t.skills, 'skill'), item(t.nudges, 'loop nudge'), item(t.writes, 'MCP write'), item(t.refusals, 'refusal')]) })
-  }
-
-  const r = d.ratings
-  if (r !== null && r.last !== null) {
-    const parts: Seg[][] = [[{ text: 'last ', dim: true }, { text: `${r.last}/5` }]]
-    if (r.todayAverage !== null) parts.push([{ text: 'today ', dim: true }, { text: (Math.round(r.todayAverage * 10) / 10).toFixed(1) }, { text: ` (${r.todayCount} rated)`, dim: true }])
-    out.push({ label: 'RATINGS', segs: joined(parts) })
+    out.push({ label: 'TODAY', segs: joined([item(t.skills, 'skill'), item(t.nudges, 'loop nudge'), item(t.refusals, 'refusal')]) })
   }
   return out
 }

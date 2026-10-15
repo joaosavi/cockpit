@@ -16,7 +16,7 @@ for u in agentes.slice resgate.slice \
          sessoes-limite.service sessoes-limite.timer \
          getdemo-faxina.service getdemo-faxina.timer \
          sessoes-esquecidas.service sessoes-esquecidas.timer \
-         avaliacoes-backup.service avaliacoes-backup.timer; do
+         cockpit-panel.service; do
   cp "/etc/systemd/system/$u" "$R/systemd/$u"
   if [ -d "/etc/systemd/system/$u.d" ]; then
     cp -r "/etc/systemd/system/$u.d" "$R/systemd/$u.d"

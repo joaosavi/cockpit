@@ -81,8 +81,7 @@ export function checkKey(command: string): string {
 
 export type Nudge = { kind: 'edits'; file: string; count: number } | { kind: 'error'; count: number } | { kind: 'repeat'; tool: string; count: number }
 
-// The note added to the tool result. It starts with `Loop check`, which the rating mod reads to count
-// the nudges of a turn.
+// The note added to the tool result. It starts with `Loop check`, which the hud's activity row reads.
 export function nudgeText(n: Nudge): string {
   let what: string
   switch (n.kind) {

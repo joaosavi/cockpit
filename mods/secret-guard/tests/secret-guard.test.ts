@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { accepts, buildTable, candidates, expandHome, fillCommand, type Found, options, redactedNotice, redactText } from '../hooks/rules.ts'
+import { accepts, buildTable, candidates, expandHome, fillCommand, findArgs, parseFind, type Found, options, redactedNotice, redactText } from '../hooks/rules.ts'
 
 // Every secret here is fake and assembled at run time, so no file of the mod holds a string that looks
 // like a real token, and the tests never touch the real filesystem or environment.
@@ -583,10 +583,32 @@ test('a Bash command with a placeholder runs with the real value, and its output
   expect(dump(r)).toContain('filled in the real value of GITHUB_TOKEN')
 })
 
+test('a Bash command that only searches for the placeholder text runs as written, with no fill notice', REPOS, async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('no match\n'))
+  setup(on, w)
+  const command = "grep -rn '<hidden:[A-Z_a-z0-9]*>' ."
+  const r = await $.tool.call({ tool: 'Bash', command })
+  expect(w.calls[0]?.command).toBe(command)
+  expect(dump(r)).not.toContain('filled in the real value')
+})
+
 test('a Bash command with a placeholder the mod cannot fill does not run', REPOS, async ($, on) => {
   const w = freshWorld()
   setup(on, w)
   const r = await $.tool.call({ tool: 'Bash', command: 'echo <hidden:openai>' })
   expect(w.calls).toEqual([])
   expect(r).toMatchObject({ deny: expect.stringContaining('the value of openai is not known, only its format') })
+})
+
+test('the find scan keeps the .env files and the folders the walk watches, and skips the rest', () => {
+  const out = ['0 d /r', '1 d /r/app', '1 f /r/.env', '2 f /r/app/.env.local', '3 d /r/a/b/c', '4 d /r/a/b/c/d', '2 l /r/app/.env.prod', '2 f /r/app/env.txt', '6 f /r/1/2/3/4/5/.env'].join('\n')
+  expect(parseFind(out)).toEqual({
+    files: ['/r/.env', '/r/app/.env.local', '/r/1/2/3/4/5/.env'],
+    links: ['/r/app/.env.prod'],
+    dirs: ['/r', '/r/app', '/r/a/b/c'],
+  })
+  const args = findArgs('/r')
+  expect(args.slice(0, 4)).toEqual(['find', '/r', '-maxdepth', '6'])
+  expect(args).toContain('node_modules')
 })

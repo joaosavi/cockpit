@@ -16,9 +16,11 @@ import {
   type EnvFile,
   expandHome,
   fillCommand,
+  findArgs,
   filledNotice,
   type Found,
   isEnvFileName,
+  parseFind,
   isEnvPath,
   isExample,
   DIRS_CHECK_MS,
@@ -130,6 +132,22 @@ async function scan($: Api, dir: string, depth: number, files: string[], watched
   await Promise.all(nested)
 }
 
+// The same scan in one `find` process. False when `find` is missing or fails, and the walk above runs.
+async function scanWithFind($: Api, root: string, files: string[], watched: string[]): Promise<boolean> {
+  let r
+  try {
+    r = await $.process.run(findArgs(root), { timeoutMs: 30_000 })
+  } catch {
+    return false
+  }
+  if (r.exitCode !== 0 || r.isStdoutTruncated) return false
+  const f = parseFind(r.stdout)
+  files.push(...f.files)
+  for (const link of f.links) if (await isFile($, link)) files.push(link)
+  watched.push(...f.dirs)
+  return true
+}
+
 // Reads every source again. The folders are scanned only when `prior` is null.
 async function build($: Api, prior: Scan | null): Promise<Built> {
   const builtAt = await $.clock.now()
@@ -140,7 +158,7 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
     const dirs: string[] = []
     // An empty env root turns the folder scan off: the list then holds the secrets file, the
     // environment and URL passwords, and the known token formats still apply.
-    if (p.envRoot !== '') await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
+    if (p.envRoot !== '' && !(await scanWithFind($, p.envRoot, found, dirs))) await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
     s = { envFiles: found.sort(), dirs, at: builtAt }
   }
   const files = s.envFiles
@@ -346,13 +364,15 @@ export function register(on: On, values: PluginOptions) {
       }
       let input = restored?.input ?? e
       const notes: string[] = restored === null ? [] : [RESTORED_NOTICE]
-      if (e.tool === 'Bash' && /<(?:hidden|oculto):/.test(e.command)) {
-        const t = await currentTable($)
-        const f = fillCommand(e.command, t)
+      // A command that only mentions the placeholder text, such as a grep for `<hidden:[A-Z]*>`, names
+      // nothing to fill and runs as written.
+      const before = e.tool === 'Bash' && /<(?:hidden|oculto):/.test(e.command) ? await currentTable($) : null
+      const f = e.tool === 'Bash' && before !== null ? fillCommand(e.command, before) : null
+      if (before !== null && f !== null && f.filled.length + f.unfilled.length > 0) {
         if (f.unfilled.length > 0) {
           countAction(tally, 'unfilled')
           await log($, { event: 'unfilled', names: f.unfilled })
-          return { deny: unfilledText(f.unfilled, t) }
+          return { deny: unfilledText(f.unfilled, before) }
         }
         countAction(tally, 'filled')
         await log($, { event: 'filled', names: f.filled })

@@ -14,14 +14,11 @@ claude plugin install cockpit@cockpit
 - `usage-limit`: one subagent at a time from 90% of the usage limit, a pause that keeps the last 2% for you, and an automatic resume when the window resets. `/limit`.
 - `memory-guard`: keeps typecheck, build, test and Playwright runs under the cgroup memory limit, with one process, a wait, or a refusal, and reruns a command killed with exit 137. `/ram`.
 - `skill-loader`: delivers the right skill when the agent touches a file or commits, and reminds it to load diagnosing-bugs when you paste an error.
-- `audit`: records every MCP call that writes in a daily file. `/audit`.
 - `loop-breaker`: tells the agent to stop and change approach when it goes in circles.
 - `secret-guard`: hides every secret value in tool output as `<hidden:NAME>`, and writes the real value back into `.env` files.
 - `collision-guard`: warns when another session on this machine edited the same file, and holds a git command once when it would take that session's uncommitted edits along.
 - `pipefail`: adds `set -o pipefail;` to a test, typecheck or lint run piped into `tail`, `head` or `grep`.
-- `mod-report`: `/mods`, what each mod did and what it cost per tool call.
-- `rating`: records every turn as a dataset with your 1-5 ratings and weak labels. `/rate`, `/ratings` and a band above the prompt.
-- `wtf`: `/wtf`, a cheap Haiku summary of where the session is and what it needs from you.
+- `panel`: a local web page with a card for every session on this machine, with what it needs from you and what it is doing. `/panel` gives the address.
 - `global-memory`: a machine-wide memory folder beside the per-project auto memory. It starts once you create `~/.claude/global-memory/MEMORY.md`.
 - `spinner-status`: replaces the tip under the spinner with one Haiku line: where the session stands, or a tip about these mods. Needs `"spinnerTipsEnabled": false` in settings.
 
@@ -33,8 +30,8 @@ On a Team or Enterprise plan, `global-memory` installs but does nothing until yo
 
 ## Turn one mod off
 
-To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `rating` and `spinner-status` also have an **Enabled** option in `/config`.
+To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `spinner-status` also has an **Enabled** option in `/config`.
 
 ## Where the mods write
 
-Every mod writes its diary under `~/.local/state/mods/<mod>/`. Each diary line has `at`, `session` and `event`, and each session ends with one `session-summary` line that `/mods` reads.
+Every mod writes its diary under `~/.local/state/mods/<mod>/`. Each diary line has `at`, `session` and `event`, and each session ends with one `session-summary` line with the calls it saw, its actions and the time its hooks took.

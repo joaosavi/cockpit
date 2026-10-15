@@ -40,13 +40,10 @@ export function options(values: unknown): Options {
 // One tip per command or mod of the `cockpit` marketplace. The tips mode rotates through them as
 // written; in mixed mode the model picks one and writes it in the user's language.
 const TIPS = [
-  '/wtf [question] sums up where this session stands and what it needs from you',
+  '/panel opens a web page with every session on this machine and what each one needs from you',
   '/hud opens the full view: model, context, plan limits, memory and live tools',
-  '/rate 1-5 scores the last answer for the ratings dataset; /ratings reviews them',
-  '/mods [days] shows what each mod did and what it cost per tool call',
   '/limit shows the 5-hour and 7-day usage limits and what is being held back',
   '/ram shows the memory headroom of each group before heavy commands',
-  '/audit [count] [filter] lists the latest MCP calls that wrote on your behalf',
   'memory-guard runs typecheck, tests and builds with one process when memory is tight',
   'loop-breaker warns the agent when it repeats the same error or the same call',
   'secret-guard hides secret values as <hidden:NAME> before the agent reads them',
