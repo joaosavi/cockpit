@@ -1,7 +1,7 @@
 """Builds the Cockpit docs site: one HTML file, every page rendered from the mods' own READMEs plus
 the hand-written guides below. Needs python-markdown (pip install markdown). Run: python3 build.py
 The sl-*.ansi files are real status line output, drawn by hud/statusline/statusline.sh."""
-import html, json, re, os, sys
+import base64, html, json, re, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pylib'))
 import markdown
 
@@ -101,6 +101,14 @@ def term(lines, title='~/acme-api'):
 def code(text, lang='sh'):
     return f'<pre><code class="language-{lang}">{html.escape(text)}</code></pre>'
 
+def shot(light, dark=None, alt='', url='localhost:7777'):
+    """A screenshot of the panel in a browser frame, from shots/; with `dark`, the image follows the theme."""
+    def img(name, cls):
+        data = base64.b64encode(open(os.path.join(HERE, 'shots', name), 'rb').read()).decode()
+        return f'<img class="{cls}" src="data:image/png;base64,{data}" alt="{html.escape(alt)}" loading="lazy">'
+    imgs = img(light, 'light has-dark' if dark else 'light') + (img(dark, 'dark') if dark else '')
+    return f'<figure class="shot"><div class="shot-bar"><span></span><span></span><span></span><em>{url}</em></div>{imgs}</figure>'
+
 def note(kind, title, body):
     return f'<aside class="note {kind}"><strong>{title}</strong><div>{body}</div></aside>'
 
@@ -130,11 +138,17 @@ def intro():
 <div class="pillars">{cards}</div>
 <p>Each mod is a Claude Code plugin with TypeScript hooks and its own tests. The <code>cockpit</code> plugin lists them all as dependencies, so one install brings the whole set. To leave one out, see <a href="#configuration-off">Turn one mod off</a>.</p>
 <h2 id="intro-how">How a mod works</h2>
-<p>Claude Code raises events as it works: a tool call, a prompt, a turn ending, a screen being drawn. A mod hooks those events in TypeScript and can change what happens. <code>secret-guard</code> rewrites a tool result before the agent reads it. <code>pipefail</code> rewrites a command before it runs. <code>hud</code> draws rows that Claude Code does not draw. Nothing runs outside Claude Code: no daemon, no server, no account.</p>
+<p>Claude Code raises events as it works: a tool call, a prompt, a turn ending, a screen being drawn. A mod hooks those events in TypeScript and can change what happens. <code>secret-guard</code> rewrites a tool result before the agent reads it. <code>pipefail</code> rewrites a command before it runs. <code>hud</code> draws rows that Claude Code does not draw.</p>
+<p>Every mod runs inside Claude Code, with one exception: <code>panel</code> starts a small web server on <code>127.0.0.1</code>, so you can see every session from a browser. There is no account and no cloud service.</p>
+<h2 id="intro-panel">Every session on one page</h2>
+<p>The <code>panel</code> page puts every Claude Code session on the machine side by side: which ones wait for you, what each one needs, what the agent is doing now, and how the machine holds up. You can answer a session from the page.</p>
+{shot('panel-light.png', 'panel-dark.png', 'The Cockpit panel with four sessions: one waiting for a decision, one blocked, one working, one done')}
+<p class="caption">The panel with made-up sessions. See <a href="#panel-guide">The session panel</a>.</p>
 <h2 id="intro-next">Next steps</h2>
 <div class="next-grid">
   <a href="#install"><b>Install Cockpit</b><span>Two commands and a setup that asks four questions.</span></a>
   <a href="#first-session"><b>Your first session</b><span>What changes on screen, and the commands to try.</span></a>
+  <a href="#panel-guide"><b>The session panel</b><span>Every session on one page, and how to answer one from it.</span></a>
   <a href="#mods"><b>Browse the mods</b><span>Eleven mods, each with its options and its cost.</span></a>
 </div>'''
 
@@ -146,6 +160,8 @@ def install():
 <li><b>Claude Code 2.1.287 or later.</b> Run <code>claude --version</code> to check. Mods use Claude Code's function hooks, which are in early access and can change between releases.</li>
 <li><b>Node 22.18 or later</b>, for the status line script. Run <code>node --version</code> to check.</li>
 <li><b>A Nerd Font</b> in your terminal, for the status line icons. This is optional: without one, choose the plain icons during setup.</li>
+<li><b>Python 3.9 or later and <code>curl</code></b>, for the <code>panel</code> page. Both come with macOS and most Linux systems.</li>
+<li><b>tmux</b>, only to answer a session from the panel. Sessions outside tmux show on the page without the send buttons.</li>
 <li><b>Linux</b> for <code>memory-guard</code>, which reads Linux memory files. The other mods have no system requirement, but they are tested on Linux.</li>
 </ul>
 <h2 id="install-steps">Install</h2>
@@ -179,16 +195,52 @@ def first_session():
 <p>While a turn runs, Claude Code normally shows a tip under the spinner. <code>spinner-status</code> replaces it with one line from Haiku about what the agent is doing right now.</p>
 {term(SPINNER_SAMPLE)}
 <p>The label says what the line is. <code>Now:</code> is where the session stands. <code>Mods:</code> is a tip about the mods you have.</p>
-<h2 id="first-panel">See every session on one page</h2>
-<p><code>panel</code> runs a local web page with a card for each Claude Code session on this machine: Working, Waiting for you, Blocked, Done, Idle or Ended, what the session needs from you and the options it offers, the tool running now, what was done, the next step, the context used, a link to the session on claude.ai and the tmux command to attach. Type <code>/panel</code> to get the address.</p>
+<h2 id="first-panel">The session panel</h2>
+<p><code>panel</code> starts a local web page with a card for every session on the machine. Type <code>/panel</code> for its address.</p>
 {term(PANEL_SAMPLE)}
-<p>The facts on each card come from the session files and transcripts. The summary comes from <code>claude -p</code>, with <code>sonnet</code> by default: when you press <b>Refresh</b>, when a session goes idle after a turn, and every 5 minutes for a session that changed. The server starts with the first session and listens only on <code>127.0.0.1</code>; on a remote machine, open the SSH tunnel <code>/panel</code> prints.</p>
+<p>Open the address in a browser. A session that waits for you comes first, with the options it offered as buttons. <a href="#panel-guide">The session panel</a> walks through the page.</p>
 <h2 id="first-try">Commands to try</h2>
 <table><thead><tr><th>Command</th><th>What you get</th></tr></thead><tbody>
 <tr><td><code>/limit</code></td><td>Both plan windows, when each resets, and what the mod holds back near the limit.</td></tr>
 <tr><td><code>/hud</code></td><td>The full heads-up display in a pane: session, limits, memory, what runs now, and today's mod actions.</td></tr>
 </tbody></table>
 <p>The guards stay quiet until they act. When one does, the agent reads a short note that starts with the mod's name, such as <code>pipefail:</code> or <code>collision-guard:</code>, and usually tells you about it.</p>'''
+
+def panel_guide():
+    return f'''
+<p class="lead">The panel is a local web page with every Claude Code session on the machine, the machine itself, and an audit of the mods. It works the same for sessions in a terminal, in tmux, or driven over Remote Control from claude.ai or the phone.</p>
+{shot('panel-light.png', 'panel-dark.png', 'The Cockpit panel: the strip with plan usage, memory and CPU, the session cards, and the machine column')}
+<h2 id="pg-open">Open the page</h2>
+<p>The server starts with the first session after you install the mod, and keeps running after that session ends. Type <code>/panel</code> in any session for the address, which is <code>http://localhost:7777</code> by default.</p>
+<p>On a remote machine, the page listens only on <code>127.0.0.1</code>, so open it through an SSH tunnel from your computer:</p>
+{code('ssh -N -L 7777:127.0.0.1:7777 my-server')}
+<p>To open the tunnel with every SSH login, add one line to the host's entry in <code>~/.ssh/config</code> on your computer:</p>
+{code('Host my-server' + chr(10) + '  LocalForward 7777 127.0.0.1:7777', 'text')}
+<h2 id="pg-read">Read the page</h2>
+<div class="feature-grid">
+<div><b>The strip</b><span>The plan's 5-hour and weekly usage, the sessions that need you, memory, CPU, disk, and the tokens of the last 24 hours by hour.</span></div>
+<div><b>The session cards</b><span>The state, a summary of where the task stands, what it needs from you, the tool running now, git, context and memory.</span></div>
+<div><b>The machine</b><span>Memory by cgroup, the services the sessions run in, and the latest actions of the guards.</span></div>
+</div>
+<p>A card's state comes from two places. <b>Working</b> comes from Claude Code itself, as soon as a turn starts. <b>Waiting for you</b>, <b>Blocked</b>, <b>Done</b> and <b>Idle</b> come from the summary, which <code>claude -p</code> writes from the session's transcript. A summary is written 20 seconds after a turn ends, every 5 minutes for a session that changed, and when you press <b>Refresh</b>. An amber dot beside <b>Summarized</b> means the session moved on since then.</p>
+<p>The bars turn amber at 75% and red at 90%. The context bar fills toward the point where Claude Code compacts the conversation, not toward the model's full window.</p>
+<h2 id="pg-answer">Answer a session</h2>
+<p>When a session waits for a decision, its card lists the options the agent offered, the recommended one first. Press an option, check the text in the dialog, and press <b>Send</b>. The page types the text into the session's prompt and presses Enter, as if you typed it. The <b>Reply</b> field sends any text the same way.</p>
+{note('info', 'Sending needs tmux', '<p>The page finds the tmux pane the session runs in. A session outside tmux, such as one in a desktop terminal tab, shows no send buttons. If you type in that pane at the same moment, the two texts mix.</p>')}
+<h2 id="pg-mods">Audit the mods</h2>
+<p>The <b>Mods</b> tab reads every Cockpit mod's diary for the last day, 7 days or 30 days. Each row shows what the mod did, its failures in red, the time its hooks added per tool call, and its slowest call. Click a row to see its recent actions with their details.</p>
+{shot('panel-mods.png', None, 'The Mods tab: one row per mod with its actions, failures and time per tool call')}
+<p>Use it to decide what earns its place. A mod with nothing recorded for a week does no work on your machine. A slowest call over 10 seconds, shown in red, is worth a look in the mod's diary.</p>
+<h2 id="pg-notify">Get notified</h2>
+<p>Press <b>Notify</b> and allow notifications. The browser then tells you when a session starts waiting for you or gets blocked, while the tab stays open. The tab title also counts the sessions that need you, as <code>(2) Cockpit</code>. Press <code>r</code> to summarize every session again.</p>
+<h2 id="pg-service">Run it as a service</h2>
+<p>On a server, run the page under systemd instead of letting a session start it. Set the <code>panel</code> option <b>Start the page</b> (<code>autostart</code>) to off, then run the server as a unit:</p>
+{code("""[Service]
+User=you
+ExecStart=/usr/bin/python3 -I %h/.claude/plugins/marketplaces/cockpit/mods/panel/server/panel.py
+Environment=PANEL_CLAUDE=%h/.local/bin/claude
+Restart=always""", 'ini')}
+<p>The <a href="#mod-panel">panel reference</a> lists every option and environment variable, and where each figure on the page comes from.</p>'''
 
 def statusline_page():
     gal = ''
@@ -253,7 +305,9 @@ def commands():
     return f'''<p class="lead">Every command Cockpit adds. Each one also answers in plain text, so it works over Remote Control, where no pane is drawn.</p>
 <table><thead><tr><th>Command</th><th>Mod</th><th>What it does</th></tr></thead><tbody>{body}</tbody></table>
 <h2 id="cmd-keys">Keys inside a pane</h2>
-<p>A pane opens on the right side of the screen. Press <code>r</code> to refresh it and <code>esc</code> to close it.</p>'''
+<p>A pane opens on the right side of the screen. Press <code>r</code> to refresh it and <code>esc</code> to close it.</p>
+<h2 id="cmd-panel-keys">Keys on the panel page</h2>
+<p>Press <code>r</code> to summarize every session again, and <code>esc</code> to close the send dialog.</p>'''
 
 def privacy():
     return f'''<p class="lead">Cockpit runs inside Claude Code on your machine. Two mods send an excerpt of the session to a model, through your own account. Everything else stays local.</p>
@@ -269,6 +323,7 @@ def privacy():
 <li><b>Diaries.</b> Every mod writes one line per action under <code>~/.local/state/mods/&lt;mod&gt;/</code>, and one summary per session. A diary never holds a secret value or a file's content.</li>
 <li><b>Session records.</b> <code>collision-guard</code> keeps the list of files each session edited, under <code>~/.local/state/mods/collision-guard/sessions/</code>, and removes it once the session has ended.</li>
 <li><b>Secrets.</b> <code>secret-guard</code> holds secret values in memory only, never on disk.</li>
+<li><b>The panel page.</b> <code>panel</code> keeps the last summary of each session under <code>~/.local/state/mods/panel/</code>. The page has no login and listens only on <code>127.0.0.1</code>. Anyone who can reach that port on the machine can read it and type into your sessions, so do not expose it.</li>
 </ul>'''
 
 def troubleshooting():
@@ -282,7 +337,9 @@ def troubleshooting():
         ('The mod options are gone', '<p>Removing a marketplace deletes the saved options of its plugins. Run <code>/cockpit:setup</code> again to write them back.</p>'),
         ('global-memory does nothing on a Team or Enterprise plan', '<p>Those plans run a built-in guard that skips user-installed plugins on the hooks <code>global-memory</code> needs. It must run as an organization plugin; its <a href="#mod-global-memory">page</a> shows the managed settings.</p>'),
         ('/panel says the page server is not running', '<p>The server starts when a session starts, unless <b>Start the page</b> (<code>autostart</code>) is off because a service manager runs it. Start a new session, or check the service, such as <code>systemctl status cockpit-panel</code>.</p>'),
-        ('A git command was refused with a list of files', '<p><code>collision-guard</code> held it, because another session on this machine has uncommitted edits in the same repo. Name your own files instead, or run the same command again within 2 minutes.</p>'),
+        ('The panel shows no send buttons on a card', '<p>The session does not run in tmux, so the page has no pane to type into. Start the session inside tmux, or answer it where it runs.</p>'),
+        ('The panel shows no memory or services column', '<p>The page shows memory by group only for cgroup v2 groups with a memory limit, and services only under systemd. On macOS, or for sessions in an unlimited group, it shows the machine\'s memory alone.</p>'),
+        ('A git command was refused with a list of files', '<p><code>collision-guard</code> held it, because another session on this machine has uncommitted edits in the same repo, under the paths the command names. Name your own files instead, or run the same command again within 2 minutes.</p>'),
     ]
     out = '<p class="lead">The problems people hit most, and the fix for each.</p>'
     for i, (q, a) in enumerate(items):
@@ -312,7 +369,7 @@ def versions():
 
 PAGES = [
     ('Get started', [('intro', 'Introduction', intro), ('install', 'Installation', install), ('first-session', 'Your first session', first_session), ('update', 'Update and uninstall', update)]),
-    ('Guides', [('statusline', 'Status line styles', statusline_page), ('configuration', 'Configuration', configuration)]),
+    ('Guides', [('panel-guide', 'The session panel', panel_guide), ('statusline', 'Status line styles', statusline_page), ('configuration', 'Configuration', configuration)]),
     ('Mods', [('mods', 'All mods', mods_index)] + [(f'mod-{m}', m, None) for _, _, ms in GROUPS for m in ms]),
     ('Reference', [('commands', 'Commands', commands), ('privacy', 'Data and privacy', privacy), ('troubleshooting', 'Troubleshooting', troubleshooting), ('versions', 'Versions', versions)]),
 ]

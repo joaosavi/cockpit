@@ -105,6 +105,21 @@ pre:hover .copy, .copy:focus-visible { opacity: 1; }
 .note.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); background: var(--warn-soft); }
 .note p { margin: 0; }
 
+/* a browser frame around a screenshot of the panel; the image follows the theme */
+.shot { margin: 0 0 1.4rem; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 12px 32px -12px rgb(0 0 0 / .18); }
+.shot-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--sunk); }
+.shot-bar span { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.shot-bar em { margin: 0 auto; font: 500 .74rem var(--font-mono); font-style: normal; color: var(--faint); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 2px 14px; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot .dark { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .shot .light.has-dark { display: none; } :root:not([data-theme="light"]) .shot .dark { display: block; } }
+:root[data-theme="dark"] .shot .light.has-dark { display: none; }
+:root[data-theme="dark"] .shot .dark { display: block; }
+.feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 0 0 1.6rem; }
+.feature-grid div { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--surface); }
+.feature-grid b { display: block; margin-bottom: 4px; }
+.feature-grid span { color: var(--muted); font-size: .93rem; line-height: 1.5; }
+
 /* terminal: dark in both themes, like the terminal itself */
 .term { margin: 0 0 1.3rem; border-radius: 10px; overflow: hidden; background: var(--term-bg); border: 1px solid var(--line); }
 .term-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--term-bar); }
