@@ -63,6 +63,9 @@ node "$DIR/../playwright/cli.js" install chromium chromium-headless-shell
 sudo mkdir -p /etc/claude-code
 sudo cp "$R/claude/managed-settings.json" /etc/claude-code/managed-settings.json
 
+# O needrestart não reinicia as sessões depois do unattended-upgrade.
+sudo cp "$R/needrestart/sessoes.conf" /etc/needrestart/conf.d/sessoes.conf
+
 # As units são do root e entram como cópia.
 sudo cp -r "$R"/systemd/* /etc/systemd/system/
 sudo systemctl daemon-reload
