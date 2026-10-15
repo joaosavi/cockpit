@@ -8,10 +8,11 @@ Tudo que monta a VPS onde o Claude Code roda 24 horas: a configuração do Claud
 | :--- | :--- | :--- |
 | `claude/` | `CLAUDE.md` global, `settings.json` e `settings.local.json` | `~/.claude/` |
 | `hooks/segredo.pl` | Troca o valor de segredo por `<oculto:NOME>` na saída de toda ferramenta | `~/.claude/hooks/` |
-| `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite`, `navegador-cofre` e `avaliacoes-backup`, que envia o dataset do mod `rating` para o repo privado `joaosavi/agent-ratings` depois de passar pelo filtro de segredos | `~/.local/bin/` |
+| `bin/` | Os laços do Remote Control (`getdemo-rc`, `zippi-rc`, `esag-rc`, `resgate-rc`), `memoria`, `sessoes-limite`, `sessoes-reinicio`, `navegador-cofre` e `avaliacoes-backup`, que envia o dataset do mod `rating` para o repo privado `joaosavi/agent-ratings` depois de passar pelo filtro de segredos | `~/.local/bin/` |
 | `skills/` | As skills feitas nesta máquina. As do pack do skills.sh ficam de fora | `~/.claude/skills/` |
 | `mods/` e `.claude-plugin/` | Os mods do Claude Code, um plugin por mod, no marketplace `cockpit`. Tudo dentro deles é em inglês | instalados pelo `claude plugin install` |
 | `systemd/` | As slices de memória, os serviços `*-rc` com os drop-ins e os timers | `/etc/systemd/system/` |
+| `needrestart/sessoes.conf` | Tira os serviços `*-rc` do reinício que o needrestart faz depois do unattended-upgrade | `/etc/needrestart/conf.d/` |
 | `tarefas/sessoes-limite/` | O `retomar.py` do timer `retomar-limite`, desligado desde 07/10/2026, e o `PROMPT.md` da sessão que montou a retomada | `~/tarefas/sessoes-limite/` |
 | `shell/` | O terminal da VPS: `zshrc`, `profile`, `npmrc`, `starship.toml` e o `config.jsonc` do fastfetch | `~/` e `~/.config/` |
 | `resgate/CLAUDE.md` | As instruções do agente de resgate | `~/resgate/` |
@@ -84,6 +85,8 @@ Os mods estão em inglês e com padrões genéricos, prontos para outro usuário
 Cada mod grava um diário por sessão em `~/.local/state/mods/<mod>/`, com uma linha de resumo no fim da sessão (chamadas vistas, ações, tempo gasto nos hooks). Os comandos são `/limit`, `/ram`, `/audit [quantidade] [filtro]`, `/mods`, `/rate`, `/ratings`, `/wtf [pergunta]` e `/hud`, e respondem em texto em qualquer lugar, Remote Control inclusive. No terminal e no app Desktop há também a parte visual: o `usage-limit` desenha uma faixa acima do prompt com as barras de 5 h e de 7 dias a partir de 75% (opção `bandFrom`), o `/ram` abre um painel com a barra de cada grupo que se atualiza a cada 2 s, e o `/audit` abre um painel com as últimas chamadas e os botões `m` (mais) e `r` (atualizar).
 
 O `retomar-limite.timer` foi desligado em 07/10/2026. A sessão que ainda bater 100% é retomada pelo próprio `usage-limit`, pela opção `resume`, ligada por padrão.
+
+O `sessoes-reinicio.timer` roda às 07:40 UTC, depois do unattended-upgrade. Quando um serviço `*-rc` está com biblioteca do sistema apagada, ele reinicia o serviço e retoma cada sessão aberta pelo id. A sessão que caiu no meio de um turno recebe uma mensagem para seguir. O `sessoes-reinicio --simular` lista o que ele faria, e o `--teste` prova a volta numa sessão descartável.
 
 Para mudar um mod:
 
