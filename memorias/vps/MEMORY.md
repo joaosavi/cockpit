@@ -5,13 +5,19 @@
 - [Acesso ao Coolify](acesso-coolify.md) — ssh oracle + psql no coolify-db; tabelas de notificação; aviso do Traefik desligado
 - [Agentes em paralelo](agentes-em-paralelo.md) — no máximo um agente em segundo plano por vez
 - [Artifact em sessão SDK](artifact-em-sessao-sdk.md) — sem CLAUDE_CODE_ARTIFACT=1 no settings, o Artifact some
-- [Download por scp](download-por-scp.md) — entregas em /home/sv/esag/entrega, com comando scp pronto
+- [Entregar arquivo](download-por-scp.md) — página privada no claude.ai com botão de download; scp só com ssh
 - [Validar por cadeia](validar-por-cadeia.md) — para o João conferir fato ou raciocínio, usar a skill global chain-check
 - [TeamSpeak na VPS](teamspeak-na-vps.md) — TS6 da galera no Coolify, ts.joaosavi.cloud; admin por ~/tsq/q.sh
 - [Testar no PC](testar-no-pc.md) — mudou algo para o João testar: push e comandos para atualizar no PC dele
 - [Resolver de forma definitiva](resolver-de-forma-definitiva.md) — bug se resolve na causa; gambiarra só quando o João pedir explicitamente
 - [Prévia no terminal](previa-no-terminal.md) — mudança visual de terminal: mandar comando para o João rodar no terminal dele antes de publicar
-- [Swap do container](swap-do-container.md) — getdemo-dev com 7 GiB de RAM e 14 GiB de swap pelo raw.lxc; mudar limits.memory ao vivo desfaz o swap
-- [Tela sem texto explicativo](tela-sem-texto-explicativo.md) — nada de subtítulo, nota ou legenda que explica o óbvio; fonte de 13px no mínimo e espaço medido
-- [Sessões combinam a vez](sessoes-combinam-a-vez.md) — com outra sessão na máquina, avisar "vou rodar X" e "liberado" antes e depois de push, typecheck e teste
+- [Mostrar arquivo no chat](mostrar-arquivo-no-chat.md) — plano, prompt e .md para o João revisar vão impressos na resposta
+- [Assinatura no Gmail](assinatura-gmail.md) — rascunho sem assinatura digitada; o João põe a padrão do Gmail ao enviar
+- [Mapa do HubSpot da Getdemo](mapa-hubspot-getdemo.md) — fluxo do deal à Conta, 105 workflows e calculadas em ~/getdemo/hubspot/mapa e auditoria
+- [Onde ficam as credenciais](onde-ficam-as-credenciais.md) — um .env por escopo (warehouse, BI, raiz do zippi, ~/getdemo), seção por serviço, nunca .env.<serviço>
 - [Seguir até acabar](seguir-ate-acabar.md) — com trabalho autônomo pedido, não parar para relatar marco; só no fim ou travado no que só o João faz
+- [Tela sem texto explicativo](tela-sem-texto-explicativo.md) — nada de subtítulo, nota ou legenda que explica o óbvio; fonte de 13px no mínimo e espaço medido
+- [Chrome do PC](chrome-do-pc.md) — Claude in Chrome nativo pela ponte do claude.ai; restart do getdemo-rc pendente, até lá `claude -p --chrome`
+- [Swap do container](swap-do-container.md) — getdemo-dev com 7 GiB de RAM e 14 GiB de swap pelo raw.lxc; mudar limits.memory ao vivo desfaz o swap
+- [Sessões combinam a vez](sessoes-combinam-a-vez.md) — com outra sessão na máquina, avisar "vou rodar X" e "liberado" antes e depois de push, typecheck e teste
+||||||| Stash base

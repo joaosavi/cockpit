@@ -9,9 +9,10 @@ código, os dados da empresa e o trabalho que não é código.
 | :--- | :--- |
 | `zippi-datawarehouse/` | A V2, em monorepo. O warehouse ingere HubSpot e Conta Azul e produz a Gold, e o BI lê a Gold. Repo `zippi-brtech/zippi-datawarehouse`, em produção no Coolify da Oracle |
 | `bi-financeiro-getdemo/` | O BI V1, congelado em manutenção. Serve para conferir o número da V2 |
-| `get-demo-datalake-pipeline/` | O data lake V1, em produção |
+| `get-demo-datalake-pipeline/` | O data lake V1, congelado em manutenção. Serve para conferir o número da V2 |
 | `spec-agentes/` | A pesquisa e as decisões de agosto de 2026 que levaram à V2. Registro parado, fora do git |
 | `relatorios/` | A auditoria das 582 colunas da Gold, em HTML, com os dados que a geraram |
+| `hubspot/` | A configuração do HubSpot: propriedades, produtos, workflows, pipelines. Todo trabalho que lê ou muda a configuração começa no `CLAUDE.md` de lá, que tem a regra de escrita |
 
 Cada repo tem o próprio `CLAUDE.md`, e ele vale quando você mexe em arquivo de lá.
 

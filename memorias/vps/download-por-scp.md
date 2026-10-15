@@ -1,18 +1,16 @@
 ---
 name: download-por-scp
-description: O João baixa arquivos do container getdemo-dev pelo PC via scp; deixe o arquivo em /home/sv/esag/entrega e dê o comando
+description: Entregar arquivo ao João: página privada no claude.ai com botão de download; scp em /home/sv/esag/entrega só quando ele tiver ssh
 metadata:
-  node_type: memory
   type: feedback
-  originSessionId: 4e07bc4d-9ce5-5c4c-9594-5c155f2d1d39
-  modified: 2026-10-05T02:46:35.426Z
 ---
 
-O João não abre arquivos direto no container `getdemo-dev`: ele baixa pelo PC, via ssh/scp. O anexo de
-arquivo na conversa também falha, porque a sessão não está num thread de projeto. Para entregar um arquivo,
-copie para `/home/sv/esag/entrega/`, com nome sem espaço e sem acento, e passe o caminho completo e um
-comando scp pronto (usuário `sv`, host `getdemo-dev`).
+O anexo na conversa (SendUserFile) falha, porque a sessão não está num thread de projeto. O conector do Drive só aceita o arquivo em base64 dentro da chamada, então não sobe nada de alguns MB.
 
-**Why:** em 05/10/2026 ele pediu: "só deixe num lugar acessível aí pra eu baixar via comando daqui".
+Caminho padrão, aprovado pelo João em 08/10/2026: publicar uma página com o Artifact (privada, só ele abre), com os arquivos em `files` e a capacidade `downloads: true`. Um botão chama `claude.use("downloads").save({filename, data})`. Para entregar um zip, publique os arquivos soltos e monte o zip no clique com JSZip do cdnjs, porque o Artifact não aceita `.zip`, `.docx` ou `.xlsx` como arquivo publicado. PDF, imagem, CSV, JSON e texto ele aceita, com até 15 MB por arquivo. A fonte tem que estar no scratchpad ou na pasta de trabalho. Depois de publicar, apague a cópia local: a página guarda os arquivos.
 
-**How to apply:** em qualquer entrega de PDF, docx ou zip. Ligado a [[tcc-handoff]].
+Alternativa quando ele estiver num PC com ssh: copiar para `/home/sv/esag/entrega/`, com nome sem espaço e sem acento, e passar o comando scp pronto (usuário `sv`, host `getdemo-dev`).
+
+**Why:** em 05/10/2026 ele pediu para deixar o arquivo acessível para baixar via scp. Em 08/10 ele estava sem ssh, e a página com download resolveu. Ele perguntou por que eu não tinha sugerido isso antes.
+
+**How to apply:** em toda entrega de PDF, planilha ou zip, ofereça a página primeiro, sem esperar o anexo e o Drive falharem. Ligado a [[tcc-handoff]].

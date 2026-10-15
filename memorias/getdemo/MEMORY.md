@@ -3,3 +3,9 @@
 - [MBR mensal](mbr-mensal.md) — o deck de agosto com o DATA trocado, nunca redesenhado; números pelo mbrFrom da V2
 - [Rendimento CDB mensal](rendimento-cdb-mensal.md) — extratos do Inter → rendimento do mês → lançamento de ajuste no Conta Azul
 - [Conciliação dos cartões](conciliacao-cartoes.md) — faturas Inter e Itaú × Conta Azul, erros recorrentes, regra de centavos do parcelamento
+- [Zag reembolsos](zag-reembolsos.md) — login pelo cofre, API graphql, status 1 pendente / 2 aprovado / 3 rejeitado / 4 pago
+- [HubSpot itens de linha](hubspot-itens-de-linha.md) — trocar Produtos do deal por item de linha; pasta ~/getdemo/hubspot, escrita só com plano aprovado
+- [Regras do faturamento](financeiro-faturamento-regras.md) — NF só cancela na competência, renegociação junta boleto, upsell unificado conta parcelas; caso Indexmed out/2026
+- [Estilo dos e-mails do João](estilo-emails-joao.md) — abertura, estrutura, vocabulário e fechamento para rascunhar em nome dele
+- [Fechamento para a contabilidade](fechamento-contabilidade.md) — passo a passo mensal: 3 abas pelo warehouse, página de download, rascunho sem anexo; Drive é com o João
+- [Cartão por Open Finance](cartao-open-finance.md) — Pluggy → /bi/cartao da V2, transação no bi2 com estado; decisões abertas em ordem

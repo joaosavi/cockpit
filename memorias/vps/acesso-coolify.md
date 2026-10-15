@@ -13,6 +13,6 @@ O Coolify (painel em https://coolify.joaosavi.cloud, IP 140.238.182.181) roda no
 - SSH: `ssh oracle` (192.168.200.1, usuário `ubuntu`, chave `~/.ssh/id_ed25519_oracle`, configurado no `~/.ssh/config`). Docker pede `sudo`.
 - Containers: `coolify`, `coolify-db`, `coolify-redis`, `coolify-realtime`, `coolify-proxy` (o Traefik) e `coolify-sentinel`.
 - Banco: `sudo docker exec -i coolify-db psql -U coolify -d coolify`. Uma mudança feita no banco vale na hora, sem reiniciar o Coolify.
-- Notificações: as tabelas `*_notification_settings` (email, discord, telegram, slack, pushover, webhook) têm uma coluna booleana por evento, no formato `<evento>_<canal>_notifications`. Em 2026-10-07, desliguei `traefik_outdated_*` nos 6 canais porque o João não queria mais o aviso de Traefik desatualizado. Um evento também pode ser desligado pelo painel, em Notifications.
+- Notificações: as tabelas `*_notification_settings` (email, discord, telegram, slack, pushover, webhook) têm uma coluna booleana por evento, no formato `<evento>_<canal>_notifications`. Em 2026-10-07, desliguei `traefik_outdated_*` nos 6 canais porque o João não queria mais o aviso de Traefik desatualizado. Em 2026-10-13, desliguei `server_patch_*` nos 6 canais pelo mesmo motivo, com o aviso de patch do servidor. Um evento também pode ser desligado pelo painel, em Notifications.
 
 Para o acesso pelo navegador, ver [[cofre-credenciais-agentes]].
