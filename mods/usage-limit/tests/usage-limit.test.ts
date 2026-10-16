@@ -365,6 +365,9 @@ test('in the pause, a commit-only command passes and schedules the resume; a pus
   const commit = 'cd /work/repo && git add -A && git commit --no-verify -m "wip: pause at 98% (usage)"'
   expect(await $.tool.call({ tool: 'Bash', command: commit })).toMatchObject({ result: 'ran' })
   expect(await $.tool.call({ tool: 'Bash', command: 'git push' })).toMatchObject({ deny: expect.stringContaining('paused at') })
+  // Windows without Git Bash commits through the PowerShell tool.
+  expect(await $.tool.call({ tool: 'PowerShell', command: 'git -C C:\\work\\repo commit -am "wip: pause"' } as never)).toMatchObject({ result: 'ran' })
+  expect(await $.tool.call({ tool: 'PowerShell', command: 'git push' } as never)).toMatchObject({ deny: expect.stringContaining('paused at') })
   await clock.set(Date.parse(RESET) + 2 * 60_000)
   expect(s.submitted.length).toBe(1)
 })

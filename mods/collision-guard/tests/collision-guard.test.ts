@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import {
   DEFAULTS,
+  dirOf,
   editedPath,
   editNote,
   type Entry,
@@ -15,6 +16,7 @@ import {
   options,
   parseEntry,
   parseStatus,
+  slashed,
 } from '../hooks/rules.ts'
 
 const NOW = Date.parse('2026-10-08T13:00:00Z')
@@ -213,6 +215,13 @@ test('git add -A is held once, listing the other session files, and runs when re
   expect(second).toMatchObject({ result: 'ok' })
 })
 
+test('a git command through PowerShell, as on Windows without Git Bash, is held the same way', async ($, on) => {
+  const s = scene({ [`${REPO}/a.ts`]: { at: NOW - 4 * MIN, root: REPO } })
+  prepare(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'PowerShell', command: 'git add -A' } as never)).toMatchObject({ deny: expect.stringContaining('`git add -A` would stage them') })
+})
+
 test('a held command runs after 2 minutes only once confirmed again', async ($, on) => {
   const s = scene({ [`${REPO}/a.ts`]: { at: NOW - 4 * MIN, root: REPO } })
   const clock = prepare(on, s)
@@ -250,4 +259,49 @@ test('the session end marks the entry ended and writes one summary line', async 
   const diary = (s.files.get(`${HOME}/.local/state/mods/collision-guard/2026-10-08-this-ses.jsonl`) ?? '').trim().split('\n').map((l): unknown => JSON.parse(l))
   expect(diary.map((l) => (l as { event: string }).event)).toEqual(['edit-warned', 'git-held', 'session-summary'])
   expect(diary[2]).toMatchObject({ toolCalls: 2, actions: { 'edit-warned': 1, 'git-held': 1 } })
+})
+
+test('a Windows path keys the registry with forward slashes, as git prints it', () => {
+  expect(editedPath('Edit', { file_path: 'C:\\w\\app\\a.ts' })).toBe('C:/w/app/a.ts')
+  expect(editedPath('Edit', { file_path: 'app\\a.ts' })).toBeNull()
+  expect(dirOf('C:/w/app/a.ts')).toBe('C:/w/app')
+  expect(dirOf('C:/a.ts')).toBe('C:/')
+  expect(dirOf('/a.ts')).toBe('/')
+  expect(slashed('/home/u/a.ts')).toBe('/home/u/a.ts')
+})
+
+test('git commands on Windows resolve against the drive, and `..` stops at it', () => {
+  const at = (line: string) => gitTargets(line, 'C:/w/app', 'C:/Users/u').map((t) => `${t.op}@${t.dir}`)
+  expect(at('git add -A')).toEqual(['stage-all@C:/w/app'])
+  expect(at('cd ..\\other && git stash')).toEqual(['stash@C:/w/other'])
+  expect(at('git -C ../../../.. add .')).toEqual(['stage-all@C:/'])
+  expect(at('cd ~/x && git add -A')).toEqual(['stage-all@C:/Users/u/x'])
+  expect(gitTargets('git checkout -- src\\lib', 'C:/w/app', 'C:/Users/u')[0]?.scope).toEqual(['C:/w/app/src/lib'])
+})
+
+test('a stale entry is deleted with del when there is no rm, as on Windows', async ($, on) => {
+  const s = scene({})
+  s.files.set(`${DIR}/other-session-0001.json`, JSON.stringify(other({}, { ended: true, seenAt: NOW - 2 * 60 * MIN })))
+  const ran: string[][] = []
+  const clock = mock.clock(on, { now: NOW })
+  mock.env(on, { USERPROFILE: HOME })
+  on('session.id', () => ({ value: 'this-session-0002' }))
+  on('fs.read', ($, e) => {
+    const text = s.files.get(e.path)
+    return text === undefined ? { deny: 'no file' } : { value: text }
+  })
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.list', ($, e) => ({
+    value: [...s.files.keys()].filter((p) => p.startsWith(`${e.path}/`)).map((p) => ({ name: p.slice(e.path.length + 1), kind: 'file' as const })),
+  }))
+  on('process.run', ($, e) => {
+    ran.push([...e.argv])
+    if (e.argv[0] === 'rm') return { deny: 'ENOENT: rm' }
+    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('session.start', () => ({ cwd: REPO }))
+  await $.session.start(start)
+  await clock.advance(1)
+  expect(ran.map((a) => a.slice(0, a[0] === 'rm' ? 2 : 6).join(' '))).toEqual(['rm -f', 'cmd /d /c del /f /q'])
+  expect(ran[1]?.at(-1)).toBe('\\home\\u\\.local\\state\\mods\\collision-guard\\sessions\\other-session-0001.json')
 })

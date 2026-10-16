@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { bareSkill, byCommand, byTool, installPathOf, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
+import { asSkill, bareSkill, byCommand, byTool, installPathOf, loadedText, looksLikeError, refusalText } from '../hooks/rules.ts'
 
 test('each file calls for the right skill', () => {
   expect(byTool('Read', '/w/src/a.ts')?.skill).toBe('typescript-best-practices')
@@ -14,6 +14,34 @@ test('each file calls for the right skill', () => {
   expect(byTool('Read', '/tmp/x/bundled-skills/2.1.296/abc/plugin-authoring/types/claude-code.d.ts')).toBeNull()
   expect(byTool('Read', '/w/node_modules/zod/index.d.ts')).toBeNull()
   expect(byTool('Read', '/w/mod/.claude-plugin/types/claude-code/index.d.ts')).toBeNull()
+})
+
+test('a Windows path calls for the same skill as its forward-slash spelling', () => {
+  expect(byTool('Edit', 'C:\\w\\.claude\\skills\\x\\SKILL.md')?.skill).toBe('writing-for-agents')
+  expect(byTool('Write', 'C:\\w\\docs\\adr\\0003-currency.md')?.skill).toBe('domain-modeling')
+  expect(byTool('Read', 'C:\\w\\node_modules\\zod\\index.d.ts')).toBeNull()
+})
+
+test('a SKILL.md with CRLF line ends loses its frontmatter too', () => {
+  expect(asSkill('/s/x', '---\r\nname: x\r\ndescription: y\r\n---\r\n\r\n# Body\r\n')).toBe('Base directory for this skill: /s/x\n\n# Body')
+})
+
+test('the user\'s skills folder falls back to USERPROFILE when HOME is unset', async ($, on) => {
+  const read: string[] = []
+  mock.clock(on, { now: 0 })
+  mock.env(on, { USERPROFILE: '/users/u' })
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('session.cwd', () => ({ value: '/work' }))
+  on('fs.read', ($, e) => {
+    read.push(e.path)
+    return { deny: 'no file' }
+  })
+  on('fs.write', () => ({ value: undefined }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Read', file_path: '/work/a.ts' })
+  expect(read).toContain('/users/u/.claude/skills/typescript-best-practices/SKILL.md')
 })
 
 test('commits and PRs call for technical-writing, and a quote does not', () => {

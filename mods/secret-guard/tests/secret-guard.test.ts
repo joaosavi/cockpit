@@ -50,6 +50,9 @@ type World = {
   // How many fs.list and fs.stat calls the mod made.
   lists: number
   stats: number
+  // No /proc, as on macOS and Windows; the environment comes from these commands instead.
+  noProc?: { env0: boolean; set: boolean }
+  ran?: string[]
 }
 
 function envBi(extra = ''): string {
@@ -99,6 +102,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
   on('session.start', () => ({ cwd: '/work' }))
   on('session.end', () => ({ sessionId: 'abcdef123456' }))
   on('fs.read', ($, e) => {
+    if (e.path === '/proc/self/environ' && w.noProc !== undefined) return { deny: 'ENOENT' }
     if (e.path === '/proc/self/environ') return { value: Object.entries(w.environ).map(([k, v]) => `${k}=${v}`).join('\0') + '\0' }
     const written = w.writes.get(e.path)
     if (written !== undefined) return { value: written }
@@ -129,6 +133,14 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
     const realPath = e.resolve ? e.path : undefined
     if (f !== undefined) return { value: { kind: 'file', size: f.text.length, mtimeMs: f.mtimeMs, isLink: false, realPath } }
     if (isDir(w, e.path)) return { value: { kind: 'dir', size: 0, mtimeMs: w.dirMtimes.get(e.path) ?? 0, isLink: false, realPath } }
+    return { deny: 'ENOENT' }
+  })
+  on('process.run', ($, e) => {
+    const argv = e.argv.join(' ')
+    w.ran?.push(argv)
+    const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    if (argv === 'env -0' && w.noProc?.env0 === true) return ok(Object.entries(w.environ).map(([k, v]) => `${k}=${v}\0`).join(''))
+    if (argv === 'cmd /d /c set' && w.noProc?.set === true) return ok(Object.entries(w.environ).map(([k, v]) => `${k}=${v}\r\n`).join(''))
     return { deny: 'ENOENT' }
   })
   on('tool.call', ($, e) => {
@@ -163,6 +175,22 @@ test('env output hides the environment token', REPOS, async ($, on) => {
   expect(leaks(dump(r))).toEqual([])
   expect(stdoutOf(r)).toMatch(/^GITHUB_TOKEN=<hidden:GITHUB_TOKEN>$/m)
 })
+
+for (const [system, noProc] of [['macOS', { env0: true, set: false }], ['Windows', { env0: false, set: true }]] as const) {
+  test(`without /proc, as on ${system}, the environment still comes in`, REPOS, async ($, on) => {
+    const w = freshWorld()
+    const only = 'e'.repeat(12) + 'nv-only-token-value'
+    const askpass = 'C:\\Program Files\\Git\\mingw64\\bin\\git-askpass.exe'
+    w.environ = { ...w.environ, ONLY_ENV_TOKEN: only, GIT_ASKPASS: askpass }
+    w.noProc = noProc
+    w.ran = []
+    w.answers.push(bash(`ONLY_ENV_TOKEN=${only}\nGIT_ASKPASS=${askpass}\n`))
+    setup(on, w)
+    const r = await $.tool.call({ tool: 'Bash', command: 'env' })
+    expect(stdoutOf(r)).toBe(`ONLY_ENV_TOKEN=<hidden:ONLY_ENV_TOKEN>\nGIT_ASKPASS=${askpass}\n`)
+    expect(w.ran.filter((a) => !a.startsWith('find'))).toEqual(noProc.env0 ? ['env -0'] : ['env -0', 'env', 'cmd /d /c set'])
+  })
+}
 
 test('printenv output hides the environment token', REPOS, async ($, on) => {
   const w = freshWorld()
@@ -403,6 +431,8 @@ test('the rules: candidates, accepts, options', () => {
   expect(candidates('PLAIN', 'not-a-secret-name-value', false)).toEqual([])
   expect(candidates('PLAIN', 'not-a-secret-name-value', true)).toEqual([['PLAIN', 'not-a-secret-name-value']])
   expect(accepts('/an/absolute/path/value', 12)).toBe(false)
+  expect(accepts('C:\\Users\\u\\AppData\\Local\\x', 12)).toBe(false)
+  expect(accepts('D:/tools/askpass.exe', 12)).toBe(false)
   expect(accepts('${SOME_VARIABLE}', 12)).toBe(false)
   expect(accepts('<oculto:GITHUB_TOKEN>', 12)).toBe(false)
   expect(accepts('<hidden:GITHUB_TOKEN>', 12)).toBe(false)

@@ -42,7 +42,8 @@ HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get('PANEL_PORT', '7777'))
 MODEL = os.environ.get('PANEL_MODEL', 'sonnet')
 REFRESH_S = max(60, int(float(os.environ.get('PANEL_REFRESH_MINUTES', '5')) * 60))
-CLAUDE = os.environ.get('PANEL_CLAUDE', 'claude')
+# shutil.which finds claude.exe or claude.cmd on Windows too.
+CLAUDE = os.environ.get('PANEL_CLAUDE') or shutil.which('claude') or 'claude'
 # A summary of a session that went idle waits this long, so a quick follow-up turn is not summed up twice.
 IDLE_SETTLE_S = 20
 # How long an ended session stays on the page, below the live ones.
@@ -300,6 +301,17 @@ def facts(entries: list[dict]) -> dict:
 # --- the sessions on this machine ---
 
 def pid_alive(pid: int) -> bool:
+    if os.name == 'nt':
+        # os.kill(pid, 0) on Windows sends Ctrl+C to the process, so ask Windows whether it still runs.
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        k.GetExitCodeProcess(h, ctypes.byref(code))
+        k.CloseHandle(h)
+        return code.value == 259
     try:
         os.kill(pid, 0)
         return True
@@ -400,7 +412,8 @@ def summarize(session_id: str, path: Path, cwd: str) -> dict:
         '--model', MODEL, '--output-format', 'json', '--system-prompt', SYSTEM, '--json-schema', json.dumps(SCHEMA),
     ]
     started = time.time()
-    r = subprocess.run(['nice', '-n', '10', *cmd], input=prompt, capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_S, cwd=str(STATE))
+    nice = ['nice', '-n', '10'] if shutil.which('nice') else []
+    r = subprocess.run([*nice, *cmd], input=prompt, capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_S, cwd=str(STATE))
     if r.returncode != 0 and not r.stdout.strip():
         raise RuntimeError(clip(r.stderr or f'claude exited {r.returncode}', 300))
     card = parse_answer(r.stdout)
@@ -521,7 +534,7 @@ class Scheduler:
 # --- the machine ---
 
 CGROUP = Path('/sys/fs/cgroup')
-PAGE = os.sysconf('SC_PAGE_SIZE')
+PAGE = os.sysconf('SC_PAGE_SIZE') if hasattr(os, 'sysconf') else 4096
 # By default the page shows the cgroups the sessions run in that have a memory limit, found on its own.
 # PANEL_GROUPS (comma-separated cgroup paths) shows these and everything under them instead.
 GROUP_ROOTS = [g.strip('/') for g in os.environ.get('PANEL_GROUPS', '').split(',') if g.strip('/')]
@@ -533,10 +546,10 @@ GUARD_EVENTS = {
     'memory-guard': {'refused': 'refused', 'reduced': 'one process', 'waited-and-fit': 'waited', 'rerun-after-137': 'rerun'},
     'secret-guard': {'redacted': 'hidden', 'restored': 'restored', 'filled': 'filled', 'unfilled': 'refused', 'failed': 'failed'},
     'skill-loader': {'loaded': 'loaded', 'reminded-diagnosing-bugs': 'reminded'},
-    'loop-breaker': {'nudge': 'loops'},
+    'loop-breaker': {'nudge': 'nudged'},
     'pipefail': {'rewritten': 'rewritten'},
     'collision-guard': {'edit-warned': 'warned', 'git-held': 'held'},
-    'usage-limit': {'tool-refused': 'refused', 'held': 'held', 'resumed': 'resumed', 'zone': 'zone changes'},
+    'usage-limit': {'tool-refused': 'refused', 'held': 'held', 'resumed': 'resumed', 'zone': 'zone changed'},
 }
 
 
@@ -570,6 +583,8 @@ class Processes:
         self.children: dict[int, list[int]] = {}
         if HAS_PROC:
             self._read_proc()
+        elif os.name == 'nt':
+            self._read_windows()
         else:
             self._read_ps()
         for pid, ppid in self.parent.items():
@@ -600,6 +615,20 @@ class Processes:
                 continue
             pid = int(parts[0])
             self.parent[pid], self.rss[pid], self.name[pid] = int(parts[1]), int(parts[2]) * 1024, os.path.basename(parts[3])
+
+    def _read_windows(self) -> None:
+        # Windows has neither /proc nor ps. One CIM query lists every process with its parent and memory.
+        cmd = ['powershell', '-NoProfile', '-NonInteractive', '-Command',
+               'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.WorkingSetSize)`t$($_.Name)" }']
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            return
+        for line in out.splitlines():
+            parts = line.strip().split('\t')
+            if len(parts) == 4 and parts[0].isdigit():
+                pid = int(parts[0])
+                self.parent[pid], self.rss[pid], self.name[pid] = int(parts[1] or 0), int(parts[2] or 0), parts[3].removesuffix('.exe')
 
     def ancestors(self, pid: int) -> list[int]:
         out, seen = [], set()
@@ -703,6 +732,64 @@ def groups(session_pids: list[int], procs: Processes, now: float) -> list[dict]:
     return out
 
 
+def cpu_times() -> tuple[int, int, int | None] | None:
+    """Total, idle and I/O wait ticks since boot, or None where the system has no counter."""
+    if os.name == 'nt':
+        import ctypes
+        idle, kernel, user = (ctypes.c_ulonglong() for _ in range(3))
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+            return None
+        return kernel.value + user.value, idle.value, None  # kernel time includes idle
+    try:
+        f = [int(x) for x in Path('/proc/stat').read_text().split('\n', 1)[0].split()[1:9]]
+    except (OSError, ValueError):
+        return None
+    return sum(f), f[3], f[4]
+
+
+class Cpu:
+    """How busy the CPUs were over the last minute: the share of time not idle, and apart from it the share spent
+    waiting on disk. The load average is no measure of this, as Linux counts in it every task waiting on disk."""
+    WINDOW = 60.0
+
+    def __init__(self) -> None:
+        self.samples: list[tuple[float, tuple]] = []
+        self.lock = threading.Lock()
+
+    def read(self, now: float) -> dict | None:
+        cores = os.cpu_count() or 1
+        first = cpu_times()
+        if first is None:
+            return self.from_ps(cores)
+        with self.lock:
+            if not self.samples:
+                self.samples.append((now - 0.3, first))
+                time.sleep(0.3)
+                first = cpu_times() or first
+            self.samples.append((now, first))
+            self.samples = [x for x in self.samples if now - x[0] <= self.WINDOW] or self.samples[-2:]
+            (_, a), (_, b) = self.samples[0], self.samples[-1]
+        total = b[0] - a[0]
+        if total <= 0:
+            return None
+        wait = None if b[2] is None else round(100 * (b[2] - a[2]) / total)
+        busy = 100 * (total - (b[1] - a[1]) - (b[2] - a[2] if b[2] is not None else 0)) / total
+        return {'busy': round(busy), 'iowait': wait, 'cores': cores}
+
+    @staticmethod
+    def from_ps(cores: int) -> dict | None:
+        # macOS has no tick counter a script can read; ps gives each process's recent share of one core
+        try:
+            out = subprocess.run(['ps', '-A', '-o', '%cpu='], capture_output=True, text=True, timeout=5).stdout
+            total = sum(float(x.replace(',', '.')) for x in out.split())
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return None
+        return {'busy': round(min(100, total / cores)), 'iowait': None, 'cores': cores}
+
+
+CPU = Cpu()
+
+
 def meminfo() -> dict:
     vals: dict[str, int] = {}
     if HAS_PROC:
@@ -713,6 +800,18 @@ def meminfo() -> dict:
         except (OSError, ValueError, IndexError):
             pass
         return {'total': vals.get('MemTotal'), 'available': vals.get('MemAvailable')}
+    if os.name == 'nt':
+        import ctypes
+
+        class Status(ctypes.Structure):
+            _fields_ = [('length', ctypes.c_ulong), ('load', ctypes.c_ulong), ('total', ctypes.c_ulonglong), ('available', ctypes.c_ulonglong),
+                        ('pageTotal', ctypes.c_ulonglong), ('pageAvail', ctypes.c_ulonglong), ('virtTotal', ctypes.c_ulonglong),
+                        ('virtAvail', ctypes.c_ulonglong), ('extAvail', ctypes.c_ulonglong)]
+        st = Status()
+        st.length = ctypes.sizeof(Status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
+            return {'total': st.total, 'available': st.available}
+        return {'total': None, 'available': None}
     try:
         total = int(subprocess.run(['sysctl', '-n', 'hw.memsize'], capture_output=True, text=True, timeout=3).stdout.strip())
         vm = subprocess.run(['vm_stat'], capture_output=True, text=True, timeout=3).stdout
@@ -788,18 +887,19 @@ def usage_windows() -> dict | None:
 
 def panel_today() -> dict:
     day = time.strftime('%Y-%m-%d', time.gmtime())
-    n, tokens, failed = 0, 0, 0
+    n, tokens, failed, cost = 0, 0, 0, 0.0
     try:
         for raw in (STATE / f'{day}-server.jsonl').read_text().splitlines():
             e = json.loads(raw)
             if e.get('event') == 'summarized':
                 n += 1
                 tokens += (e.get('input') or 0) + (e.get('output') or 0)
+                cost += e.get('costUsd') or 0
             elif e.get('event') == 'failed':
                 failed += 1
     except (OSError, ValueError):
         pass
-    return {'summaries': n, 'tokens': tokens, 'failed': failed}
+    return {'summaries': n, 'tokens': tokens, 'failed': failed, 'costUsd': round(cost, 4)}
 
 
 def compact_window() -> int | None:
@@ -812,8 +912,7 @@ def compact_window() -> int | None:
 
 def overview(cards: list[dict], procs: Processes, now: float) -> dict:
     g = groups([c['pid'] for c in cards if c.get('pid')], procs, now)
-    disk = shutil.disk_usage('/')
-    load = os.getloadavg()
+    disk = shutil.disk_usage(Path.home().anchor or '/')
     versions = sorted({c.get('version') for c in cards if c.get('version')})
     return {
         'host': socket.gethostname(),
@@ -822,7 +921,7 @@ def overview(cards: list[dict], procs: Processes, now: float) -> dict:
         'memory': meminfo(),
         'groups': g,
         'services': services(g),
-        'cpu': {'load': [round(x, 2) for x in load], 'cores': os.cpu_count()},
+        'cpu': CPU.read(now),
         'disk': {'used': disk.used, 'total': disk.total},
         'guards': guards_today(),
         'panel': panel_today(),
@@ -833,6 +932,40 @@ def overview(cards: list[dict], procs: Processes, now: float) -> dict:
 
 
 # --- auditing the mods ---
+
+# Anthropic API list prices in dollars per million tokens, as of October 2026: input, output, a 5-minute
+# cache write (1.25 times input) and a cache read. On a subscription the mods spend plan usage, not money;
+# the page shows what the same calls would cost through the API.
+PRICES = {
+    'haiku': (0.10, 0.50, 0.125, 0.01),
+    'sonnet': (2.00, 10.00, 2.50, 0.20),
+    'opus': (4.00, 20.00, 5.00, 0.20),
+    'fable': (10.00, 50.00, 12.50, 0.25),
+}
+
+
+def price_of(model: str | None) -> tuple[float, float, float, float] | None:
+    m = (model or '').lower()
+    return next((v for k, v in PRICES.items() if k in m), None)
+
+
+def mod_model(mod: str, default: str = 'haiku') -> str:
+    """The model a mod's option names, from the settings file, else `default`."""
+    try:
+        configs = json.loads((CONFIG / 'settings.json').read_text()).get('pluginConfigs', {})
+        return str(configs.get(f'{mod}@cockpit', {}).get('options', {}).get('model') or default)
+    except (OSError, ValueError, AttributeError):
+        return default
+
+
+def tokens_cost(e: dict, model: str) -> float:
+    """The API price of the model tokens a diary line counts, as `inputTokens`, `outputTokens` and the cache fields."""
+    p = price_of(model)
+    if p is None:
+        return 0.0
+    return ((e.get('inputTokens') or 0) * p[0] + (e.get('outputTokens') or 0) * p[1]
+            + (e.get('cacheCreationTokens') or 0) * p[2] + (e.get('cacheReadTokens') or 0) * p[3]) / 1e6
+
 
 # Diary lines that record bookkeeping, not something the mod did to a session.
 QUIET_EVENTS = {'session-summary', 'list-built', 'peak-measured', 'prompt', 'started', 'summarized'}
@@ -879,6 +1012,8 @@ def mods_report(days: int) -> list[dict]:
         max_ms = 0.0
         recent: list[dict] = []
         summary_actions: dict[str, int] = {}
+        cost = 0.0
+        model = mod_model(mod)
         last = None
         for f in sorted(d.glob('*.jsonl')):
             if f.name[:10] < first_day:
@@ -896,6 +1031,11 @@ def mods_report(days: int) -> list[dict]:
                 if at is None or at < since:
                     continue
                 ev = str(e.get('event'))
+                # A model call's price: `claude -p` reports its own, the mods count tokens.
+                if isinstance(e.get('costUsd'), (int, float)):
+                    cost += e['costUsd']
+                elif ev == 'session-summary' and e.get('inputTokens') is not None:
+                    cost += tokens_cost(e, model)
                 if e.get('session') and e['session'] != '-':
                     sessions.add(e['session'])
                 if ev == 'session-summary':
@@ -929,6 +1069,7 @@ def mods_report(days: int) -> list[dict]:
             'msPerCall': round(hook_ms / calls, 1) if calls else None,
             'maxHookMs': round(max_ms) if max_ms else None,
             'last': last,
+            'costUsd': round(cost, 4),
             'recent': sorted(recent, key=lambda x: -x['at'])[:40],
         })
     _mods_cache[days] = (now, out)
@@ -973,61 +1114,48 @@ def git_state(cwd: str) -> dict | None:
 _panes_cache: tuple[float, dict[int, tuple[str, str]]] = (0.0, {})
 
 
-def tmux_panes() -> dict[int, tuple[str, str]]:
-    """Every tmux pane of this user, by the pid of the process it runs, with its socket. Looks in each
-    server's socket folder, so panes on any socket name count."""
-    global _panes_cache
-    now = time.time()
-    if now - _panes_cache[0] < 10:
-        return _panes_cache[1]
-    out: dict[int, tuple[str, str]] = {}
-    if shutil.which('tmux'):
-        base = Path(os.environ.get('TMUX_TMPDIR', '/tmp')) / f'tmux-{os.getuid()}'
-        for sock in base.glob('*') if base.is_dir() else []:
-            try:
-                r = subprocess.run(['tmux', '-S', str(sock), 'list-panes', '-a', '-F', '#{pane_pid} #{pane_id}'], capture_output=True, text=True, timeout=3)
-            except (OSError, subprocess.SubprocessError):
-                continue
-            for line in r.stdout.splitlines():
-                pid, _, pane = line.partition(' ')
-                if pid.isdigit() and pane.startswith('%'):
-                    out[int(pid)] = (str(sock), pane)
-    _panes_cache = (now, out)
-    return out
+INBOX = STATE / 'inbox'
+LISTENING_S = 15
 
 
-# --- answering a session ---
-
-def tmux_target(pid: int, procs: Processes | None = None) -> tuple[str, str] | None:
-    """The tmux socket and pane a session runs in: the pane whose process is the session or one of its
-    parents."""
-    panes = tmux_panes()
-    for p in (procs or Processes()).ancestors(pid):
-        if p in panes:
-            return panes[p]
-    return None
+def listening(session_id: str) -> bool:
+    """Whether the session's panel mod checks its inbox: it touches `<session>.seen` every 2 seconds."""
+    try:
+        return time.time() - (INBOX / f'{session_id}.seen').stat().st_mtime < LISTENING_S
+    except OSError:
+        return False
 
 
-def send_to_session(session_id: str, text: str) -> str | None:
-    """Types `text` into the session's prompt and presses Enter, as if the user did. Returns why not, or None."""
-    text = re.sub(r'\s+', ' ', text).strip()[:4000]
+def seen_id(session_id: str) -> str | None:
+    try:
+        return json.loads((INBOX / f'{session_id}.seen').read_text()).get('done')
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def send_to_session(session_id: str, text: str, wait_s: float = 6.0) -> str | None:
+    """Hands `text` to the session's panel mod, which submits it as the user's prompt once the session is idle.
+    Waits for the mod to take it, and withdraws it when the mod does not. Returns why not, or None."""
+    text = text.strip()[:4000]
     if not text:
         return 'empty text'
-    sess = next((x for x in live_sessions() if x['sessionId'] == session_id), None)
-    if sess is None:
+    if not any(x['sessionId'] == session_id for x in live_sessions()):
         return 'the session is not running'
-    target = tmux_target(sess['pid'])
-    if target is None or not shutil.which('tmux'):
-        return 'the session does not run in tmux'
-    sock, pane = target
-    try:
-        subprocess.run(['tmux', '-S', sock, 'send-keys', '-t', pane, '-l', text], check=True, timeout=5, capture_output=True)
-        time.sleep(0.3)
-        subprocess.run(['tmux', '-S', sock, 'send-keys', '-t', pane, 'Enter'], check=True, timeout=5, capture_output=True)
-    except (OSError, subprocess.SubprocessError) as err:
-        return clip(str(err), 200)
-    log({'event': 'sent', 'session': session_id[:8], 'chars': len(text)})
-    return None
+    if not listening(session_id):
+        return 'the session does not run the panel mod, or runs an older version of it'
+    msg_id = f'{time.time_ns():x}'
+    path = INBOX / f'{session_id}.json'
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps({'id': msg_id, 'text': text}))
+    os.replace(tmp, path)
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        if seen_id(session_id) == msg_id:
+            log({'event': 'sent', 'session': session_id[:8], 'chars': len(text)})
+            return None
+        time.sleep(0.25)
+    path.unlink(missing_ok=True)
+    return 'the session did not take the message'
 
 
 # --- the page and its API ---
@@ -1088,7 +1216,7 @@ def card_for(sess: dict | None, sid: str, s: Summarizer, ended: bool, procs: Pro
         'startedAt': int((sess or {}).get('startedAt') or 0) / 1000 or None,
         'rss': procs.tree_rss(sess['pid']) if procs and sess else None,
         'group': (cgroup_of(sess['pid']) or '').rsplit('/', 1)[-1] if sess else None,
-        'canSend': bool(sess and tmux_target(sess['pid'], procs)),
+        'canSend': bool(sess) and listening(sid),
         'git': git_state(cwd) if sess else None,
         'hourly': f.get('hourly'),
         'summary': {k: v for k, v in summary.items() if not k.startswith('_')} if summary else None,
@@ -1178,7 +1306,24 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, json.dumps({'queued': queued}).encode(), 'application/json')
 
 
+def detach(log_path: str) -> None:
+    """Starts this server again as a background process that outlives the caller, then returns. The mod uses
+    it instead of a shell, so it works the same on Linux, macOS and Windows."""
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    out = open(log_path, 'ab')
+    kw: dict[str, Any] = {'stdin': subprocess.DEVNULL, 'stdout': out, 'stderr': out, 'close_fds': True}
+    if os.name == 'nt':
+        kw['creationflags'] = 0x00000008 | 0x00000200  # DETACHED_PROCESS, CREATE_NEW_PROCESS_GROUP
+    else:
+        kw['start_new_session'] = True
+    subprocess.Popen([sys.executable, '-I', str(Path(__file__).resolve())], **kw)
+
+
 def main() -> None:
+    if len(sys.argv) > 2 and sys.argv[1] == '--detach':
+        detach(sys.argv[2])
+        return
+    INBOX.mkdir(parents=True, exist_ok=True)
     STATE.mkdir(parents=True, exist_ok=True)
     s = Summarizer()
     Scheduler(s)

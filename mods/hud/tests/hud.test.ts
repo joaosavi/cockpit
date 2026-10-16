@@ -14,8 +14,10 @@ import {
   lineRow,
   limitTone,
   localDay,
+  macMemory,
   memory,
   memoryTone,
+  windowsMemory,
   modelName,
   notableOf,
   options,
@@ -220,7 +222,7 @@ test('the pane text lists every section with the labels aligned', () => {
 
 type On = Parameters<Parameters<typeof test>[1]>[1]
 
-type Setup = { surfaces?: string[]; opened?: string[]; agents?: number; text?: string[]; counts?: { git: number; agents: number } }
+type Setup = { surfaces?: string[]; opened?: string[]; agents?: number; text?: string[]; counts?: { git: number; agents: number }; ran?: string[][]; noRm?: boolean; env?: Record<string, string>; files?: Record<string, string>; outputs?: Record<string, string> }
 
 const FILES: Record<string, string> = {
   '/proc/self/cgroup': '0::/agents.slice/demo.service\n',
@@ -241,8 +243,9 @@ const DIRS: Record<string, { name: string; kind: 'file'; size: number; isLink: b
 
 function setup(on: On, s: Setup = {}) {
   const clock = mock.clock(on, { now: NOW })
-  mock.env(on, { HOME: '/home' })
+  mock.env(on, s.env ?? { HOME: '/home' })
   mock.store(on, {})
+  const files = s.files ?? FILES
   on('session.start', () => ({ cwd: '/home/my-app' }))
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -251,10 +254,15 @@ function setup(on: On, s: Setup = {}) {
   on('session.measure', ($, e) => ({ changed: e.changed }))
   on('command.register', () => ({ value: undefined }))
   on('process.run', ($, e) => {
+    s.ran?.push([...e.argv])
+    if (s.noRm === true && e.argv[0] === 'rm') return { deny: 'ENOENT: rm' }
+    const out = s.outputs?.[e.argv[0] ?? '']
+    if (out !== undefined) return { value: { exitCode: 0, stdout: out, stderr: '' } }
+    if (s.outputs !== undefined && ['sysctl', 'vm_stat', 'powershell'].includes(e.argv[0] ?? '')) return { deny: 'ENOENT: command not found' }
     if (s.counts !== undefined && e.argv.includes('status')) s.counts.git += 1
     return { value: { exitCode: 0, stdout: e.argv.includes('status') ? '# branch.oid abc\n# branch.head main\n? new.ts\n' : '', stderr: '' } }
   })
-  on('fs.read', ($, e) => (e.path in FILES ? { value: FILES[e.path] ?? '' } : { deny: 'no such file' }))
+  on('fs.read', ($, e) => (e.path in files ? { value: files[e.path] ?? '' } : { deny: 'no such file' }))
   on('fs.list', ($, e) => (e.path in DIRS ? { value: DIRS[e.path] ?? [] } : { deny: 'no such folder' }))
   on('fs.write', ($, e) => {
     s.text?.push(e.text)
@@ -449,6 +457,64 @@ test('/hud in Remote Control answers with the same content as text', SAO_PAULO, 
   ])
 })
 
+// Sample outputs, copied in shape from a Mac and a Windows PC. The real commands never ran in these
+// tests: the macOS and Windows paths are checked only against this simulated output.
+const VM_STAT = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                               65536.
+Pages active:                            401234.
+Pages inactive:                          196608.
+Pages speculative:                            0.
+Pages throttled:                              0.
+Pages wired down:                        150000.
+Pages purgeable:                              0.
+"Translation faults":                 123456789.
+`
+const PS_JSON = '{\r\n    "TotalVisibleMemorySize":  16777216,\r\n    "FreePhysicalMemory":  4194304\r\n}\r\n'
+const NO_LINUX = { '/home/.local/state/mods/skill-loader/2026-10-07-aaaa.jsonl': FILES['/home/.local/state/mods/skill-loader/2026-10-07-aaaa.jsonl'] ?? '' }
+
+test('the macOS and Windows readings parse into the machine', () => {
+  // 262144 pages of 16 KiB are 4 GiB available.
+  expect(macMemory('17179869184\n', VM_STAT)).toEqual({ total: 16 * GiB, available: 4 * GiB })
+  expect(macMemory('', VM_STAT)).toBeNull()
+  expect(macMemory('17179869184', 'vm_stat: command not found')).toBeNull()
+  expect(windowsMemory(PS_JSON)).toEqual({ total: 16 * GiB, available: 4 * GiB })
+  expect(windowsMemory('Get-CimInstance : Access denied')).toBeNull()
+})
+
+test('/hud on macOS shows the machine memory read through sysctl and vm_stat', SAO_PAULO, async ($, on) => {
+  setup(on, { surfaces: [], env: { HOME: '/home' }, files: NO_LINUX, outputs: { sysctl: '17179869184\n', vm_stat: VM_STAT } })
+  await $.session.start(START)
+  const answer = await $.command.run({ command: 'hud', args: '' })
+  const text = 'text' in answer && typeof answer.text === 'string' ? answer.text : ''
+  // 4 GiB available of 16, less the 2% margin of 0.32 GiB, is 3.68 GiB, shown rounded down.
+  expect(text.split('\n')).toContain('MEMORY    machine 12.0/16.0G · 3.6G fits')
+})
+
+test('/hud on Windows shows the machine memory read through PowerShell, once per 15 seconds', SAO_PAULO, async ($, on) => {
+  const ran: string[][] = []
+  const clock = setup(on, { surfaces: [], ran, env: { USERPROFILE: '/home', OS: 'Windows_NT' }, files: NO_LINUX, outputs: { powershell: PS_JSON } })
+  await $.session.start(START)
+  const answer = await $.command.run({ command: 'hud', args: '' })
+  const text = 'text' in answer && typeof answer.text === 'string' ? answer.text : ''
+  expect(text.split('\n')).toContain('MEMORY    machine 12.0/16.0G · 3.6G fits')
+  const before = ran.filter((a) => a[0] === 'powershell').length
+  expect(before).toBeGreaterThan(0)
+  await $.command.run({ command: 'hud', args: '' })
+  expect(ran.filter((a) => a[0] === 'powershell').length).toBe(before)
+  expect(ran.some((a) => a[0] === 'sysctl')).toBe(false)
+  await clock.advance(16_000)
+  await $.command.run({ command: 'hud', args: '' })
+  expect(ran.filter((a) => a[0] === 'powershell').length).toBeGreaterThan(before)
+})
+
+test('without a memory reading, the MEMORY row is left out', SAO_PAULO, async ($, on) => {
+  setup(on, { surfaces: [], env: { HOME: '/home' }, files: NO_LINUX, outputs: {} })
+  await $.session.start(START)
+  const answer = await $.command.run({ command: 'hud', args: '' })
+  const text = 'text' in answer && typeof answer.text === 'string' ? answer.text : ''
+  expect(text.includes('MEMORY')).toBe(false)
+})
+
 test('the session ends with one summary line in the diary', async ($, on) => {
   const text: string[] = []
   setup(on, { text })
@@ -641,4 +707,25 @@ test('the bars color by heat: each cell by its place in gradient, the whole bar 
   expect(ansiRow([{ text: 'x', rgb: [1, 2, 3] }])).toBe('\x1b[38;2;1;2;3mx\x1b[0m')
   expect(options({ barColor: 'SOLID' }).barColor).toBe('solid')
   expect(options({}).barColor).toBe('gradient')
+})
+
+test('the start sweeps live files older than two days without find, and falls back to del without rm', async ($, on) => {
+  const live = '/home/.local/state/mods/hud/live'
+  DIRS[live] = [
+    { name: 'old.json', kind: 'file', size: 30, isLink: false, mtimeMs: NOW - 3 * 86_400_000 } as never,
+    { name: 'fresh.json', kind: 'file', size: 30, isLink: false, mtimeMs: NOW - 3_600_000 } as never,
+  ]
+  try {
+    const ran: string[][] = []
+    setup(on, { ran, noRm: true })
+    await $.session.start(START)
+    const removals = ran.filter((a) => a[0] === 'rm' || a[0] === 'cmd')
+    expect(ran.some((a) => a[0] === 'find')).toBe(false)
+    expect(removals).toEqual([
+      ['rm', '-f', `${live}/old.json`],
+      ['cmd', '/d', '/c', 'del', '/f', '/q', '\\home\\.local\\state\\mods\\hud\\live\\old.json'],
+    ])
+  } finally {
+    delete DIRS[live]
+  }
 })

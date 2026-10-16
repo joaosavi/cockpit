@@ -10,20 +10,31 @@ added to a tool result, which only the model reads otherwise.
 
 A mod cannot draw rows under the prompt: that place belongs to the status line command of the
 settings. The mod ships one, `statusline/statusline.sh`, which draws the hud there in one of four
-styles. Set it in `~/.claude/settings.json`, and set `band` to `off` so the rows do not show twice:
+styles. `/cockpit:setup` writes it for you. To set it by hand, on macOS or Linux, put this in
+`~/.claude/settings.json`, and set `band` to `off` so the rows do not show twice:
 
 ```json
 {
-  "statusLine": { "type": "command", "command": "~/claude-devcontainer/mods/hud/statusline/statusline.sh", "refreshInterval": 5 },
+  "statusLine": { "type": "command", "command": "~/.claude/plugins/marketplaces/cockpit/mods/hud/statusline/statusline.sh", "refreshInterval": 5 },
   "pluginConfigs": { "hud@cockpit": { "options": { "band": "off", "style": "refined", "icons": "nerd" } } }
 }
 ```
 
-The path above is a clone of the repo. When the marketplace was added from GitHub, Claude Code keeps
-its own clone at `~/.claude/plugins/marketplaces/cockpit`, and `claude plugin marketplace update cockpit`
-keeps it current, so `~/.claude/plugins/marketplaces/cockpit/mods/hud/statusline/statusline.sh` works
-too. The `installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18
-or later, which runs its TypeScript as is.
+When the marketplace was added from GitHub, Claude Code keeps its own clone at
+`~/.claude/plugins/marketplaces/cockpit`, and `claude plugin marketplace update cockpit` keeps it
+current. When you added it from a local clone of the repo, use that clone's path instead. The
+`installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18 or
+later, which runs its TypeScript as is.
+
+On Windows, Claude Code runs the status line command through Git Bash when it is installed and
+through PowerShell otherwise, and PowerShell cannot run a `.sh` file. Point the command at Node
+instead, with forward slashes, which work in both shells:
+
+```json
+{ "statusLine": { "type": "command", "command": "node ~/.claude/plugins/marketplaces/cockpit/mods/hud/statusline/statusline.ts", "refreshInterval": 5 } }
+```
+
+Run this way, the script takes the 4 padding columns off `COLUMNS` itself.
 
 `refreshInterval` re-runs the script every 5 seconds, so git, the PR and the session time stay
 current while the session is idle. Without it, the status line redraws only on Claude Code's events,
@@ -69,7 +80,7 @@ and no glyph for the folder, the model and the memory.
 
 The status line reads the model, the folder, the context window and the plan limits from the JSON
 Claude Code pipes to it, so they show from the session's first screen, before any prompt. It reads
-git and the cgroup memory itself. The tool call count comes from the mod, which writes it at each
+git and the memory itself. The tool call count comes from the mod, which writes it at each
 call to `~/.local/state/mods/hud/live/<session>.json` and removes the file when the session ends.
 Without the file, the row shows `0 calls`.
 
@@ -104,7 +115,7 @@ leaves them out. `/hud` still lists the tool and the subagents in its `NOW` row.
 | `38m · 214 calls` | Time since the session started, and the tool calls it made | |
 | `ctx` | Context window fill | green below 60%, yellow below 85%, red from 85% |
 | `5h`, `7d` | The plan's 5-hour and 7-day windows. `resets 2h30m` is the time left until the window resets, `resets 3d20h` past a day. | green below 75%, yellow below 90%, red from 90% |
-| `mem` | Memory that still fits before the tightest cgroup limit, minus a 2% margin. Without a cgroup limit, the machine's available memory. Hidden when neither can be read. | yellow below 1 GB, red below 500 MB |
+| `mem` | Memory that still fits before the tightest cgroup limit, minus a 2% margin. Without a cgroup limit, as on macOS and Windows, the machine's available memory. Hidden wherever neither can be read. | yellow below 1 GB, red below 500 MB |
 | Activity row | The latest note another mod added to a tool result, such as a loop-breaker loop check or a memory-guard single-process rerun. Claude Code already shows failed tool calls in red | yellow |
 
 In a narrow terminal the band drops fields instead of wrapping. The panel first shortens its bars,
@@ -121,7 +132,7 @@ NOW       Bash yarn turbo run test 0:42 · 2 subagents
 TODAY     2 skills · 1 loop nudge · 0 refusals
 ```
 
-- `MEMORY` names the session's own cgroup and the group whose limit sets the headroom.
+- `MEMORY` names the session's own cgroup and the group whose limit sets the headroom, or the machine's memory without a cgroup limit. The row is left out when there is no reading.
 - `TODAY` counts today's lines in the other mods' diaries under `~/.local/state/mods`: skill-loader
   `loaded`, loop-breaker `nudge`, usage-limit `tool-refused` and memory-guard `refused`.
 
@@ -168,8 +179,13 @@ work it causes:
 
 - During a turn, a 1-second timer reads `$.agent.list()` for `/hud`, and redraws only while the
   pane is open. The timer stops when the turn ends.
-- Every 15 seconds, idle or not, one `git status` (3-second timeout) and a read of the cgroup files
-  under `/sys/fs/cgroup`. The band redraws only when what it shows changed.
+- Every 15 seconds, idle or not, one `git status` (3-second timeout) and a memory reading: on Linux,
+  the files under `/sys/fs/cgroup` and `/proc/meminfo`; on macOS, `sysctl -n hw.memsize` and
+  `vm_stat` (2-second timeout); on Windows, one PowerShell run of `Get-CimInstance
+  Win32_OperatingSystem` (5-second timeout, about a second to start, an estimate). A command reading
+  stays fresh for 15 seconds. The band redraws only when what it shows changed.
+- The status line script reads memory at each redraw: on macOS one `vm_stat` (1-second timeout); on
+  Windows Node's own figures, with no command.
 - Each tool call adds two redraw requests, one at its start and one at its end. Claude Code throttles
   redraws to 10 a second and merges the rest.
 - `/hud` reads today's diaries. While the pane is open, it lists the
@@ -178,6 +194,22 @@ work it causes:
 At the end of each session the mod writes one summary line to
 `~/.local/state/mods/hud/<day>-<session>.jsonl`: tool calls seen, the hook's own time per call, the
 number of band renders and the slowest one.
+
+## Limits
+
+- On Linux the memory comes from cgroup v2 and `/proc/meminfo`. On macOS it is the free, inactive,
+  speculative and purgeable pages of `vm_stat` against `hw.memsize`; on Windows, `FreePhysicalMemory`
+  against `TotalVisibleMemorySize`, and in the status line Node's `os.freemem()`, which reads the same
+  available physical memory. Both have no per-session limit, so the field shows the whole machine.
+- The macOS and Windows readings are tested only against simulated `vm_stat` and PowerShell output,
+  not on a Mac or a Windows PC.
+- When the reading fails, or on another system without `/proc/meminfo`, the memory field is left out.
+- On Windows, point the status line at `statusline.ts` through Node, as above. The Windows setup is
+  not tested.
+- On Windows without `HOME`, `~` is `USERPROFILE`, for the mod and the script alike.
+- The band, the status line and the `/hud` pane are drawn by Claude Code's terminal interface.
+  Tested only in a terminal.
+- The PR field needs the GitHub CLI, `gh`, signed in. Without it the field is left out.
 
 ## Develop
 

@@ -58,7 +58,8 @@ export function register(on: On, values: PluginOptions) {
     cwd = e.cwd
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
-    const home = await $.env.get('HOME')
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/pipefail/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`

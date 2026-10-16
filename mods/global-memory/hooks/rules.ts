@@ -34,11 +34,11 @@ export function parseSection(text: string): Parsed | null {
   return { projectDir, mode, opening, isFull: comma === ',' && system === ' system' }
 }
 
-// `~` and `~/...` resolved against HOME; null when HOME is needed and missing.
+// `~`, `~/...` and Windows' `~\\...` resolved against HOME; null when HOME is needed and missing.
 export function expandHome(path: string, home: string | undefined): string | null {
-  if (path !== '~' && !path.startsWith('~/')) return path
+  if (path !== '~' && !path.startsWith('~/') && !path.startsWith('~\\')) return path
   if (home === undefined || home === '') return null
-  return home.replace(/\/+$/, '') + path.slice(1)
+  return home.replace(/[\\/]+$/, '') + path.slice(1)
 }
 
 // The global folder from the plugin options, without a trailing slash.
@@ -47,7 +47,7 @@ export function globalDir(values: PluginOptions, home: string | undefined): stri
   const path = typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : DEFAULT_DIR
   const expanded = expandHome(path, home)
   if (expanded === null) return null
-  const trimmed = expanded.replace(/\/+$/, '')
+  const trimmed = expanded.replace(/[\\/]+$/, '')
   return trimmed === '' ? null : trimmed
 }
 
@@ -107,7 +107,7 @@ const ANCHORS = ['## Types of memory', '## What NOT to save in memory', '## How 
 export function rewriteSection(text: string, global: string): { text: string; mode: Mode } | null {
   const p = parseSection(text)
   if (p === null) return null
-  const shown = global.endsWith('/') ? global : `${global}/`
+  const shown = /[\\/]$/.test(global) ? global : `${global}/`
   let out = text.replace(p.opening, openingSentence(p, shown))
   for (const [from, to] of EDITS) out = out.replace(from, to)
   const block = scopeBlock(p, shown, text.includes(`\`${INDEX}\``))

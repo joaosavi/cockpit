@@ -38,10 +38,15 @@ import {
   parseEntry,
   parseStatus,
   registryDir,
+  slashed,
 } from './rules.ts'
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
+
+// The tools that run a shell command: Bash, and PowerShell on Windows without Git Bash. A Set of
+// strings, since the tool names this version's types list may not include PowerShell.
+const COMMAND_TOOLS: ReadonlySet<string> = new Set(['Bash', 'PowerShell'])
 
 let o: Options = DEFAULTS
 let home = ''
@@ -188,7 +193,7 @@ async function afterEdit($: Api, path: string, r: ToolCallResult): Promise<ToolC
 }
 
 async function guardGit($: Api, command: string, pass: () => Promise<ToolCallResult>): Promise<ToolCallResult> {
-  const targets = gitTargets(command, await $.session.cwd(), home)
+  const targets = gitTargets(command, slashed(await $.session.cwd()), home)
   if (targets.length === 0) return pass()
   const now = await $.clock.now()
   const mine = await own($)
@@ -227,10 +232,22 @@ async function prune($: Api): Promise<void> {
   const now = await $.clock.now()
   const stale = (await entries($)).filter((e) => isStale(e, now, o))
   if (stale.length === 0) return
+  await removeFiles($, stale.map((e) => entryPath(home, e.session)))
+}
+
+// Deletes files with `rm`, or with `del` on Windows, where `rm` is missing unless Git's tools are on
+// the PATH. `$.fs` writes but does not delete. A file left behind is tried again at the next start.
+async function removeFiles($: Api, paths: readonly string[]): Promise<void> {
   try {
-    await $.process.run(['rm', '-f', ...stale.map((e) => entryPath(home, e.session))], { timeoutMs: 5_000 })
+    await $.process.run(['rm', '-f', ...paths], { timeoutMs: 5_000 })
+    return
   } catch {
-    // the next session start tries again
+    // no `rm`: Windows
+  }
+  try {
+    await $.process.run(['cmd', '/d', '/c', 'del', '/f', '/q', ...paths.map((p) => p.replaceAll('/', '\\'))], { timeoutMs: 5_000 })
+  } catch {
+    // neither: the files stay
   }
 }
 
@@ -239,7 +256,8 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
-    home = (await $.env.get('HOME')) ?? ''
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    home = slashed((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? '')
     if (home !== '') {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/collision-guard/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
@@ -264,7 +282,7 @@ export function register(on: On, values: PluginOptions) {
       const path = editedPath(e.tool, input)
       if (path !== null) return afterEdit($, path, await pass(e))
       const command = input.command
-      if (e.tool === 'Bash' && o.git !== 'off' && typeof command === 'string') return guardGit($, command, () => pass(e))
+      if (COMMAND_TOOLS.has(e.tool) && o.git !== 'off' && typeof command === 'string') return guardGit($, command, () => pass(e))
       return pass(e)
     }),
   )

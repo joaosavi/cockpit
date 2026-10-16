@@ -100,12 +100,24 @@ export function editedPath(tool: string, input: Readonly<Record<string, unknown>
   const key = EDIT_TOOLS[tool]
   if (key === undefined) return null
   const path = input[key]
-  return typeof path === 'string' && path.startsWith('/') ? path : null
+  return typeof path === 'string' && isAbsolute(slashed(path)) ? slashed(path) : null
+}
+
+// A Windows path with forward slashes (`C:\\w\\a.ts` as `C:/w/a.ts`), the way git prints it, so one
+// spelling keys the registry on every system. A POSIX path comes back as it is.
+export function slashed(path: string): string {
+  return path.replaceAll('\\', '/')
+}
+
+// `/...`, or a Windows drive path `C:/...`, after `slashed`.
+function isAbsolute(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:\//.test(path)
 }
 
 export function dirOf(path: string): string {
+  const top = /^[A-Za-z]:\//.test(path) ? 3 : 1
   const i = path.lastIndexOf('/')
-  return i <= 0 ? '/' : path.slice(0, i)
+  return i < top ? path.slice(0, top) : path.slice(0, i)
 }
 
 // --- who else edited a path ---
@@ -213,15 +225,17 @@ function words(segment: string): string[] {
 }
 
 function resolve(dir: string, path: string, home: string): string {
-  const p = path === '~' ? home : path.startsWith('~/') ? `${home}${path.slice(1)}` : path
-  const joined = p.startsWith('/') ? p : `${dir}/${p}`
+  const p = slashed(path === '~' ? home : path.startsWith('~/') ? `${home}${path.slice(1)}` : path)
+  const joined = isAbsolute(p) ? p : `${slashed(dir)}/${p}`
+  // A Windows drive stays in front, as the root `..` cannot climb past.
+  const drive = /^[A-Za-z]:/.exec(joined)?.[0] ?? ''
   const parts: string[] = []
-  for (const part of joined.split('/')) {
+  for (const part of joined.slice(drive.length).split('/')) {
     if (part === '' || part === '.') continue
     if (part === '..') parts.pop()
     else parts.push(part)
   }
-  return `/${parts.join('/')}`
+  return `${drive}/${parts.join('/')}`
 }
 
 const has = (args: readonly string[], ...flags: string[]) => args.some((a) => flags.includes(a))

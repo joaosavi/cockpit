@@ -2,9 +2,9 @@ import { expect, mock, test } from 'claude-code/testing'
 
 type Scene = { ran: string[]; written: Map<string, string> }
 
-function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene) {
+function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene, env: Record<string, string> = { HOME: '/home' }) {
   const clock = mock.clock(on, { now: Date.parse('2026-10-07T13:00:00Z') })
-  mock.env(on, { HOME: '/home' })
+  mock.env(on, env)
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('fs.read', ($, e) => {
     const text = s.written.get(e.path)
@@ -83,4 +83,12 @@ test('without extraRunners, a piped repo check script runs as written', async ($
   await $.session.start(start)
   await $.tool.call({ tool: 'Bash', command: 'yarn verify 2>&1 | grep FAIL' })
   expect(s.ran).toEqual(['yarn verify 2>&1 | grep FAIL'])
+})
+
+test('without HOME, as on Windows, the diary goes under USERPROFILE', async ($, on) => {
+  const s = { ran: [], written: new Map<string, string>() }
+  prepare(on, s, { USERPROFILE: '/users/u' })
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn vitest run 2>&1 | tail -5' })
+  expect([...s.written.keys()]).toEqual(['/users/u/.local/state/mods/pipefail/2026-10-07-abcdef12.jsonl'])
 })

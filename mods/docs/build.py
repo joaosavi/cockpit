@@ -115,7 +115,6 @@ def note(kind, title, body):
 PANEL_SAMPLE = (
     '<span class="t-dim">❯</span> /panel\n'
     '  <span class="t-dim">⎿</span>  panel: http://localhost:7777\n'
-    '     From another computer: ssh -N -L 7777:127.0.0.1:7777 my-server, then open http://localhost:7777\n'
     '     4 sessions: <b class="t-warn">1 need you</b>, <span class="t-acc">2 working</span>.'
 )
 SPINNER_SAMPLE = (
@@ -160,10 +159,16 @@ def install():
 <li><b>Claude Code 2.1.287 or later.</b> Run <code>claude --version</code> to check. Mods use Claude Code's function hooks, which are in early access and can change between releases.</li>
 <li><b>Node 22.18 or later</b>, for the status line script. Run <code>node --version</code> to check.</li>
 <li><b>A Nerd Font</b> in your terminal, for the status line icons. This is optional: without one, choose the plain icons during setup.</li>
-<li><b>Python 3.9 or later and <code>curl</code></b>, for the <code>panel</code> page. Both come with macOS and most Linux systems.</li>
-<li><b>tmux</b>, only to answer a session from the panel. Sessions outside tmux show on the page without the send buttons.</li>
-<li><b>Linux</b> for <code>memory-guard</code>, which reads Linux memory files. The other mods have no system requirement, but they are tested on Linux.</li>
+<li><b>Python 3.9 or later and <code>curl</code></b>, for the <code>panel</code> page. macOS ships both, and Windows 10 or later ships <code>curl</code>. On Windows, install Python from python.org or the Microsoft Store.</li>
 </ul>
+<p>The status line, the spinner line and the panes are part of Claude Code's terminal interface. Run <code>claude</code> in a terminal: Terminal or iTerm on macOS, Windows Terminal or PowerShell on Windows, or the terminal panel of VS Code or JetBrains. The mods are tested only in the terminal interface, not in the Desktop app or in the chat panel of the IDE extensions.</p>
+<h2 id="install-os">macOS, Windows and Linux</h2>
+<p>Every mod runs on all three systems, and they are tested on Linux only. Two things differ:</p>
+<ul>
+<li><code>memory-guard</code> and the memory figure of the <code>hud</code> read cgroup limits and <code>/proc/meminfo</code> on Linux. On macOS they read <code>vm_stat</code> and on Windows PowerShell, and there they compare against the whole machine's memory. The macOS and Windows readings are tested only against simulated output.</li>
+<li>The <code>panel</code> page shows memory by cgroup, systemd services and the share of CPU time spent waiting on disk only on Linux.</li>
+</ul>
+<p>On Windows, the setup points the status line at Node instead of the <code>.sh</code> script, because PowerShell cannot run a shell script. The Limits section of each mod's page says what changes on each system.</p>
 <h2 id="install-steps">Install</h2>
 <ol class="steps">
 <li><p>Add the marketplace and install the bundle:</p>{code(f"claude plugin marketplace add {REPO}{chr(10)}claude plugin install cockpit@cockpit")}
@@ -208,39 +213,52 @@ def first_session():
 
 def panel_guide():
     return f'''
-<p class="lead">The panel is a local web page with every Claude Code session on the machine, the machine itself, and an audit of the mods. It works the same for sessions in a terminal, in tmux, or driven over Remote Control from claude.ai or the phone.</p>
+<p class="lead">The panel is a local web page with every Claude Code session on your computer, the computer itself, and an audit of the mods. Open it in a browser tab beside your sessions.</p>
 {shot('panel-light.png', 'panel-dark.png', 'The Cockpit panel: the strip with plan usage, memory and CPU, the session cards, and the machine column')}
 <h2 id="pg-open">Open the page</h2>
 <p>The server starts with the first session after you install the mod, and keeps running after that session ends. Type <code>/panel</code> in any session for the address, which is <code>http://localhost:7777</code> by default.</p>
-<p>On a remote machine, the page listens only on <code>127.0.0.1</code>, so open it through an SSH tunnel from your computer:</p>
-{code('ssh -N -L 7777:127.0.0.1:7777 my-server')}
-<p>To open the tunnel with every SSH login, add one line to the host's entry in <code>~/.ssh/config</code> on your computer:</p>
-{code('Host my-server' + chr(10) + '  LocalForward 7777 127.0.0.1:7777', 'text')}
+<p>The page listens only on <code>127.0.0.1</code>, so only your own computer reaches it. When the sessions run on another machine, see <a href="#server">Running on a server</a>.</p>
 <h2 id="pg-read">Read the page</h2>
 <div class="feature-grid">
-<div><b>The strip</b><span>The plan's 5-hour and weekly usage, the sessions that need you, memory, CPU, disk, and the tokens of the last 24 hours by hour.</span></div>
+<div><b>The strip</b><span>The plan's 5-hour and weekly usage, the sessions that need you, memory, the CPU over the last minute, disk, and the tokens of the last 24 hours by hour.</span></div>
 <div><b>The session cards</b><span>The state, a summary of where the task stands, what it needs from you, the tool running now, git, context and memory.</span></div>
-<div><b>The machine</b><span>Memory by cgroup, the services the sessions run in, and the latest actions of the guards.</span></div>
+<div><b>The side column</b><span>The latest actions of the guards, what each did today, and the summaries made today with their API price. On Linux, also memory by cgroup and systemd services.</span></div>
 </div>
 <p>A card's state comes from two places. <b>Working</b> comes from Claude Code itself, as soon as a turn starts. <b>Waiting for you</b>, <b>Blocked</b>, <b>Done</b> and <b>Idle</b> come from the summary, which <code>claude -p</code> writes from the session's transcript. A summary is written 20 seconds after a turn ends, every 5 minutes for a session that changed, and when you press <b>Refresh</b>. An amber dot beside <b>Summarized</b> means the session moved on since then.</p>
-<p>The bars turn amber at 75% and red at 90%. The context bar fills toward the point where Claude Code compacts the conversation, not toward the model's full window.</p>
+<p>The bars turn amber at 75% and red at 90%. The context bar fills toward the point where Claude Code compacts the conversation, not toward the model's full window. <b>CPU, last minute</b> is the share of CPU time that was not idle over the last minute, across all cores; on Linux, the share spent waiting on disk shows under it when it reaches 5%.</p>
 <h2 id="pg-answer">Answer a session</h2>
-<p>When a session waits for a decision, its card lists the options the agent offered, the recommended one first. Press an option, check the text in the dialog, and press <b>Send</b>. The page types the text into the session's prompt and presses Enter, as if you typed it. The <b>Reply</b> field sends any text the same way.</p>
-{note('info', 'Sending needs tmux', '<p>The page finds the tmux pane the session runs in. A session outside tmux, such as one in a desktop terminal tab, shows no send buttons. If you type in that pane at the same moment, the two texts mix.</p>')}
+<p>When a session waits for a decision, its card lists the options the agent offered, the recommended one first. Press an option, check the text in the dialog, and press <b>Send</b>. The <b>Reply</b> field sends any text the same way.</p>
+<p>The page leaves the text in the session's inbox. The <code>panel</code> mod in that session checks the inbox every 2 seconds and submits the text as your prompt, and Claude Code runs it once the session is idle. This works in any session that runs the mod, with or without tmux.</p>
+{note('info', 'No send buttons on a card', '<p>A card shows send buttons only when its session checked the inbox in the last 15 seconds. A session that loaded an older <code>panel</code> mod has none until you run <code>/reload-plugins</code> in it. When a session does not take a message within 6 seconds, the page withdraws it and says so.</p>')}
 <h2 id="pg-mods">Audit the mods</h2>
-<p>The <b>Mods</b> tab reads every Cockpit mod's diary for the last day, 7 days or 30 days. Each row shows what the mod did, its failures in red, the time its hooks added per tool call, and its slowest call. Click a row to see its recent actions with their details.</p>
+<p>The <b>Mods</b> tab reads every Cockpit mod's diary for the last day, 7 days or 30 days. Each row shows what the mod did, its failures in red, the time its hooks added per tool call, its slowest call, and the API cost of its model calls. Click a row to see its recent actions with their details.</p>
+<p>The API cost is what the same calls would cost at Anthropic's API list prices. On a Pro or Max plan they spend plan usage, not money. Only <code>panel</code> and <code>spinner-status</code> call a model.</p>
 {shot('panel-mods.png', None, 'The Mods tab: one row per mod with its actions, failures and time per tool call')}
 <p>Use it to decide what earns its place. A mod with nothing recorded for a week does no work on your machine. A slowest call over 10 seconds, shown in red, is worth a look in the mod's diary.</p>
 <h2 id="pg-notify">Get notified</h2>
 <p>Press <b>Notify</b> and allow notifications. The browser then tells you when a session starts waiting for you or gets blocked, while the tab stays open. The tab title also counts the sessions that need you, as <code>(2) Cockpit</code>. Press <code>r</code> to summarize every session again.</p>
-<h2 id="pg-service">Run it as a service</h2>
-<p>On a server, run the page under systemd instead of letting a session start it. Set the <code>panel</code> option <b>Start the page</b> (<code>autostart</code>) to off, then run the server as a unit:</p>
+<p>The <a href="#mod-panel">panel reference</a> lists every option and environment variable, and where each figure on the page comes from.</p>'''
+
+def server():
+    return f'''
+<p class="lead">Most people run Claude Code on their own computer, and nothing on this page applies to them. If you run it on a remote Linux machine over SSH, the mods work the same, and a few parts do more.</p>
+<h2 id="srv-panel">Open the panel through a tunnel</h2>
+<p>The page listens only on <code>127.0.0.1</code> of the machine where the sessions run. From your computer, open an SSH tunnel, then open <code>http://localhost:7777</code>. In a session opened over SSH, <code>/panel</code> prints this command with the machine's name.</p>
+{code('ssh -N -L 7777:127.0.0.1:7777 my-server')}
+<p>To open the tunnel with every SSH login, add one line to the host's entry in <code>~/.ssh/config</code> on your computer:</p>
+{code('Host my-server' + chr(10) + '  LocalForward 7777 127.0.0.1:7777', 'text')}
+<h2 id="srv-service">Run the panel as a service</h2>
+<p>Instead of letting a session start the page, run it under systemd. Set the <code>panel</code> option <b>Start the page</b> (<code>autostart</code>) to off, then run the server as a unit:</p>
 {code("""[Service]
 User=you
 ExecStart=/usr/bin/python3 -I %h/.claude/plugins/marketplaces/cockpit/mods/panel/server/panel.py
 Environment=PANEL_CLAUDE=%h/.local/bin/claude
 Restart=always""", 'ini')}
-<p>The <a href="#mod-panel">panel reference</a> lists every option and environment variable, and where each figure on the page comes from.</p>'''
+<p>Set <code>PANEL_GROUPS</code> to a comma-separated list of cgroup paths, such as <code>agents.slice</code>, to show those groups and everything under them on the page.</p>
+<h2 id="srv-memory">Memory limits</h2>
+<p>When sessions run under a cgroup v2 memory limit, as a systemd service or a container sets, <code>memory-guard</code> keeps heavy commands under the tightest limit, the <code>hud</code> shows the room left under it, <code>/ram</code> shows each group, and the panel shows each group's memory and the state of its systemd services.</p>
+<h2 id="srv-remote">Remote Control and tmux</h2>
+<p>Every Cockpit command also answers in plain text, so it works when you drive a session over Remote Control from claude.ai or the mobile app, where no pane is drawn. A panel card links to the session on claude.ai when the session runs with Remote Control. For a session that runs in tmux, the card's <b>tmux</b> button copies the command that attaches to its pane.</p>'''
 
 def statusline_page():
     gal = ''
@@ -296,13 +314,13 @@ def mods_index():
     return out
 
 def commands():
-    rows = [('/panel', 'panel', 'The address of the page with every session on this machine, and the SSH tunnel to reach it.'),
+    rows = [('/panel', 'panel', 'The address of the page with every session on this computer, and how many need you.'),
             ('/hud', 'hud', 'The full heads-up display in a pane: session, limits, memory, now, today.'),
             ('/limit', 'usage-limit', 'Both plan windows, their resets, and what the mod holds back.'),
-            ('/ram', 'memory-guard', 'Memory headroom per group and the measured peak of each heavy command.'),
+            ('/ram', 'memory-guard', 'Memory headroom per group, or of the machine, and the measured peak of each heavy command.'),
             ('/cockpit:setup', 'cockpit', 'Runs the setup again.')]
     body = ''.join(f'<tr><td><code>{html.escape(c)}</code></td><td><a href="#mod-{m}">{m}</a></td><td>{d}</td></tr>' if m != 'cockpit' else f'<tr><td><code>{c}</code></td><td>cockpit</td><td>{d}</td></tr>' for c, m, d in rows)
-    return f'''<p class="lead">Every command Cockpit adds. Each one also answers in plain text, so it works over Remote Control, where no pane is drawn.</p>
+    return f'''<p class="lead">Every command Cockpit adds. Each one also answers in plain text, so it works where no pane is drawn, such as Remote Control.</p>
 <table><thead><tr><th>Command</th><th>Mod</th><th>What it does</th></tr></thead><tbody>{body}</tbody></table>
 <h2 id="cmd-keys">Keys inside a pane</h2>
 <p>A pane opens on the right side of the screen. Press <code>r</code> to refresh it and <code>esc</code> to close it.</p>
@@ -336,9 +354,10 @@ def troubleshooting():
         ('A mod shows "failed to load" in claude plugin list', '<p>The marketplace copy and the installed version are out of step. Run <code>claude plugin marketplace update cockpit</code>, then <code>claude plugin update cockpit@cockpit</code>, and restart.</p>'),
         ('The mod options are gone', '<p>Removing a marketplace deletes the saved options of its plugins. Run <code>/cockpit:setup</code> again to write them back.</p>'),
         ('global-memory does nothing on a Team or Enterprise plan', '<p>Those plans run a built-in guard that skips user-installed plugins on the hooks <code>global-memory</code> needs. It must run as an organization plugin; its <a href="#mod-global-memory">page</a> shows the managed settings.</p>'),
-        ('/panel says the page server is not running', '<p>The server starts when a session starts, unless <b>Start the page</b> (<code>autostart</code>) is off because a service manager runs it. Start a new session, or check the service, such as <code>systemctl status cockpit-panel</code>.</p>'),
-        ('The panel shows no send buttons on a card', '<p>The session does not run in tmux, so the page has no pane to type into. Start the session inside tmux, or answer it where it runs.</p>'),
-        ('The panel shows no memory or services column', '<p>The page shows memory by group only for cgroup v2 groups with a memory limit, and services only under systemd. On macOS, or for sessions in an unlimited group, it shows the machine\'s memory alone.</p>'),
+        ('/panel says the page server is not running', '<p>The server starts when a session starts, unless <b>Start the page</b> (<code>autostart</code>) is off. Check that Python 3.9 or later is installed as <code>python3</code>, <code>python</code> or <code>py</code>, and that <code>curl</code> runs, then start a new session. The server writes its errors to <code>~/.local/state/mods/panel/server.log</code>. If a service manager runs the server, check the service.</p>'),
+        ('The panel shows no send buttons on a card', '<p>The session has not checked its inbox in the last 15 seconds, usually because it loaded an older <code>panel</code> mod. Run <code>/reload-plugins</code> in that session.</p>'),
+        ('The panel shows no memory or services column', '<p>That is expected on macOS and Windows. The page shows memory by group only for Linux cgroup v2 groups with a memory limit, and services only under systemd. Elsewhere it shows the machine\'s memory alone, in the strip.</p>'),
+        ('/ram says there is no memory reading', '<p><code>memory-guard</code> found no <code>/proc/meminfo</code>, and the system command failed: <code>sysctl</code> and <code>vm_stat</code> on macOS, or PowerShell on Windows, missing or slower than its timeout. Until a reading works, heavy commands run as written.</p>'),
         ('A git command was refused with a list of files', '<p><code>collision-guard</code> held it, because another session on this machine has uncommitted edits in the same repo, under the paths the command names. Name your own files instead, or run the same command again within 2 minutes.</p>'),
     ]
     out = '<p class="lead">The problems people hit most, and the fix for each.</p>'
@@ -369,7 +388,7 @@ def versions():
 
 PAGES = [
     ('Get started', [('intro', 'Introduction', intro), ('install', 'Installation', install), ('first-session', 'Your first session', first_session), ('update', 'Update and uninstall', update)]),
-    ('Guides', [('panel-guide', 'The session panel', panel_guide), ('statusline', 'Status line styles', statusline_page), ('configuration', 'Configuration', configuration)]),
+    ('Guides', [('panel-guide', 'The session panel', panel_guide), ('statusline', 'Status line styles', statusline_page), ('configuration', 'Configuration', configuration), ('server', 'Running on a server', server)]),
     ('Mods', [('mods', 'All mods', mods_index)] + [(f'mod-{m}', m, None) for _, _, ms in GROUPS for m in ms]),
     ('Reference', [('commands', 'Commands', commands), ('privacy', 'Data and privacy', privacy), ('troubleshooting', 'Troubleshooting', troubleshooting), ('versions', 'Versions', versions)]),
 ]

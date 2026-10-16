@@ -132,7 +132,8 @@ export function register(on: On, values: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
-    const home = await $.env.get('HOME')
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/spinner-status/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`

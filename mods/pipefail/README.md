@@ -30,12 +30,13 @@ Add a repo's own check script here when its exit code says whether the code work
 
 ## Cost
 
-The hook added about 2 ms per Bash call on the author's VPS (56 calls measured in October 2026, an estimate).
+The hook added about 2 ms per Bash call on the author's Linux machine (56 calls measured in October 2026, an estimate).
 
 ## Limits
 
 - Only `tail`, `head` and `grep` as the filter. Other filters, such as `sed` or `awk`, are left alone.
 - A runner hidden inside a script the command calls is not seen.
+- Only the Bash tool. On Windows without Git Bash, commands run through the PowerShell tool and the mod leaves them alone. Tested on Linux only.
 
 ## Install
 

@@ -25,8 +25,10 @@ const GENERATED = /(^|\/)(node_modules|bundled-skills)\/|\/\.claude-plugin\/type
 
 export function byTool(tool: string, path: string): Trigger | null {
   if (!READ_TOOLS.has(tool) && !WRITE_TOOLS.has(tool)) return null
-  if (GENERATED.test(path)) return null
-  return TRIGGERS.find((t) => t.path?.test(path) === true) ?? null
+  // A Windows path (`C:\w\SKILL.md`) is matched with forward slashes, as the patterns spell it.
+  const p = path.replaceAll('\\', '/')
+  if (GENERATED.test(p)) return null
+  return TRIGGERS.find((t) => t.path?.test(p) === true) ?? null
 }
 
 // The command without heredoc bodies and without quoted text, so a quoted `git commit` does not count.
@@ -109,6 +111,7 @@ export function installPathOf(json: string, plugin: string): string | null {
 }
 
 export function asSkill(dir: string, content: string): string {
-  const body = content.replace(/^---\n[\s\S]*?\n---\n/, '').trim()
+  // `\r?` because a Windows checkout can end its lines with CRLF.
+  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim()
   return `Base directory for this skill: ${dir}\n\n${body}`
 }

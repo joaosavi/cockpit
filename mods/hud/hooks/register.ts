@@ -24,6 +24,13 @@ import {
   type Level,
   lineRow,
   localDay,
+  MAC_PAGES_COMMAND,
+  MAC_TIMEOUT_MS,
+  MAC_TOTAL_COMMAND,
+  type Machine,
+  MACHINE_TTL_MS,
+  macMemory,
+  macTotal,
   mayHoldToday,
   type Memory,
   MEMORY_MARGIN,
@@ -51,6 +58,9 @@ import {
   toolDetail,
   toolName,
   type Window,
+  WINDOWS_COMMAND,
+  WINDOWS_TIMEOUT_MS,
+  windowsMemory,
 } from './rules.ts'
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
@@ -185,10 +195,29 @@ async function openLive($: Api) {
   liveFile = `${dir}/${await $.session.id()}.json`
   await writeLive($)
   try {
-    // Files of sessions that ended without a session.end, such as a killed terminal.
-    await $.process.run(['find', dir, '-name', '*.json', '-mtime', '+2', '-delete'], { timeoutMs: GIT_TIMEOUT_MS })
+    // Files of sessions that ended without a session.end, such as a killed terminal: older than two
+    // days. Listed with `$.fs`, so no `find`, which macOS spells differently and Windows lacks.
+    const cutoff = (await $.clock.now()) - 2 * 86_400_000
+    const stale = (await $.fs.list(dir)).filter((f) => f.kind === 'file' && f.name.endsWith('.json') && f.mtimeMs < cutoff)
+    if (stale.length > 0) await removeFiles($, stale.map((f) => `${dir}/${f.name}`))
   } catch {
     // stale files stay until the next start
+  }
+}
+
+// Deletes files with `rm`, or with `del` on Windows, where `rm` is missing unless Git's tools are on
+// the PATH. `$.fs` writes but does not delete.
+async function removeFiles($: Api, paths: readonly string[]): Promise<void> {
+  try {
+    await $.process.run(['rm', '-f', ...paths], { timeoutMs: GIT_TIMEOUT_MS })
+    return
+  } catch {
+    // no `rm`: Windows
+  }
+  try {
+    await $.process.run(['cmd', '/d', '/c', 'del', '/f', '/q', ...paths.map((p) => p.replaceAll('/', '\\'))], { timeoutMs: GIT_TIMEOUT_MS })
+  } catch {
+    // neither: the sweep at the next start tries again
   }
 }
 
@@ -230,13 +259,49 @@ async function readLevels($: Api): Promise<Level[]> {
 
 async function readMemory($: Api): Promise<Memory | null> {
   if (!o.memory) return null
-  let machine = null
+  return memory(await readLevels($), await readMachine($), MEMORY_MARGIN)
+}
+
+// The last command reading, kept for MACHINE_TTL_MS, and the one running, so the pane's refresh does
+// not start a second PowerShell while the first one starts.
+let machineCache: { at: number; value: Machine | null } | null = null
+let machinePending: Promise<Machine | null> | null = null
+
+async function readMachine($: Api): Promise<Machine | null> {
   try {
-    machine = meminfo(await $.fs.read('/proc/meminfo'))
+    return meminfo(await $.fs.read('/proc/meminfo'))
   } catch {
-    // no /proc/meminfo, as on macOS
+    // no /proc/meminfo: macOS or Windows
   }
-  return memory(await readLevels($), machine, MEMORY_MARGIN)
+  const at = await $.clock.now()
+  if (machineCache !== null && at - machineCache.at < MACHINE_TTL_MS) return machineCache.value
+  machinePending ??= commandMachine($)
+  let value: Machine | null = null
+  try {
+    value = await machinePending
+  } catch {
+    // a reading that failed counts as none
+  } finally {
+    machinePending = null
+  }
+  machineCache = { at, value }
+  return value
+}
+
+// The machine's memory from the system's own command, or null on any failure, which hides the field.
+async function commandMachine($: Api): Promise<Machine | null> {
+  try {
+    if ((await $.env.get('OS')) === 'Windows_NT') {
+      const r = await $.process.run(WINDOWS_COMMAND, { timeoutMs: WINDOWS_TIMEOUT_MS })
+      return r.exitCode === 0 ? windowsMemory(r.stdout) : null
+    }
+    const size = await $.process.run(MAC_TOTAL_COMMAND, { timeoutMs: MAC_TIMEOUT_MS })
+    if (size.exitCode !== 0 || macTotal(size.stdout) === null) return null
+    const pages = await $.process.run(MAC_PAGES_COMMAND, { timeoutMs: MAC_TIMEOUT_MS })
+    return pages.exitCode === 0 ? macMemory(size.stdout, pages.stdout) : null
+  } catch {
+    return null
+  }
 }
 
 async function readGit($: Api): Promise<Git | null> {
@@ -435,7 +500,8 @@ export function register(on: On, values: PluginOptions) {
     cwd = e.cwd
     now = await $.clock.now()
     try {
-      home = await $.env.get('HOME')
+      // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+      home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     } catch {
       home = undefined
     }
@@ -596,13 +662,8 @@ export function register(on: On, values: PluginOptions) {
     renders = 0
     maxRenderMs = 0
     endTurn()
-    if (liveFile !== '') {
-      try {
-        await $.process.run(['rm', '-f', liveFile], { timeoutMs: GIT_TIMEOUT_MS })
-      } catch {
-        // removed by the next start's sweep after two days
-      }
-    }
+    // A file left behind goes in the next start's sweep after two days.
+    if (liveFile !== '') await removeFiles($, [liveFile])
     await log($, sessionSummary(t, e.sessionId, cwd, extra))
     return next(e)
   })

@@ -4,7 +4,7 @@ Warns when two Claude Code sessions on the same machine work on the same files, 
 
 ## Why
 
-Running several sessions at once is common, and two of them often land in the same repo. On the author's VPS, 11 pairs of sessions edited the same repo less than 30 minutes apart in 8 days, and 5 of those pairs edited the same file. Claude Code's Edit already refuses a file changed since it was read, so one session does not silently overwrite the other. What it does not catch is git: `git add -A` or `git commit -a` in one session stages the other session's half-done edits, and `git stash`, `checkout` or `reset --hard` moves or discards them.
+Running several sessions at once is common, and two of them often land in the same repo. On the author's Linux machine, 11 pairs of sessions edited the same repo less than 30 minutes apart in 8 days, and 5 of those pairs edited the same file. Claude Code's Edit already refuses a file changed since it was read, so one session does not silently overwrite the other. What it does not catch is git: `git add -A` or `git commit -a` in one session stages the other session's half-done edits, and `git stash`, `checkout` or `reset --hard` moves or discards them.
 
 ## What it does
 
@@ -40,6 +40,7 @@ A tool call that is neither an edit nor a git command costs nothing measurable. 
 - Sessions must share the machine and the home folder. Sessions on another computer, or in a container with its own home, are not seen.
 - A file changed by a Bash command (`sed -i`, a script, a formatter) is not recorded as an edit. Only Edit, Write, MultiEdit and NotebookEdit are.
 - `git checkout <name>` reads the same whether `<name>` is a branch or a file, so the note says "to another branch or an older version".
+- Tested on Linux only. On Windows, paths are compared with forward slashes, as git prints them, git commands through the PowerShell tool are checked like Bash ones, and the files of ended sessions are deleted with `del` when there is no `rm`. A `cd` to a Git Bash path such as `/c/work` is not followed.
 
 ## Install
 

@@ -67,6 +67,10 @@ let tally = newTally()
 const KEY = 'windows'
 
 type Api = Parameters<Hook<'session.start'>>[0]
+
+// The tools that run a shell command: Bash, and PowerShell on Windows without Git Bash. A Set of
+// strings, since the tool names this version's types list may not include PowerShell.
+const COMMAND_TOOLS: ReadonlySet<string> = new Set(['Bash', 'PowerShell'])
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text'>
 
 // One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
@@ -188,7 +192,8 @@ export function register(on: On, values: PluginOptions) {
     cwd = e.cwd
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
-    const home = await $.env.get('HOME')
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/usage-limit/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
@@ -284,7 +289,7 @@ export function register(on: On, values: PluginOptions) {
       }
       if (reserveTurn) return pass(e)
       const command: unknown = Reflect.get(e, 'command')
-      if (e.tool === 'Bash' && typeof command === 'string' && isCommitCommand(command)) {
+      if (COMMAND_TOOLS.has(e.tool) && typeof command === 'string' && isCommitCommand(command)) {
         countAction(tally, 'commit-passed')
         await log($, { event: 'commit-passed', agentId: e.agentId })
         // The turn may end after the commit without any refused call, so the resume is scheduled here too.

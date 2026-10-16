@@ -166,6 +166,64 @@ export function meminfo(text: string): { available: number; total: number } | nu
   return available === null || total === null ? null : { available, total }
 }
 
+// Where there is no /proc/meminfo, the machine's memory comes from a command. The mod tells Windows
+// by `OS=Windows_NT`, which Windows sets for every process, and tries the macOS commands elsewhere.
+export const MAC_TOTAL_COMMAND = ['sysctl', '-n', 'hw.memsize']
+export const MAC_PAGES_COMMAND = ['vm_stat']
+export const WINDOWS_COMMAND = [
+  'powershell',
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  '(Get-CimInstance Win32_OperatingSystem | Select TotalVisibleMemorySize,FreePhysicalMemory | ConvertTo-Json)',
+]
+// How long a command reading stays fresh. PowerShell takes about a second to start, and the peak
+// ticker asks every second while a heavy command runs.
+export const MACHINE_TTL_MS = 10_000
+export const MAC_TIMEOUT_MS = 2000
+export const WINDOWS_TIMEOUT_MS = 5000
+
+// The output of `sysctl -n hw.memsize`: the total in bytes, or null.
+export function macTotal(text: string): number | null {
+  const t = text.trim()
+  return /^\d+$/.test(t) && Number(t) > 0 ? Number(t) : null
+}
+
+// macOS: the total from `sysctl -n hw.memsize`, and as available the free, inactive, speculative and
+// purgeable pages of `vm_stat`, times the page size its header prints.
+export function macMemory(memsize: string, vmStat: string): Machine | null {
+  const total = macTotal(memsize)
+  const page = /page size of (\d+) bytes/.exec(vmStat)?.[1]
+  if (total === null || page === undefined) return null
+  const pages = (name: string): number | null => {
+    const m = new RegExp(`^Pages ${name}:\\s+(\\d+)\\.?\\s*$`, 'm').exec(vmStat)
+    return m?.[1] === undefined ? null : Number(m[1])
+  }
+  const free = pages('free')
+  if (free === null) return null
+  const count = free + (pages('inactive') ?? 0) + (pages('speculative') ?? 0) + (pages('purgeable') ?? 0)
+  return { available: Math.min(total, count * Number(page)), total }
+}
+
+// Windows: the JSON of `Win32_OperatingSystem`, both values in KiB.
+export function windowsMemory(json: string): Machine | null {
+  let v: unknown
+  try {
+    v = JSON.parse(json.trim())
+  } catch {
+    return null
+  }
+  if (typeof v !== 'object' || v === null) return null
+  const kib = (key: string): number | null => {
+    const n: unknown = Reflect.get(v, key)
+    const x = typeof n === 'number' ? n : typeof n === 'string' && /^\d+$/.test(n.trim()) ? Number(n) : Number.NaN
+    return Number.isFinite(x) && x >= 0 ? x * 1024 : null
+  }
+  const total = kib('TotalVisibleMemorySize')
+  const available = kib('FreePhysicalMemory')
+  return total === null || available === null || total === 0 ? null : { available: Math.min(total, available), total }
+}
+
 export function mb(bytes: number): string {
   return `${Math.round(bytes / MB)} MB`
 }

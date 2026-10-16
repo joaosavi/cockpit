@@ -1,7 +1,7 @@
 {
   "name": "hud",
-  "version": "1.0.0-beta.4",
-  "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, memory headroom, and the live tool, subagents and errors of the running turn. /hud opens the full view",
+  "version": "1.0.0-beta.6",
+  "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, and memory headroom. /hud opens the full view",
   "author": {
     "name": "João Savi"
   },

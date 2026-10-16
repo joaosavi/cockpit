@@ -24,7 +24,13 @@ import {
   LEGEND,
   type Level,
   levelLine,
+  MAC_PAGES_COMMAND,
+  MAC_TIMEOUT_MS,
+  MAC_TOTAL_COMMAND,
   type Machine,
+  MACHINE_TTL_MS,
+  macMemory,
+  macTotal,
   machineLine,
   mb,
   meminfo,
@@ -40,6 +46,9 @@ import {
   retriedNotice,
   statusText,
   tone,
+  WINDOWS_COMMAND,
+  WINDOWS_TIMEOUT_MS,
+  windowsMemory,
   withMeasurement,
   workingSet,
 } from './rules.ts'
@@ -115,9 +124,44 @@ async function readLevels($: Api): Promise<Level[]> {
   return levels
 }
 
-async function readMachine($: Api) {
+// The last command reading, kept for MACHINE_TTL_MS, and the one running, so the peak ticker does
+// not start a second PowerShell while the first one starts.
+let machineCache: { at: number; value: Machine | null } | null = null
+let machinePending: Promise<Machine | null> | null = null
+
+async function readMachine($: Api): Promise<Machine | null> {
   try {
     return meminfo(await $.fs.read('/proc/meminfo'))
+  } catch {
+    // no /proc/meminfo: macOS or Windows
+  }
+  const now = await $.clock.now()
+  if (machineCache !== null && now - machineCache.at < MACHINE_TTL_MS) return machineCache.value
+  machinePending ??= commandMachine($)
+  let value: Machine | null = null
+  try {
+    value = await machinePending
+  } catch {
+    // a reading that failed counts as none
+  } finally {
+    machinePending = null
+  }
+  machineCache = { at: now, value }
+  return value
+}
+
+// The machine's memory from the system's own command. Any failure gives null, which is today's
+// behaviour without a reading: the command runs as it came.
+async function commandMachine($: Api): Promise<Machine | null> {
+  try {
+    if ((await $.env.get('OS')) === 'Windows_NT') {
+      const r = await $.process.run(WINDOWS_COMMAND, { timeoutMs: WINDOWS_TIMEOUT_MS })
+      return r.exitCode === 0 ? windowsMemory(r.stdout) : null
+    }
+    const size = await $.process.run(MAC_TOTAL_COMMAND, { timeoutMs: MAC_TIMEOUT_MS })
+    if (size.exitCode !== 0 || macTotal(size.stdout) === null) return null
+    const pages = await $.process.run(MAC_PAGES_COMMAND, { timeoutMs: MAC_TIMEOUT_MS })
+    return pages.exitCode === 0 ? macMemory(size.stdout, pages.stdout) : null
   } catch {
     return null
   }
@@ -275,7 +319,8 @@ export function register(on: On, values: PluginOptions) {
     cwd = e.cwd
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
-    const home = await $.env.get('HOME')
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/memory-guard/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`

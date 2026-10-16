@@ -34,12 +34,13 @@ None.
 
 ## Cost
 
-The hook added about 2 ms per tool call on the author's VPS (60 calls measured in October 2026, an estimate).
+The hook added about 2 ms per tool call on the author's Linux machine (60 calls measured in October 2026, an estimate).
 
 ## Limits
 
 - A failure is read from the exit code and from failure words in the output, so a tool that fails silently is not counted.
 - Counts reset at the end of each turn, so a loop that spans several turns is not caught.
+- On Windows without `HOME`, the diary goes under `USERPROFILE`. Tested on Linux only.
 
 ## Install
 

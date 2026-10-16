@@ -136,6 +136,8 @@ export function candidates(name: string, value: string, anyName: boolean): Pair[
   }
   // In a URL the secret is the password. The whole URL is the service's address, which shows up in logs and errors.
   if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)) return pairs
+  // A Windows path, such as GIT_ASKPASS's, is an address too, and its pieces after a space are not secrets.
+  if (/^[A-Za-z]:[\\/]/.test(value)) return pairs
   if (anyName || SECRET_NAME.test(name)) {
     pairs.push([name, value])
     // The piece is a secret too. The Coolify token has the form `id|secret`, and on 2026-10-06 the
@@ -151,6 +153,8 @@ export function accepts(v: string, minLength: number): boolean {
   return (
     v.length >= minLength &&
     !v.startsWith('/') &&
+    // A Windows path, such as GIT_ASKPASS's, as `/` above is a POSIX one.
+    !/^[A-Za-z]:[\\/]/.test(v) &&
     !/[\t\n]/.test(v) &&
     !/^\$\{?\w+\}?$/.test(v) &&
     !/^<(?:hidden|oculto):/.test(v)

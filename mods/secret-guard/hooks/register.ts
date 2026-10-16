@@ -90,7 +90,8 @@ async function log($: Api, entry: Record<string, unknown>) {
 }
 
 async function paths($: Api): Promise<Paths> {
-  const home = await $.env.get('HOME')
+  // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
   return { secretsFile: expandHome(o.secretsFile, home), envRoot: expandHome(o.envRoot, home) }
 }
 
@@ -148,6 +149,28 @@ async function scanWithFind($: Api, root: string, files: string[], watched: stri
   return true
 }
 
+// The process's environment as `/proc/self/environ` spells it: NUL-separated `NAME=value`. Linux has
+// the file. Elsewhere a child started by `$.process.run` inherits the same environment and prints it:
+// `env -0`, then `env`, then Windows' `cmd /c set`, the last two one entry per line. Empty when none runs.
+async function environText($: Api): Promise<string> {
+  const proc = await readOrNull($, '/proc/self/environ')
+  if (proc !== null) return proc
+  const attempts: ReadonlyArray<readonly [readonly string[], boolean]> = [
+    [['env', '-0'], false],
+    [['env'], true],
+    [['cmd', '/d', '/c', 'set'], true],
+  ]
+  for (const [argv, byLine] of attempts) {
+    try {
+      const r = await $.process.run(argv, { timeoutMs: 5_000 })
+      if (r.exitCode === 0 && !r.isStdoutTruncated && r.stdout !== '') return byLine ? r.stdout.replace(/\r?\n/g, '\0') : r.stdout
+    } catch {
+      // not on this system: the next one
+    }
+  }
+  return ''
+}
+
 // Reads every source again. The folders are scanned only when `prior` is null.
 async function build($: Api, prior: Scan | null): Promise<Built> {
   const builtAt = await $.clock.now()
@@ -169,7 +192,7 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
     if (text !== null) envFiles.push({ path, text })
   }
   // `$.env.get` takes only literal names, so the names come from the process's own environment.
-  const environ = parseEnviron((await readOrNull($, '/proc/self/environ')) ?? '')
+  const environ = parseEnviron(await environText($))
   const table = buildTable({ secrets, envFiles, environ, minLength: o.minLength })
   const known = new Map<string, boolean>([[p.secretsFile, secrets !== null], ...envFiles.map((f): [string, boolean] => [f.path, true])])
   await log($, {
@@ -337,7 +360,8 @@ export function register(on: On, values: PluginOptions) {
     cwd = e.cwd
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
-    const home = await $.env.get('HOME')
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/secret-guard/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`

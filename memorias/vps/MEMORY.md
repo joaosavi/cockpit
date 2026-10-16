@@ -20,4 +20,3 @@
 - [Chrome do PC](chrome-do-pc.md) — Claude in Chrome nativo pela ponte do claude.ai; restart do getdemo-rc pendente, até lá `claude -p --chrome`
 - [Swap do container](swap-do-container.md) — getdemo-dev com 7 GiB de RAM e 14 GiB de swap pelo raw.lxc; mudar limits.memory ao vivo desfaz o swap
 - [Sessões combinam a vez](sessoes-combinam-a-vez.md) — com outra sessão na máquina, avisar "vou rodar X" e "liberado" antes e depois de push, typecheck e teste
-||||||| Stash base

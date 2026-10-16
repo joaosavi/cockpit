@@ -49,6 +49,7 @@ None per tool call: the mod has no `tool.call` hook. It reads the global `MEMORY
 
 - The rewrite matches the wording of the memory section Claude Code 2.1.292 sends. A different wording is left alone and logged as `skipped-unrecognized`.
 - Every session on the machine reads the global folder. Never save credentials there.
+- On Windows without `HOME`, `~` is `USERPROFILE`. Tested on Linux only.
 
 ## Install
 

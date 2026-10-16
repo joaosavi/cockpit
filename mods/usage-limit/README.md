@@ -38,13 +38,14 @@ When a 5-hour or 7-day window reaches 100%, the session stops wherever it is, of
 
 ## Cost
 
-The `tool.call` hook added about 6 ms per tool call on the author's VPS (60 calls measured in October 2026, an estimate).
+The `tool.call` hook added about 6 ms per tool call on the author's Linux machine (60 calls measured in October 2026, an estimate).
 
 ## Limits
 
 - The reading arrives with each model response, so a burst of parallel requests can pass the pause before the next reading. The resume after the limit error and the commit allowed during the pause cover that case.
 - A prompt with an origin Claude Code cannot classify counts as yours and spends the reserve.
 - `/clear`, `/resume` and `/branch` cancel the scheduled resume and drop the held messages of the previous conversation.
+- In the pause, a commit-only command passes through the Bash tool or, on Windows without Git Bash, the PowerShell tool. Tested on Linux only.
 
 ## Install
 

@@ -46,12 +46,13 @@ and the user's folders count.
 
 ## Cost
 
-The hook added about 2 ms per tool call on the author's VPS (60 calls measured in October 2026, an estimate). A held write costs the agent one extra call.
+The hook added about 2 ms per tool call on the author's Linux machine (60 calls measured in October 2026, an estimate). A held write costs the agent one extra call.
 
 ## Limits
 
 - Subagents are left alone: a skill delivered there would land in the main conversation.
 - The error detection matches common English and Portuguese phrases and stack-trace shapes, so it misses an error described in other words.
+- Windows paths with backslashes and `SKILL.md` files with CRLF line ends count the same as their POSIX spelling. Tested on Linux only.
 
 ## Install
 

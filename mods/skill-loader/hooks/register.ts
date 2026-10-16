@@ -51,7 +51,8 @@ async function ownSkillsDir($: Api): Promise<string> {
   if (ownSkills !== null) return ownSkills
   ownSkills = ''
   try {
-    const home = (await $.env.get('HOME')) ?? ''
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
     const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
     const path = installPathOf(await $.fs.read(`${config}/plugins/installed_plugins.json`), 'skill-loader')
     if (path !== null) ownSkills = `${path}/skills`
@@ -66,7 +67,7 @@ async function ownSkillsDir($: Api): Promise<string> {
 // plugin's own copy comes first; the project's and the user's folders cover a skill it lacks.
 async function skillText($: Api, skill: string): Promise<string | null> {
   const own = await ownSkillsDir($)
-  const dirs = [...(own === '' ? [] : [own]), `${await $.session.cwd()}/.claude/skills`, `${(await $.env.get('HOME')) ?? ''}/.claude/skills`]
+  const dirs = [...(own === '' ? [] : [own]), `${await $.session.cwd()}/.claude/skills`, `${(await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''}/.claude/skills`]
   for (const base of dirs) {
     const dir = `${base}/${skill}`
     try {
@@ -124,7 +125,8 @@ export function register(on: On) {
     cwd = e.cwd
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
-    const home = await $.env.get('HOME')
+    // HOME, or USERPROFILE on Windows, where HOME is usually unset.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     if (home !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
       diary = `${home}/.local/state/mods/skill-loader/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`

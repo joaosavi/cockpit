@@ -1,7 +1,7 @@
 {
   "name": "memory-guard",
-  "version": "1.0.0-beta.4",
-  "description": "Keeps typecheck, build, test and Playwright runs under the session's cgroup memory limit, so the kernel does not kill them: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137.",
+  "version": "1.0.0-beta.6",
+  "description": "Keeps typecheck, build, test and Playwright runs under the memory limit, the tightest cgroup limit on Linux or the machine's memory on Linux, macOS and Windows: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
@@ -23,7 +23,7 @@
     "margin": {
       "type": "number",
       "title": "Margin (%)",
-      "description": "Share of each cgroup's memory max kept free. The high mark counts only for a cgroup with no max.",
+      "description": "Share of memory kept free: of each cgroup's memory max, or of the machine's total without a cgroup limit. The high mark counts only for a cgroup with no max.",
       "default": 2,
       "min": 0,
       "max": 30

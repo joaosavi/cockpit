@@ -12,7 +12,7 @@ claude plugin install cockpit@cockpit
 ## The mods
 
 - `usage-limit`: one subagent at a time from 90% of the usage limit, a pause that keeps the last 2% for you, and an automatic resume when the window resets. `/limit`.
-- `memory-guard`: keeps typecheck, build, test and Playwright runs under the cgroup memory limit, with one process, a wait, or a refusal, and reruns a command killed with exit 137. `/ram`.
+- `memory-guard`: keeps typecheck, build, test and Playwright runs under the memory limit, with one process, a wait, or a refusal, and reruns a command killed with exit 137 with one process. `/ram`.
 - `skill-loader`: delivers the right skill when the agent touches a file or commits, and reminds it to load diagnosing-bugs when you paste an error.
 - `loop-breaker`: tells the agent to stop and change approach when it goes in circles.
 - `secret-guard`: hides every secret value in tool output as `<hidden:NAME>`, and writes the real value back into `.env` files.
@@ -22,7 +22,7 @@ claude plugin install cockpit@cockpit
 - `global-memory`: a machine-wide memory folder beside the per-project auto memory. It starts once you create `~/.claude/global-memory/MEMORY.md`.
 - `spinner-status`: replaces the tip under the spinner with one Haiku line: where the session stands, or a tip about these mods. Needs `"spinnerTipsEnabled": false` in settings.
 
-Each mod has its own README with its options, what it records and what it costs.
+Each mod has its own README with its options, what it records, what it costs, and what changes on macOS, Windows and Linux.
 
 ## Team and Enterprise plans
 
@@ -34,4 +34,4 @@ To turn one mod off, disable the bundle first and then the mod, because Claude C
 
 ## Where the mods write
 
-Every mod writes its diary under `~/.local/state/mods/<mod>/`. Each diary line has `at`, `session` and `event`, and each session ends with one `session-summary` line with the calls it saw, its actions and the time its hooks took.
+Every mod writes its diary under `~/.local/state/mods/<mod>/`, where `~` is `HOME`, or `USERPROFILE` on Windows when `HOME` is unset. Each diary line has `at`, `session` and `event`, and each session ends with one `session-summary` line with the calls it saw, its actions and the time its hooks took.

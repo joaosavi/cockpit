@@ -63,7 +63,7 @@ for i, (s, p) in enumerate(zip(SESSIONS, procs)):
     write(CONFIG / 'sessions' / f'{p.pid}.json', json.dumps({
         'pid': str(p.pid), 'sessionId': sid, 'cwd': s['cwd'], 'kind': 'interactive', 'name': s['name'], 'version': '2.1.300',
         'status': s['status'], 'statusUpdatedAt': str(int((NOW - 60) * 1000)), 'startedAt': str(int((NOW - s['up'] * 3600) * 1000)),
-        'tmux': f"{s['name']}:@0.%{i}", 'bridgeSessionId': f'session_demo{i}'}))
+        'bridgeSessionId': f'session_demo{i}'}))
     rows = [{'type': 'user', 'timestamp': iso(NOW - s['up'] * 3600), 'gitBranch': s['branch'], 'message': {'role': 'user', 'content': s['prompt']}}]
     for h in range(23, -1, -1):
         if (h + i) % 5 == 0 and h > 6 and i != 1:
@@ -82,7 +82,7 @@ write(CONFIG / 'settings.json', json.dumps({'autoCompactWindow': 733000, 'enable
 write(CONFIG / 'plugins' / 'store' / 'usage-limit_cockpit-demo.json', json.dumps({'windows': {'at': NOW * 1000, 'windows': [
     {'kind': 'five_hour', 'percentUsed': 62, 'resetsAt': iso(NOW + 5000)}, {'kind': 'seven_day', 'percentUsed': 38, 'resetsAt': iso(NOW + 3 * 86400)}]}}))
 MODS = {'secret-guard': ['redacted', 'redacted', 'filled'], 'collision-guard': ['git-held', 'edit-warned'], 'pipefail': ['rewritten'] * 4,
-        'memory-guard': ['reduced', 'reduced', 'waited-and-fit', 'refused'], 'loop-breaker': ['nudge'], 'usage-limit': [],
+        'memory-guard': [], 'loop-breaker': ['nudge'], 'usage-limit': [],
         'skill-loader': ['loaded'] * 5, 'hud': [], 'spinner-status': [], 'global-memory': ['context-injected'] * 4, 'panel': []}
 DETAIL = {'redacted': {'tool': 'Bash', 'names': 'STRIPE_KEY'}, 'filled': {'names': 'DATABASE_URL'}, 'git-held': {'op': 'stage-all', 'files': 2},
           'edit-warned': {'sessions': 'web'}, 'rewritten': {'key': 'npm test'}, 'reduced': {'key': 'tsc --noEmit'}, 'waited-and-fit': {'key': 'next build'},
@@ -106,23 +106,18 @@ import panel  # noqa: E402
 
 by_pid = {s['pid']: s for s in SESSIONS}
 panel.git_state = lambda cwd: next((s['git'] for s in SESSIONS if s['cwd'] == cwd), None)
-panel.tmux_target = lambda pid, procs=None: ('/tmp/demo', '%0')
-panel.cgroup_of = lambda pid: f"agents.slice/{by_pid[pid]['name']}.service" if pid in by_pid else None
+panel.listening = lambda sid: True
 panel.Processes.tree_rss = lambda self, pid: by_pid[pid]['mem'] * 2 ** 20 if pid in by_pid else 0
 GiB = 2 ** 30
-panel.groups = lambda pids, procs, now: [
-    {'name': 'agents.slice', 'label': 'agents', 'isParent': True, 'used': 3.1 * GiB, 'high': 5.5 * GiB, 'max': 6 * GiB, 'cpu': 38, 'procs': 0, 'top': None, 'oomKills': 0},
-    {'name': 'agents.slice/api.service', 'label': 'api', 'isParent': False, 'used': 1.2 * GiB, 'high': 2.5 * GiB, 'max': 3 * GiB, 'cpu': 4, 'procs': 6, 'top': {'name': 'claude', 'rss': 702 * 2 ** 20}, 'oomKills': 0},
-    {'name': 'agents.slice/web.service', 'label': 'web', 'isParent': False, 'used': 1.5 * GiB, 'high': 2.5 * GiB, 'max': 3 * GiB, 'cpu': 31, 'procs': 14, 'top': {'name': 'chromium', 'rss': 610 * 2 ** 20}, 'oomKills': 0},
-    {'name': 'agents.slice/infra.service', 'label': 'infra', 'isParent': False, 'used': 0.4 * GiB, 'high': 1 * GiB, 'max': 1.5 * GiB, 'cpu': 1, 'procs': 4, 'top': {'name': 'claude', 'rss': 310 * 2 ** 20}, 'oomKills': 0},
-]
-panel.services = lambda g: [{'unit': f'{n}.service', 'state': 'active', 'sub': 'running', 'since': NOW - h * 3600, 'restarts': r} for n, h, r in [('api', 6.5, 0), ('web', 3.2, 0), ('infra', 26, 1)]]
+# A laptop: no cgroups and no services, as on macOS and Windows
+panel.groups = lambda pids, procs, now: []
+panel.services = lambda g: []
 panel.meminfo = lambda: {'total': 16 * GiB, 'available': 9.4 * GiB}
 _overview = panel.overview
 def overview(cards, procs, now):
     o = _overview(cards, procs, now)
-    o.update(host='devbox', cpu={'load': [1.6, 1.9, 2.2], 'cores': 4}, disk={'used': 61 * GiB, 'total': 200 * GiB},
-             panel={'summaries': 38, 'tokens': 912000, 'failed': 0})
+    o.update(host='MacBook-Pro', cpu={'busy': 23, 'iowait': None, 'cores': 10}, disk={'used': 312 * GiB, 'total': 494 * GiB},
+             panel={'summaries': 38, 'tokens': 912000, 'failed': 0, 'costUsd': 2.66})
     return o
 panel.overview = overview
 panel.Summarizer.request = lambda self, sid, reason: False

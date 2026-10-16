@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { expandHome, indexContent, parseSection, rewriteSection, withGlobalIndex } from '../hooks/rules.ts'
+import { expandHome, globalDir, indexContent, parseSection, rewriteSection, withGlobalIndex } from '../hooks/rules.ts'
 import { coreSection } from './core-section.ts'
 
 const PROJECT = '/home/u/.claude/projects/-home-u-work/memory/'
@@ -26,6 +26,12 @@ test('expands ~ with HOME and refuses ~ without it', () => {
   expect(expandHome('~/.claude/global-memory', '/home/u')).toBe(GLOBAL)
   expect(expandHome('/srv/memory', undefined)).toBe('/srv/memory')
   expect(expandHome('~/x', undefined)).toBeNull()
+})
+
+test('expands a Windows home and a ~\\ path, and trims either trailing separator', () => {
+  expect(expandHome('~\\.claude\\memory', 'C:\\Users\\u\\')).toBe('C:\\Users\\u\\.claude\\memory')
+  expect(expandHome('~/.claude/memory', 'C:\\Users\\u')).toBe('C:\\Users\\u/.claude/memory')
+  expect(globalDir({ globalDir: 'D:\\memory\\' }, undefined)).toBe('D:\\memory')
 })
 
 test('the rewritten section keeps the project folder and adds the global one with the save rules', () => {

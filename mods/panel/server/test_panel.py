@@ -1,8 +1,12 @@
 """Tests for the panel server's pure parts: python3 -I mods/panel/server/test_panel.py"""
 
 import json
+import os
+import time
 import sys
+import tempfile
 import unittest
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -124,16 +128,74 @@ class Machine(unittest.TestCase):
         self.assertEqual((g['branch'], g['changed'], g['ahead']), ('main', 1, 0))
         self.assertIsNone(panel.git_state(tempfile.mkdtemp()))
 
-    def test_the_tmux_pane_is_found_through_the_parents(self):
-        class P:
-            def ancestors(self, pid):
-                return [pid, 50, 10]
-        old = panel.tmux_panes
-        panel.tmux_panes = lambda: {10: ('/tmp/tmux-1/x', '%3')}
+    def test_an_answer_waits_for_the_session_to_take_it(self):
+        d = Path(tempfile.mkdtemp())
+        old = (panel.INBOX, panel.live_sessions)
+        panel.INBOX, panel.live_sessions = d, lambda: [{'sessionId': 's1'}]
         try:
-            self.assertEqual(panel.tmux_target(99, P()), ('/tmp/tmux-1/x', '%3'))
+            self.assertIn('panel mod', panel.send_to_session('s1', 'yes'))
+            (d / 's1.seen').write_text('{}')
+            def take():
+                while not (d / 's1.json').exists():
+                    time.sleep(0.05)
+                msg = json.loads((d / 's1.json').read_text())
+                (d / 's1.seen').write_text(json.dumps({'done': msg['id']}))
+            threading.Thread(target=take).start()
+            self.assertIsNone(panel.send_to_session('s1', ' Round the total \n'))
+            self.assertEqual(json.loads((d / 's1.json').read_text())['text'], 'Round the total')
+            (d / 's1.json').unlink()
+            self.assertEqual(panel.send_to_session('s1', 'again', wait_s=0.3), 'the session did not take the message')
+            self.assertFalse((d / 's1.json').exists())
         finally:
-            panel.tmux_panes = old
+            panel.INBOX, panel.live_sessions = old
+
+
+class Portable(unittest.TestCase):
+    def test_processes_come_from_ps_without_proc(self):
+        old = panel.HAS_PROC
+        panel.HAS_PROC = False
+        try:
+            p = panel.Processes()
+        finally:
+            panel.HAS_PROC = old
+        self.assertIn(os.getpid(), p.parent)
+        self.assertGreater(p.rss[os.getpid()], 0)
+        self.assertEqual(p.ancestors(os.getpid())[0], os.getpid())
+
+    def test_the_overview_works_without_cgroups(self):
+        old = panel.HAS_CGROUP2
+        panel.HAS_CGROUP2 = False
+        try:
+            o = panel.overview([], panel.Processes(), time.time())
+        finally:
+            panel.HAS_CGROUP2 = old
+        self.assertEqual(o['groups'], [])
+
+    def test_cpu_counts_disk_wait_apart_from_busy(self):
+        ticks = iter([(1000, 500, 100), (2000, 700, 600)])
+        old = panel.cpu_times
+        panel.cpu_times = lambda: next(ticks, (2000, 700, 600))
+        try:
+            c = panel.Cpu().read(time.time())
+        finally:
+            panel.cpu_times = old
+        self.assertEqual((c['busy'], c['iowait']), (30, 50))
+
+    def test_cpu_falls_back_to_ps_without_a_tick_counter(self):
+        old = panel.cpu_times
+        panel.cpu_times = lambda: None
+        try:
+            c = panel.Cpu().read(time.time())
+        finally:
+            panel.cpu_times = old
+        self.assertIsNone(c['iowait'])
+        self.assertGreaterEqual(c['busy'], 0)
+
+    def test_a_mod_model_call_is_priced(self):
+        e = {'inputTokens': 1_000_000, 'outputTokens': 100_000, 'cacheReadTokens': 0, 'cacheCreationTokens': 0}
+        self.assertAlmostEqual(panel.tokens_cost(e, 'haiku'), 0.10 + 0.05)
+        self.assertAlmostEqual(panel.tokens_cost(e, 'claude-sonnet-5-5'), 2.0 + 1.0)
+        self.assertEqual(panel.tokens_cost(e, 'unknown-model'), 0.0)
 
 
 if __name__ == '__main__':

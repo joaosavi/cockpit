@@ -36,11 +36,13 @@ export function installPathOf(json: string, plugin: string): string | null {
   }
 }
 
-// The shell line that starts the server detached: its own session, its output to the log, so the
-// call that starts it returns at once and the server outlives the Claude Code session.
-export function startLine(server: string, log: string): string {
-  const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
-  return `setsid -f python3 -I ${q(server)} >>${q(log)} 2>&1 </dev/null`
+// The Python commands to try, in order: `python3` on Linux and macOS, `python` or the `py` launcher on Windows.
+export const PYTHONS = ['python3', 'python', 'py'] as const
+
+// The command that starts the server detached. The server starts itself again in the background and exits,
+// so no shell is needed and it works the same on Linux, macOS and Windows.
+export function startArgs(python: string, server: string, log: string): string[] {
+  return [python, '-I', server, '--detach', log]
 }
 
 export function serverEnv(o: Options, state: string): Record<string, string> {
@@ -49,13 +51,12 @@ export function serverEnv(o: Options, state: string): Record<string, string> {
 
 export type Counts = { needs: number; working: number; total: number }
 
-// What /panel answers: where the page is, how to reach it from another computer, and what it shows now.
-export function panelText(o: Options, up: boolean, counts: Counts | null, host: string): string {
+// What /panel answers: where the page is and what it shows now. `sshHost` is set when the session runs over
+// SSH, and then the answer adds the tunnel that reaches the page from the computer the user sits at.
+export function panelText(o: Options, up: boolean, counts: Counts | null, sshHost: string | null): string {
   const url = `http://localhost:${o.port}`
-  const lines = [
-    up ? `panel: ${url}` : `panel: the page server is not running on port ${o.port}.`,
-    `From another computer: ssh -N -L ${o.port}:127.0.0.1:${o.port} ${host}, then open ${url}`,
-  ]
+  const lines = [up ? `panel: ${url}` : `panel: the page server is not running on port ${o.port}.`]
+  if (sshHost !== null) lines.push(`From your computer: ssh -N -L ${o.port}:127.0.0.1:${o.port} ${sshHost}, then open ${url}`)
   if (up && counts !== null) lines.push(`${counts.total} sessions: ${counts.needs} need you, ${counts.working} working.`)
   return lines.join('\n')
 }
@@ -76,6 +77,16 @@ export function countsOf(json: string): Counts | null {
       else if (state === 'waiting' || state === 'blocked') needs += 1
     }
     return { needs, working, total }
+  } catch {
+    return null
+  }
+}
+
+// A message the page left in a session's inbox, or null when the file is not one.
+export function inboxMessage(json: string): { id: string; text: string } | null {
+  try {
+    const m = JSON.parse(json) as { id?: unknown; text?: unknown }
+    return typeof m.id === 'string' && typeof m.text === 'string' && m.text.trim() !== '' ? { id: m.id, text: m.text } : null
   } catch {
     return null
   }

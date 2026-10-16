@@ -35,7 +35,7 @@ By default the mod reads no `.env` files: the list holds the secrets file, the e
 
 ## Cost
 
-The hook added about 64 ms per tool call on the author's VPS (60 calls measured in October 2026, an estimate), with `envRoot` set to a folder of about 140 subfolders, most of it checking whether a source file changed.
+The hook added about 64 ms per tool call on the author's Linux machine (60 calls measured in October 2026, an estimate), with `envRoot` set to a folder of about 140 subfolders, most of it checking whether a source file changed.
 
 ## Limits
 
@@ -44,6 +44,9 @@ The hook added about 64 ms per tool call on the author's VPS (60 calls measured 
 - A `.env` file outside `envRoot` is not read, so its values stay visible unless another source has them.
 - Filling a placeholder in a command lets the agent use a secret, including sending it to a server. It cannot do more than it already could with `source .env`, but the command runs without a prompt of its own.
 - The mod also restores `<oculto:NAME>`, the placeholder an earlier Perl hook wrote.
+- The names of the environment come from `/proc/self/environ` on Linux. Elsewhere the mod runs `env -0`, then `env`, then `cmd /c set` (Windows) to read them, in a child that inherits the same environment.
+- Placeholders are filled back in Bash commands only. On Windows without Git Bash, a PowerShell command with a placeholder runs as written. Output of every tool is still hidden.
+- Tested on Linux only. The macOS and Windows paths are covered by unit tests with a simulated environment.
 
 ## Install
 

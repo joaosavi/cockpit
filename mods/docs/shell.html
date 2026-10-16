@@ -1,41 +1,41 @@
 <title>Cockpit Docs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap">
 <style>
 /* Layout: a docs shell. Top bar, section nav on the left, the page in a 46rem column, its outline on the right. */
 :root {
-  --bg: #f6f8f8;
+  --bg: #f7f7fa;
   --surface: #ffffff;
-  --sunk: #eef2f3;
-  --fg: #142024;
-  --muted: #56666c;
-  --faint: #8a979c;
-  --line: #dce3e5;
-  --accent: #0a7685;
-  --accent-ink: #075a66;
-  --accent-soft: #dff1f3;
+  --sunk: #f1f0f6;
+  --fg: #17161f;
+  --muted: #5d5b6e;
+  --faint: #8d8b9e;
+  --line: #e6e5ee;
+  --accent: #6e56cf;
+  --accent-ink: #5b45b8;
+  --accent-soft: #efeafe;
   --warn: #9a6200;
   --warn-soft: #fbf0d9;
-  --term-bg: #0d1417;
-  --term-fg: #d7dde0;
-  --term-dim: #6b7a80;
-  --term-bar: #172126;
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --term-bg: #0f0e16;
+  --term-fg: #e2e0ec;
+  --term-dim: #77748c;
+  --term-bar: #1a1824;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --top: 56px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c1113; --surface: #121a1d; --sunk: #172125; --fg: #e3eaec; --muted: #9aaab0; --faint: #6c7c82; --line: #233037;
-    --accent: #4ccfdc; --accent-ink: #7fdfe8; --accent-soft: #10343a; --warn: #f0b84f; --warn-soft: #2e2510;
-    --term-bg: #070b0d; --term-bar: #10181b; color-scheme: dark;
+    --bg: #0c0b11; --surface: #15141c; --sunk: #1c1b25; --fg: #edecf3; --muted: #a3a1b3; --faint: #6f6d82; --line: #25242f;
+    --accent: #a594f9; --accent-ink: #c4b8ff; --accent-soft: #241e3d; --warn: #f0b84f; --warn-soft: #2e2510;
+    --term-bg: #08070d; --term-bar: #131219; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0c1113; --surface: #121a1d; --sunk: #172125; --fg: #e3eaec; --muted: #9aaab0; --faint: #6c7c82; --line: #233037;
-  --accent: #4ccfdc; --accent-ink: #7fdfe8; --accent-soft: #10343a; --warn: #f0b84f; --warn-soft: #2e2510;
-  --term-bg: #070b0d; --term-bar: #10181b; color-scheme: dark;
+  --bg: #0c0b11; --surface: #15141c; --sunk: #1c1b25; --fg: #edecf3; --muted: #a3a1b3; --faint: #6f6d82; --line: #25242f;
+  --accent: #a594f9; --accent-ink: #c4b8ff; --accent-soft: #241e3d; --warn: #f0b84f; --warn-soft: #2e2510;
+  --term-bg: #08070d; --term-bar: #131219; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { scroll-padding-top: calc(var(--top) + 16px); }
@@ -123,16 +123,16 @@ pre:hover .copy, .copy:focus-visible { opacity: 1; }
 /* terminal: dark in both themes, like the terminal itself */
 .term { margin: 0 0 1.3rem; border-radius: 10px; overflow: hidden; background: var(--term-bg); border: 1px solid var(--line); }
 .term-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--term-bar); }
-.term-bar span { width: 10px; height: 10px; border-radius: 50%; background: #2c3a40; }
+.term-bar span { width: 10px; height: 10px; border-radius: 50%; background: #34313f; }
 .term-bar em { margin-left: 8px; font: 500 .74rem var(--font-mono); font-style: normal; color: var(--term-dim); }
 .term pre { margin: 0; border: 0; border-radius: 0; background: none; color: var(--term-fg); padding: 14px 16px 16px; font-size: .76rem; line-height: 1.55; }
 .t-dim { color: var(--term-dim); }
 .t-acc { color: #c678dd; }
-.t-rule { color: #26343a; }
-.t-chip { color: #c678dd; background: #1f2a30; border-radius: 3px; padding: 0 4px; }
+.t-rule { color: #2e2b3a; }
+.t-chip { color: #c678dd; background: #241f33; border-radius: 3px; padding: 0 4px; }
 .t-warn { color: #e5c07b; }
 .t-ok { color: #7ec699; }
-.t-badge { color: #0d1417; background: #e5c07b; font-weight: 700; }
+.t-badge { color: #0f0e16; background: #e5c07b; font-weight: 700; }
 
 /* home cards */
 .pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 1.4rem; }

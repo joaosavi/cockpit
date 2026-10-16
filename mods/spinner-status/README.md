@@ -89,3 +89,9 @@ At the end of each session the mod writes one `session-summary` line to
 (`haiku:answered`, `haiku:api-error`, `haiku:empty-reply`, `haiku:aborted`, `haiku:no-text`,
 `haiku:error`) and the calls skipped because one was still running (`skipped:busy`), and sums the
 tokens, the model time and the excerpt size. It never writes the excerpt or the line.
+
+## Limits
+
+- The model call goes through Claude Code itself, with no command of its own, so it works the same on
+  macOS, Windows and Linux. On Windows without `HOME`, the diary goes under `USERPROFILE`. Tested on Linux only.
+- The spinner line is drawn by Claude Code's terminal interface. Tested only in a terminal.

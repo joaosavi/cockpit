@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { groups, headroom, heavy, inactiveFile, reduced, refusalText, statusText, withMeasurement, workingSet } from '../hooks/rules.ts'
+import { groups, headroom, heavy, inactiveFile, macMemory, macTotal, reduced, refusalText, statusText, windowsMemory, withMeasurement, workingSet } from '../hooks/rules.ts'
 
 const MB = 1024 * 1024
 const GB = 1024 * MB
@@ -311,4 +311,154 @@ test('the status line shows only when the headroom is under 500 MB, and the agen
     'memory-guard: refused npx tsc after waiting 120s for memory; another session or process holds it.\nHeadroom: 10 MB, after the 2% margin\n' +
       'Tell the user, or continue with work that does not need this command.',
   )
+})
+
+// Sample outputs, copied in shape from a Mac and a Windows PC. The real commands never ran in these
+// tests: the macOS and Windows paths are checked only against this simulated output.
+const VM_STAT = (free: number, inactive: number) => `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                               ${free}.
+Pages active:                            401234.
+Pages inactive:                          ${inactive}.
+Pages speculative:                         1000.
+Pages throttled:                              0.
+Pages wired down:                        150000.
+Pages purgeable:                           2000.
+"Translation faults":                 123456789.
+Pages copy-on-write:                    1234567.
+Swapins:                                      0.
+Swapouts:                                     0.
+`
+const MEMSIZE = '17179869184\n'
+const PS = (freeKiB: number) => `{\r\n    "TotalVisibleMemorySize":  16658432,\r\n    "FreePhysicalMemory":  ${freeKiB}\r\n}\r\n`
+
+test('reads the macOS total and the free, inactive, speculative and purgeable pages', () => {
+  expect(macTotal(MEMSIZE)).toBe(16 * GB)
+  expect(macTotal('')).toBeNull()
+  expect(macTotal('sysctl: unknown oid')).toBeNull()
+  expect(macMemory(MEMSIZE, VM_STAT(10000, 200000))).toEqual({ total: 16 * GB, available: (10000 + 200000 + 1000 + 2000) * 16384 })
+  // Intel Macs print a 4096-byte page.
+  expect(macMemory(MEMSIZE, VM_STAT(10000, 0).replace('16384', '4096'))?.available).toBe(13000 * 4096)
+  expect(macMemory(MEMSIZE, 'garbage')).toBeNull()
+  expect(macMemory('', VM_STAT(1, 1))).toBeNull()
+  // Never more available than the total.
+  expect(macMemory('1000', VM_STAT(10000, 0))).toEqual({ total: 1000, available: 1000 })
+})
+
+test('reads the Windows total and free memory from the PowerShell JSON, in KiB', () => {
+  expect(windowsMemory(PS(8000000))).toEqual({ total: 16658432 * 1024, available: 8000000 * 1024 })
+  expect(windowsMemory('{"TotalVisibleMemorySize":"1024","FreePhysicalMemory":"512"}')).toEqual({ total: 1024 * 1024, available: 512 * 1024 })
+  expect(windowsMemory('')).toBeNull()
+  expect(windowsMemory('Get-CimInstance : Access denied')).toBeNull()
+  expect(windowsMemory('{"TotalVisibleMemorySize":16658432}')).toBeNull()
+  expect(windowsMemory('null')).toBeNull()
+})
+
+type System = {
+  env: Record<string, string>
+  // What each command prints, by its first word; a missing one cannot start.
+  outputs: Record<string, string | (() => string)>
+  ran: string[]
+  commands: string[]
+  statuses?: unknown[]
+}
+
+// A Mac or Windows PC: no /proc and no cgroups, so memory comes only from the system's commands.
+function system(on: Parameters<Parameters<typeof test>[1]>[1], s: System) {
+  const clock = mock.clock(on, { now: 0 })
+  mock.env(on, s.env)
+  mock.store(on, {})
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('command.register', () => ({ value: undefined }))
+  on('ui.status', ($, e) => {
+    s.statuses?.push(Reflect.get(e, 'text'))
+    return { value: undefined }
+  })
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.read', () => ({ deny: 'ENOENT' }))
+  on('session.surfaces', () => ({ value: [] }))
+  on('process.run', async ($, e) => {
+    const name = e.argv[0] ?? ''
+    s.ran.push(name)
+    if (name === 'sleep') {
+      await clock.advance(5000)
+      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    }
+    const out = s.outputs[name]
+    if (out === undefined) return { deny: 'ENOENT: command not found' }
+    return { value: { exitCode: 0, stdout: typeof out === 'function' ? out() : out, stderr: '' } }
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  on('tool.call', ($, e) => {
+    s.commands.push(String(Reflect.get(e, 'command')))
+    return { result: 'ok', text: 'ok' }
+  })
+  return clock
+}
+
+test('on macOS, a heavy command that fits the available memory runs as it came', async ($, on) => {
+  // 16 GB total and a 2% margin of 328 MB; 77000 pages of 16 KiB are 1203 MB available, so 875 MB of
+  // headroom, over the 600 MB vitest estimate.
+  const s: System = { env: { HOME: '/Users/u' }, outputs: { sysctl: MEMSIZE, vm_stat: VM_STAT(10000 + 64000, 0) }, ran: [], commands: [] }
+  system(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'npx vitest run' })
+  expect(s.commands).toEqual(['npx vitest run'])
+  expect(s.ran).toContain('vm_stat')
+})
+
+test('on macOS, without room for tsc, waits, then refuses and shows the machine', async ($, on) => {
+  // 13000 pages of 16 KiB are 203 MB available, under the 328 MB margin.
+  const s: System = { env: { HOME: '/Users/u' }, outputs: { sysctl: MEMSIZE, vm_stat: VM_STAT(10000, 0) }, ran: [], commands: [] }
+  system(on, s)
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(s.commands).toEqual([])
+  expect(r).toMatchObject({ deny: expect.stringContaining('Machine: 203 MB available of 16384 MB') })
+})
+
+test('on Windows, reads memory through PowerShell and reduces a command that does not fit whole', async ($, on) => {
+  // 16268 MB total and a 2% margin of 325 MB; 900 MB free leaves 575 MB, under the 600 MB test
+  // estimate and over the 360 MB of the reduced run.
+  const s: System = { env: { USERPROFILE: 'C:/Users/u', OS: 'Windows_NT' }, outputs: { powershell: PS(900 * 1024) }, ran: [], commands: [] }
+  system(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn turbo run test' })
+  expect(s.commands).toEqual(['yarn turbo run test --concurrency=1'])
+  expect(s.ran).not.toContain('sysctl')
+})
+
+test('on Windows, one PowerShell reading serves the next 10 seconds', async ($, on) => {
+  const s: System = { env: { USERPROFILE: 'C:/Users/u', OS: 'Windows_NT' }, outputs: { powershell: PS(8000000) }, ran: [], commands: [] }
+  const clock = system(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  const first = s.ran.filter((r) => r === 'powershell').length
+  expect(first).toBe(1)
+  await clock.advance(11_000)
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(s.ran.filter((r) => r === 'powershell').length).toBe(2)
+  expect(s.commands.length).toBe(3)
+})
+
+test('when the system commands fail, a heavy command runs as it came and nothing shows', async ($, on) => {
+  const statuses: unknown[] = []
+  const s: System = { env: { USERPROFILE: '/users/u' }, outputs: {}, ran: [], commands: [], statuses }
+  system(on, s)
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Bash', command: 'yarn turbo run typecheck' })
+  expect(r).not.toHaveProperty('deny')
+  expect(r).not.toHaveProperty('context')
+  expect(s.commands).toEqual(['yarn turbo run typecheck'])
+  expect(s.ran).toEqual(['sysctl'])
+  expect(statuses.every((x) => x === undefined)).toBe(true)
+})
+
+test('when PowerShell prints an error, a heavy command runs as it came', async ($, on) => {
+  const s: System = { env: { OS: 'Windows_NT' }, outputs: { powershell: 'Get-CimInstance : Access denied' }, ran: [], commands: [] }
+  system(on, s)
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(r).not.toHaveProperty('deny')
+  expect(s.commands).toEqual(['npx tsc --noEmit'])
 })
