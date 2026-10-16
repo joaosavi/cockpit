@@ -20,12 +20,12 @@ trabalho, uma por vez.
 
 ```bash
 cd scripts && npm install && npx playwright install chromium-headless-shell && cd ..
-uv run --quiet --with pypdf python3 scripts/montar.py tcc.html
-python3 scripts/checar.py tcc.html
-uv run --quiet --with pdfplumber --with pypdf python3 scripts/conferir_pdf.py tcc.pdf
+uv run --quiet --with pypdf scripts/montar.py tcc.html
+uv run --quiet scripts/checar.py tcc.html
+uv run --quiet --with pdfplumber --with pypdf scripts/conferir_pdf.py tcc.pdf
 ```
 
-Sem `uv`, rode `pip install pypdf pdfplumber` uma vez e use `python3` direto. O `checar.py` confere o texto;
+Sem `uv`, rode `pip install pypdf pdfplumber` uma vez e troque `uv run --quiet --with ...` por `python`. O `checar.py` confere o texto;
 o `conferir_pdf.py` mede o PDF pronto e sai com erro quando algo foge do manual. Se o navegador baixado não
 abrir, o `scripts/navegador.js` tenta o Google Chrome e o Microsoft Edge instalados; para outro navegador,
 aponte a variável `CHROME_PATH` para o executável.

@@ -2,7 +2,7 @@
 """Checagem do texto do trabalho a partir do HTML (a fonte única), contra o regulamento e o Manual da UDESC.
 
 Uso:
-    python3 scripts/checar.py tcc.html
+    uv run --quiet scripts/checar.py tcc.html
 
 Confere:
 - marcadores [PREENCHER] e parágrafos com a classe "pendente" que sobraram (saem cinza no PDF);

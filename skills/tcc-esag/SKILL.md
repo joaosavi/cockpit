@@ -35,15 +35,15 @@ governa as sessões seguintes, os links oficiais conferidos e, na consultoria, u
 2. Crie o projeto numa pasta nova (o script recusa pasta que exista e não esteja vazia):
 
    ```bash
-   python3 <pasta-desta-skill>/scripts/novo_projeto.py <pasta-nova> --modelo <chave>
+   uv run --quiet <pasta-desta-skill>/scripts/novo_projeto.py <pasta-nova> --modelo <chave>
    ```
 
 3. Dentro da pasta nova, instale as dependências e gere o PDF do modelo:
 
    ```bash
    cd scripts && npm install && npx playwright install chromium-headless-shell && cd ..
-   uv run --quiet --with pypdf python3 scripts/montar.py tcc.html
-   uv run --quiet --with pdfplumber --with pypdf python3 scripts/conferir_pdf.py tcc.pdf
+   uv run --quiet --with pypdf scripts/montar.py tcc.html
+   uv run --quiet --with pdfplumber --with pypdf scripts/conferir_pdf.py tcc.pdf
    ```
 
    O passo termina com o PDF gerado e o `conferir_pdf.py` com zero erro; as linhas de marcador `[PREENCHER]`

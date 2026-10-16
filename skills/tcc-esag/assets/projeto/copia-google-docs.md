@@ -12,7 +12,7 @@ O que precisa estar ligado: o conector do Google Drive, no Claude.
 
 ## Passos
 
-1. Rode `uv run --quiet --with pypdf python3 scripts/montar.py tcc.html --tudo`. Ele gera o PDF, a página de
+1. Rode `uv run --quiet --with pypdf scripts/montar.py tcc.html --tudo`. Ele gera o PDF, a página de
    leitura e o `tcc.docx`.
 2. Suba o `tcc.docx` com o `create_file` do Drive: `contentMimeType`
    `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `parentId` da pasta, `title` com
@@ -22,9 +22,9 @@ O que precisa estar ligado: o conector do Google Drive, no Claude.
    Google em papel Carta, sem margens, sem capa e sem número de página.
 3. Exporte a cópia com `download_file_content` e `exportMimeType: "application/pdf"`. O resultado fica salvo
    num arquivo, e a mensagem da ferramenta diz onde.
-4. Rode `uv run --quiet --with pypdf python3 scripts/conferir_docs.py <arquivo salvo>`. A cópia está pronta
+4. Rode `uv run --quiet --with pypdf scripts/conferir_docs.py <arquivo salvo>`. A cópia está pronta
    quando ele disser "todas as páginas certas".
-5. Se ele listar páginas erradas, rode `python3 scripts/google_docs.py tcc.html --paginas google-paginas.json`,
+5. Se ele listar páginas erradas, rode `uv run --quiet scripts/google_docs.py tcc.html --paginas google-paginas.json`,
    suba esse `.docx` como cópia nova, exporte e confira de novo com `--paginas google-paginas.json`. Quando a
    nova passar, mande a anterior para a lixeira com `trash_file`.
 6. Mande o link da cópia ao autor.

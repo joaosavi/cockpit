@@ -11,9 +11,9 @@ Tudo por código, então sumário e listas ficam sempre alinhados, mesmo que voc
   4. Renderiza de novo e confere. Se a paginação mudou (o sumário cresceu de página), repete até estabilizar.
 
 Uso:
-    uv run --quiet --with pypdf python3 scripts/montar.py tcc.html [tcc.pdf]
-    uv run --quiet --with pypdf python3 scripts/montar.py tcc.html --render-only   só renderiza
-    uv run --quiet --with pypdf python3 scripts/montar.py tcc.html --tudo          PDF, página de leitura,
+    uv run --quiet --with pypdf scripts/montar.py tcc.html [tcc.pdf]
+    uv run --quiet --with pypdf scripts/montar.py tcc.html --render-only   só renderiza
+    uv run --quiet --with pypdf scripts/montar.py tcc.html --tudo          PDF, página de leitura,
                                                      conferência no navegador e o .docx da cópia do Google Docs
 
 Requer pypdf e o Node com as dependências de scripts/ (npm install).
@@ -29,7 +29,7 @@ import unicodedata
 try:
     from pypdf import PdfReader
 except Exception:
-    sys.exit("pypdf não encontrado. Rode com: uv run --quiet --with pypdf python3 scripts/montar.py tcc.html")
+    sys.exit("pypdf não encontrado. Rode com: uv run --quiet --with pypdf scripts/montar.py tcc.html")
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -78,7 +78,7 @@ def render(html_path, pdf_path):
         os.remove(pdf_abs)
     try:
         saida = subprocess.run(["node", os.path.join(AQUI, "paginar.js"), tmp, pdf_abs], check=True, timeout=300,
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, encoding="utf-8")
     except subprocess.CalledProcessError as erro:
         sys.exit("Falha ao paginar o PDF com o Paged.js:\n" + (erro.stderr or erro.stdout))
     finally:

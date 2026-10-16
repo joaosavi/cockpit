@@ -2,7 +2,7 @@
 """Confere a cópia do Google Docs contra o PDF do motor, pelo PDF que o Google exporta.
 
 Uso:
-    uv run --quiet --with pypdf python3 scripts/conferir_docs.py <exportacao> [tcc.html] [--paginas google-paginas.json]
+    uv run --quiet --with pypdf scripts/conferir_docs.py <exportacao> [tcc.html] [--paginas google-paginas.json]
 
 <exportacao> é o PDF exportado do Google Doc: o .pdf, ou o JSON que a ferramenta do Drive
 (download_file_content com exportMimeType application/pdf) salva, com o PDF em base64 no campo "content".

@@ -3,6 +3,7 @@
 // Imprime JSON, com as medidas em pontos.
 // Uso: node scripts/medir.js <pagina-paginada.html>
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { abrirNavegador } = require('./navegador');
 
 (async () => {
@@ -10,7 +11,7 @@ const { abrirNavegador } = require('./navegador');
   const navegador = await abrirNavegador();
   try {
     const pagina = await navegador.newPage({ viewport: { width: 1400, height: 1200 } });
-    await pagina.goto('file://' + path.resolve(entrada));
+    await pagina.goto(pathToFileURL(path.resolve(entrada)).href);
     await pagina.waitForFunction(() => document.getElementById('aviso').hidden, null, { timeout: 120000 });
     const medidas = await pagina.evaluate(() => {
       // A área útil da folha tem 16 cm; a razão converte o pixel da tela em ponto, com ou sem zoom.

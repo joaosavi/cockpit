@@ -2,7 +2,7 @@
 """Confere o PDF pronto contra as regras de forma do Manual da UDESC, medindo o arquivo, e não o CSS.
 
 Uso:
-    uv run --quiet --with pdfplumber --with pypdf python3 scripts/conferir_pdf.py tcc.pdf
+    uv run --quiet --with pdfplumber --with pypdf scripts/conferir_pdf.py tcc.pdf
 
 Confere, folha por folha:
 - papel A4 (Manual p. 42);
@@ -33,7 +33,7 @@ try:
     import pdfplumber
     from pypdf import PdfReader
 except ImportError:
-    sys.exit("pdfplumber ou pypdf não encontrado. Rode com: uv run --quiet --with pdfplumber --with pypdf python3 scripts/conferir_pdf.py tcc.pdf")
+    sys.exit("pdfplumber ou pypdf não encontrado. Rode com: uv run --quiet --with pdfplumber --with pypdf scripts/conferir_pdf.py tcc.pdf")
 
 CM = 72 / 2.54
 A4 = (595.28, 841.89)

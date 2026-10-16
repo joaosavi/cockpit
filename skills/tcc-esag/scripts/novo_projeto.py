@@ -2,8 +2,8 @@
 """Cria um projeto de TCC de Administração da ESAG/UDESC, com a formatação pronta, para o autor só escrever.
 
 Uso:
-    python3 novo_projeto.py <pasta-nova> --modelo tcc-iv
-    python3 novo_projeto.py --modelos          lista os modelos
+    uv run --quiet novo_projeto.py <pasta-nova> --modelo tcc-iv
+    uv run --quiet novo_projeto.py --modelos          lista os modelos
 
 Copia o motor de formatação (CSS, scripts, verificadores, cópia do Google Docs), as normas, os links oficiais
 e os arquivos de trabalho (AGENTS.md, HANDOFF.md e os demais) para a pasta nova, e escreve o tcc.html com as
@@ -346,9 +346,9 @@ def main():
     print(f"Modelo: {modelo['nome']}")
     print("Próximos passos, dentro da pasta:")
     print("  cd scripts && npm install && npx playwright install chromium-headless-shell && cd ..")
-    print("  uv run --quiet --with pypdf python3 scripts/montar.py tcc.html")
-    print("  python3 scripts/checar.py tcc.html")
-    print("  uv run --quiet --with pdfplumber --with pypdf python3 scripts/conferir_pdf.py tcc.pdf")
+    print("  uv run --quiet --with pypdf scripts/montar.py tcc.html")
+    print("  uv run --quiet scripts/checar.py tcc.html")
+    print("  uv run --quiet --with pdfplumber --with pypdf scripts/conferir_pdf.py tcc.pdf")
 
 
 if __name__ == "__main__":

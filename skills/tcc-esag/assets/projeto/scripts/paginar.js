@@ -4,6 +4,7 @@
 // marcadores de navegação.
 // Uso: node scripts/paginar.js <entrada.html> <saida.pdf>
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { abrirNavegador } = require('./navegador');
 
 (async () => {
@@ -11,7 +12,7 @@ const { abrirNavegador } = require('./navegador');
   const navegador = await abrirNavegador();
   try {
     const pagina = await navegador.newPage();
-    await pagina.goto('file://' + path.resolve(entrada));
+    await pagina.goto(pathToFileURL(path.resolve(entrada)).href);
     await pagina.waitForFunction(() => document.getElementById('aviso').hidden, null, { timeout: 120000 });
     const info = await pagina.evaluate(() => {
       const folhas = Array.from(document.querySelectorAll('#folhas .pagedjs_page'));

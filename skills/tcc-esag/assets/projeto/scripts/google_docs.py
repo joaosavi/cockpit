@@ -5,7 +5,7 @@ O HTML continua sendo a fonte. Este .docx serve só para a cópia no Google Docs
 margens, estilos, seções, cabeçalho e notas de rodapé, e perde quase tudo de um HTML.
 
 Uso:
-    python3 scripts/google_docs.py tcc.html [tcc.docx] [--paginas google-paginas.json]
+    uv run --quiet scripts/google_docs.py tcc.html [tcc.docx] [--paginas google-paginas.json]
 
 --paginas troca, no sumário e nas listas, a página do PDF pela página em que o Google pôs o título. O arquivo
 sai do scripts/conferir_docs.py, que lê o PDF exportado da cópia já enviada.
@@ -670,7 +670,7 @@ def medir(html_path):
         '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head><body>' + pagina + "</body></html>")
     try:
         saida = subprocess.run(["node", os.path.join(AQUI, "medir.js"), tmp],
-                               capture_output=True, text=True, check=True, timeout=300).stdout
+                               capture_output=True, text=True, encoding="utf-8", check=True, timeout=300).stdout
     finally:
         os.remove(tmp)
     return json.loads(saida)

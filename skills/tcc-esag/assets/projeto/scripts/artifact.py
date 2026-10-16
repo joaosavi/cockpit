@@ -8,10 +8,11 @@ Times New Roman não está instalada: tem as mesmas medidas, então a paginaçã
 bloqueia fontes de fora do Google Fonts, por isso a fonte vai dentro da página.
 
 Uso:
-    python3 scripts/artifact.py [arquivo.html]   gera artifact/index.html, com o Paged.js do unpkg
+    uv run --quiet scripts/artifact.py [arquivo.html]   gera artifact/index.html, com o Paged.js do unpkg
 """
 import base64
 import os
+import pathlib
 import re
 import sys
 
@@ -19,7 +20,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTES = os.path.join(RAIZ, "scripts", "fontes")
 SAIDA = os.path.join(RAIZ, "artifact")
 PAGEDJS_CDN = "https://unpkg.com/pagedjs@0.4.3/dist/paged.min.js"
-PAGEDJS_LOCAL = "file://" + os.path.join(RAIZ, "scripts", "vendor", "paged.min.js")
+PAGEDJS_LOCAL = pathlib.Path(RAIZ, "scripts", "vendor", "paged.min.js").as_uri()
 
 
 def sem_bloco(css, inicio):

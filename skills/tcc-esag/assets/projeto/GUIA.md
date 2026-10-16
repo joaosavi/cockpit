@@ -230,7 +230,7 @@ Os erros que mais custam nota na consultoria aparecem na ligação entre as seç
 
 Na semana do envio:
 
-- [ ] `python3 scripts/checar.py tcc.html` sem aviso de seção, de marcador `[PREENCHER]` nem de referência sem citação
+- [ ] `uv run --quiet scripts/checar.py tcc.html` sem aviso de seção, de marcador `[PREENCHER]` nem de referência sem citação
 - [ ] `conferir_pdf.py` com zero erro e nenhum marcador por escrever no PDF final
 - [ ] Resumo e abstract de 150 a 500 palavras, com três a cinco palavras-chave
 - [ ] Uso de IA descrito na Metodologia, a partir do `uso-de-ia.md`

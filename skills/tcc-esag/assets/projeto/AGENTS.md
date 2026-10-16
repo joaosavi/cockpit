@@ -69,16 +69,16 @@ não preencha sumário, listas ou ids de título à mão, e não mexa no CSS.
 # uma vez, na primeira sessão
 cd scripts && npm install && npx playwright install chromium-headless-shell && cd ..
 
-# a cada mudança no texto (sem uv: pip install pypdf pdfplumber, e rode com python3)
-uv run --quiet --with pypdf python3 scripts/montar.py tcc.html
-python3 scripts/checar.py tcc.html
-uv run --quiet --with pdfplumber --with pypdf python3 scripts/conferir_pdf.py tcc.pdf
+# a cada mudança no texto (sem uv: pip install pypdf pdfplumber, e troque "uv run --quiet --with ..." por "python")
+uv run --quiet --with pypdf scripts/montar.py tcc.html
+uv run --quiet scripts/checar.py tcc.html
+uv run --quiet --with pdfplumber --with pypdf scripts/conferir_pdf.py tcc.pdf
 
 # página de leitura com as mesmas folhas do PDF, para publicar como Artifact do Claude (opcional)
-python3 scripts/artifact.py && node scripts/conferir.js
+uv run --quiet scripts/artifact.py && node scripts/conferir.js
 
 # tudo de uma vez: PDF, página de leitura, conferência no navegador e o .docx da cópia do Google Docs
-uv run --quiet --with pypdf python3 scripts/montar.py tcc.html --tudo
+uv run --quiet --with pypdf scripts/montar.py tcc.html --tudo
 ```
 
 O `montar.py` tira a página de cada título, ilustração e tabela do próprio layout do Paged.js, e avisa
