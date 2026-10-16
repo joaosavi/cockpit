@@ -340,7 +340,8 @@ def main():
             f.write(DECISOES_IV)
     for nome in ("AGENTS.md", "README.md", "HANDOFF.md", "uso-de-ia.md", os.path.join("revisao", "roteiro.md")):
         caminho = os.path.join(destino, nome)
-        open(caminho, "w", encoding="utf-8").write(preencher(open(caminho, encoding="utf-8").read(), valores))
+        texto = open(caminho, encoding="utf-8").read()
+        open(caminho, "w", encoding="utf-8").write(preencher(texto, valores))
     open(os.path.join(destino, "tcc.html"), "w", encoding="utf-8").write(documento(chave, modelo))
     print(f"Projeto criado em {destino}")
     print(f"Modelo: {modelo['nome']}")
