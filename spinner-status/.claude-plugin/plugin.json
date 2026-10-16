@@ -1,0 +1,41 @@
+{
+  "name": "spinner-status",
+  "version": "1.0.0-beta.6",
+  "description": "Replaces the tip under the spinner with one short line from Haiku: where this session stands, or a tip about your mods and their commands that fits the moment",
+  "author": {
+    "name": "João Savi"
+  },
+  "license": "MIT",
+  "keywords": [
+    "spinner",
+    "tip",
+    "summary",
+    "haiku",
+    "mods"
+  ],
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Draw the line under the spinner. Off, the mod does nothing and makes no model call",
+      "default": true
+    },
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "mixed: Haiku writes a session summary and picks a mod tip, and the line alternates between them. tips: mod tips only, in rotation, with no model call. summary: the session summary only",
+      "options": [
+        "mixed",
+        "tips",
+        "summary"
+      ],
+      "default": "mixed"
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "Model that writes the line: an alias such as haiku, or a full model id",
+      "default": "claude-haiku-4-5-20251001"
+    }
+  }
+}

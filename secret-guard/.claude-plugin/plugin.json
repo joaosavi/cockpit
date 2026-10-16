@@ -1,0 +1,41 @@
+{
+  "name": "secret-guard",
+  "version": "1.0.0-beta.7",
+  "description": "Hides every secret value in tool output as <hidden:NAME> before the agent reads it, MCP and subagent output included, and writes the real value back when the agent puts the placeholder into a .env or secrets file.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/secret-guard",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "secrets",
+    "redaction",
+    "security",
+    "dotenv",
+    "mod"
+  ],
+  "userConfig": {
+    "secretsFile": {
+      "type": "string",
+      "title": "Secrets file",
+      "description": "KEY=value file whose every value is a secret, whatever its name. A leading ~ is your home folder.",
+      "default": "~/.secrets"
+    },
+    "envRoot": {
+      "type": "string",
+      "title": ".env root",
+      "description": "Folder searched for .env files, 5 levels deep, such as the folder that holds your repos. Empty searches none. A leading ~ is your home folder.",
+      "default": ""
+    },
+    "minLength": {
+      "type": "number",
+      "title": "Minimum length",
+      "description": "Values shorter than this are left alone, except known token formats.",
+      "default": 12,
+      "min": 4,
+      "max": 64
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "name": "cockpit",
+  "owner": {
+    "name": "João Savi"
+  },
+  "description": "Mods for Claude Code: guards that keep the agent out of trouble, and instruments that show where the session stands",
+  "plugins": [
+    {
+      "name": "cockpit",
+      "source": "./cockpit",
+      "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, loop, secret, collision and pipefail guards, the session panel, the HUD and the spinner status line."
+    },
+    {
+      "name": "usage-limit",
+      "source": "./usage-limit",
+      "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a commit of the work in progress at 97%, a pause that keeps the last 2% for you, and an automatic resume when the window resets."
+    },
+    {
+      "name": "memory-guard",
+      "source": "./memory-guard",
+      "description": "Keeps typecheck, build, test and Playwright runs under the memory limit, the tightest cgroup limit on Linux or the machine's memory on Linux, macOS and Windows: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137."
+    },
+    {
+      "name": "skill-loader",
+      "source": "./skill-loader",
+      "description": "Loads the right skill at the right moment, so CLAUDE.md needs no load-this-skill rules: typescript-best-practices for .ts, writing-for-agents for SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling for CONTEXT.md and ADRs, technical-writing for READMEs, commits and PRs, and a diagnosing-bugs reminder when you paste an error."
+    },
+    {
+      "name": "loop-breaker",
+      "source": "./loop-breaker",
+      "description": "Notices when the agent goes in circles (repeated fix attempts on one file, the same error coming back, the same call repeated) and tells it to stop and change approach; refuses nothing."
+    },
+    {
+      "name": "secret-guard",
+      "source": "./secret-guard",
+      "description": "Hides every secret value in tool output as <hidden:NAME> before the agent reads it, MCP and subagent output included, and writes the real value back when the agent puts the placeholder into a .env or secrets file."
+    },
+    {
+      "name": "pipefail",
+      "source": "./pipefail",
+      "description": "Adds set -o pipefail to a command that pipes a test, typecheck or lint run into tail, head or grep, so a failing run cannot exit 0 and read as a pass."
+    },
+    {
+      "name": "global-memory",
+      "source": "./global-memory",
+      "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md."
+    },
+    {
+      "name": "hud",
+      "source": "./hud",
+      "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, and memory headroom. /hud opens the full view"
+    },
+    {
+      "name": "collision-guard",
+      "source": "./collision-guard",
+      "description": "Warns when two Claude Code sessions on this machine edit the same file, and holds a git command once when it would stage, commit, stash or discard another session's uncommitted edits."
+    },
+    {
+      "name": "spinner-status",
+      "source": "./spinner-status",
+      "description": "Replaces the tip under the spinner with one short line from Haiku: where this session stands, or a tip about your mods and their commands that fits the moment"
+    },
+    {
+      "name": "panel",
+      "source": "./panel",
+      "description": "A local web page with a card for every Claude Code session on this machine: whether it waits for you, what it needs, what it is doing, with a summary from claude -p every few minutes and a refresh button."
+    }
+  ]
+}

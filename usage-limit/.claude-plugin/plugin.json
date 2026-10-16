@@ -1,0 +1,66 @@
+{
+  "name": "usage-limit",
+  "version": "1.0.0-beta.7",
+  "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a commit of the work in progress at 97%, a pause that keeps the last 2% for you, and an automatic resume when the window resets.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/usage-limit",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "usage-limit",
+    "rate-limit",
+    "subagents",
+    "pause",
+    "resume",
+    "mod"
+  ],
+  "userConfig": {
+    "reserve": {
+      "type": "number",
+      "title": "Reserve (%)",
+      "description": "Share of the usage limit kept for you. The session pauses at 100 minus this value.",
+      "default": 2,
+      "min": 0,
+      "max": 20
+    },
+    "alert": {
+      "type": "number",
+      "title": "Alert (%)",
+      "description": "From this share of the usage limit, only one subagent runs at a time.",
+      "default": 90,
+      "min": 50,
+      "max": 99
+    },
+    "timeZone": {
+      "type": "string",
+      "title": "Time zone",
+      "description": "IANA time zone for the times shown, such as America/New_York. Empty uses the system time zone.",
+      "default": ""
+    },
+    "commitAt": {
+      "type": "number",
+      "title": "Commit from (%)",
+      "description": "From this share of the usage limit, the agent is asked once per window to commit its work in progress, without pushing. 0 turns it off.",
+      "default": 97,
+      "min": 0,
+      "max": 99
+    },
+    "resume": {
+      "type": "boolean",
+      "title": "Resume when the window resets",
+      "description": "Resume the session on its own when the window resets, after the pause or after the limit error. Off, you resume it.",
+      "default": true
+    },
+    "bandFrom": {
+      "type": "number",
+      "title": "Band from (%)",
+      "description": "Show the usage band above the prompt from this share of the usage limit.",
+      "default": 75,
+      "min": 0,
+      "max": 100
+    }
+  }
+}

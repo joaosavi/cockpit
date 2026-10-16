@@ -1,0 +1,32 @@
+{
+  "name": "cockpit",
+  "version": "1.0.0-beta.7",
+  "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, loop, secret, collision and pipefail guards, the session panel, the HUD and the spinner status line.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/cockpit",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "bundle",
+    "mods",
+    "guards",
+    "cockpit",
+    "mod"
+  ],
+  "dependencies": [
+    "usage-limit",
+    "memory-guard",
+    "skill-loader",
+    "loop-breaker",
+    "secret-guard",
+    "pipefail",
+    "panel",
+    "hud",
+    "spinner-status",
+    "collision-guard",
+    "global-memory"
+  ]
+}

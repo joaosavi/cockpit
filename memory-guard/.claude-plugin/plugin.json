@@ -1,0 +1,40 @@
+{
+  "name": "memory-guard",
+  "version": "1.0.0-beta.7",
+  "description": "Keeps typecheck, build, test and Playwright runs under the memory limit, the tightest cgroup limit on Linux or the machine's memory on Linux, macOS and Windows: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/memory-guard",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "cgroup",
+    "oom",
+    "typecheck",
+    "build",
+    "test",
+    "playwright",
+    "mod"
+  ],
+  "userConfig": {
+    "margin": {
+      "type": "number",
+      "title": "Margin (%)",
+      "description": "Share of memory kept free: of each cgroup's memory max, or of the machine's total without a cgroup limit. The high mark counts only for a cgroup with no max.",
+      "default": 2,
+      "min": 0,
+      "max": 30
+    },
+    "waitSeconds": {
+      "type": "number",
+      "title": "Wait for memory (seconds)",
+      "description": "How long a heavy command waits for memory to free up before it is refused.",
+      "default": 120,
+      "min": 0,
+      "max": 600
+    }
+  }
+}

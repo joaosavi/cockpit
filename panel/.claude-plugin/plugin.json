@@ -1,0 +1,44 @@
+{
+  "name": "panel",
+  "version": "1.0.0-beta.7",
+  "description": "A local web page with a card for every Claude Code session on this machine: whether it waits for you, what it needs, what it is doing, with a summary from claude -p every few minutes and a refresh button.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/panel",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": ["sessions", "dashboard", "summary", "remote", "mod"],
+  "userConfig": {
+    "port": {
+      "type": "number",
+      "title": "Port",
+      "description": "The page listens on 127.0.0.1 at this port",
+      "default": 7777,
+      "min": 1024,
+      "max": 65535
+    },
+    "model": {
+      "type": "string",
+      "title": "Summary model",
+      "description": "The model claude -p uses to write each card",
+      "options": ["sonnet", "haiku", "opus"],
+      "default": "sonnet"
+    },
+    "refreshMinutes": {
+      "type": "number",
+      "title": "Refresh (minutes)",
+      "description": "A session whose transcript changed gets a new summary this often. A session that goes idle after a turn gets one right away",
+      "default": 5,
+      "min": 1,
+      "max": 120
+    },
+    "autostart": {
+      "type": "boolean",
+      "title": "Start the page",
+      "description": "Start the page server when a session starts and it is not running. Off when a service manager such as systemd runs it",
+      "default": true
+    }
+  }
+}

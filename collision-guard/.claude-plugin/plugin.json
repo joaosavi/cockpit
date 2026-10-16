@@ -1,0 +1,48 @@
+{
+  "name": "collision-guard",
+  "version": "1.0.0-beta.7",
+  "description": "Warns when two Claude Code sessions on this machine edit the same file, and holds a git command once when it would stage, commit, stash or discard another session's uncommitted edits.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/collision-guard",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "sessions",
+    "git",
+    "parallel",
+    "conflicts",
+    "mod"
+  ],
+  "userConfig": {
+    "git": {
+      "type": "string",
+      "title": "Git commands",
+      "description": "confirm: hold a git command that would touch another session's uncommitted edits once, and let it run when the agent runs it again within 2 minutes. note: let it run and tell the agent afterwards. off: leave git commands alone",
+      "options": [
+        "confirm",
+        "note",
+        "off"
+      ],
+      "default": "confirm"
+    },
+    "windowMinutes": {
+      "type": "number",
+      "title": "Window outside git (minutes)",
+      "description": "How long another session's edit to a file outside any git repo still counts. Inside a repo, an edit counts while git shows the file as changed",
+      "default": 30,
+      "min": 1,
+      "max": 1440
+    },
+    "expireHours": {
+      "type": "number",
+      "title": "Session expiry (hours)",
+      "description": "A session silent for this long counts as gone, and its record is removed",
+      "default": 24,
+      "min": 1,
+      "max": 168
+    }
+  }
+}

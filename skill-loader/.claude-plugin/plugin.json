@@ -1,0 +1,19 @@
+{
+  "name": "skill-loader",
+  "version": "1.0.0-beta.7",
+  "description": "Loads the right skill at the right moment, so CLAUDE.md needs no load-this-skill rules: typescript-best-practices for .ts, writing-for-agents for SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling for CONTEXT.md and ADRs, technical-writing for READMEs, commits and PRs, and a diagnosing-bugs reminder when you paste an error.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/skill-loader",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "claude-md",
+    "typescript",
+    "technical-writing",
+    "mod"
+  ]
+}

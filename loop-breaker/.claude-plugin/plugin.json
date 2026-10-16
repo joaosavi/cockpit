@@ -1,0 +1,45 @@
+{
+  "name": "loop-breaker",
+  "version": "1.0.0-beta.7",
+  "description": "Notices when the agent goes in circles (repeated fix attempts on one file, the same error coming back, the same call repeated) and tells it to stop and change approach; refuses nothing.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/loop-breaker",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "loops",
+    "retries",
+    "debugging",
+    "agent-behavior",
+    "mod"
+  ],
+  "userConfig": {
+    "editLimit": {
+      "type": "number",
+      "title": "Fix attempts",
+      "description": "Edits to one file after failed commands, in one turn, before the nudge.",
+      "default": 5,
+      "min": 2,
+      "max": 50
+    },
+    "errorLimit": {
+      "type": "number",
+      "title": "Repeated errors",
+      "description": "Times the same error may come back in one turn before the nudge.",
+      "default": 3,
+      "min": 2,
+      "max": 20
+    },
+    "repeatLimit": {
+      "type": "number",
+      "title": "Repeated calls",
+      "description": "Identical tool calls in a row before the nudge.",
+      "default": 3,
+      "min": 2,
+      "max": 20
+    }
+  }
+}

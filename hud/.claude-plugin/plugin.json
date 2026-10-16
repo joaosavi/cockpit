@@ -1,0 +1,125 @@
+{
+  "name": "hud",
+  "version": "1.0.0-beta.7",
+  "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, and memory headroom. /hud opens the full view",
+  "author": {
+    "name": "João Savi"
+  },
+  "license": "MIT",
+  "keywords": [
+    "hud",
+    "status",
+    "band",
+    "context",
+    "usage",
+    "rate-limit",
+    "memory",
+    "subagents",
+    "activity"
+  ],
+  "userConfig": {
+    "band": {
+      "type": "string",
+      "title": "Band",
+      "description": "What the band above the prompt shows: panel (two rows with bars), line (one compact row) or off. Use off with the status line script, which draws the panel under the prompt",
+      "options": [
+        "panel",
+        "line",
+        "off"
+      ],
+      "default": "panel"
+    },
+    "activity": {
+      "type": "boolean",
+      "title": "Activity",
+      "description": "While a turn runs, show the latest note another mod added to a tool result. Claude Code already shows the tool, its errors, the subagents and the time",
+      "default": true
+    },
+    "memory": {
+      "type": "boolean",
+      "title": "Memory",
+      "description": "Show how much memory still fits before the tightest cgroup limit, or the machine's when there is none",
+      "default": true
+    },
+    "timeZone": {
+      "type": "string",
+      "title": "Time zone",
+      "description": "IANA time zone for the times shown and for what counts as today, such as America/New_York. Empty uses the system time zone.",
+      "default": ""
+    },
+    "bar": {
+      "type": "string",
+      "title": "Bar style",
+      "description": "Glyphs of the bars: dots (●○, the default), blocks (▰▱), solid (█░), line (━─) or squares (■□)",
+      "options": [
+        "blocks",
+        "solid",
+        "line",
+        "dots",
+        "squares"
+      ],
+      "default": "dots"
+    },
+    "barWidth": {
+      "type": "number",
+      "title": "Bar width",
+      "description": "Cells of a full-width bar, 4 to 30. Narrow terminals still shrink the bars",
+      "default": 10
+    },
+    "colors": {
+      "type": "string",
+      "title": "Colors",
+      "description": "Colors for ok, warning and critical, separated by spaces: names (green, bright-cyan), #rrggbb or 0-255. Empty uses green, yellow and red",
+      "default": ""
+    },
+    "hide": {
+      "type": "string",
+      "title": "Hidden fields",
+      "description": "Fields to leave out, separated by commas: model, project, branch, age, calls, ctx, 5h, 7d, reset, mem",
+      "default": ""
+    },
+    "contextBase": {
+      "type": "string",
+      "title": "Context measured against",
+      "description": "compact: 100% is the auto-compact window (/autocompact), when it is smaller than the model's window. window: the model's full window",
+      "options": [
+        "compact",
+        "window"
+      ],
+      "default": "compact"
+    },
+    "style": {
+      "type": "string",
+      "title": "Status line style",
+      "description": "Layout of the status line under the prompt: refined (two rows, the default), blocks (two rows of colored blocks), minimal (two rows in words) or compact (one row, two when it does not fit)",
+      "options": [
+        "refined",
+        "blocks",
+        "minimal",
+        "compact"
+      ],
+      "default": "refined"
+    },
+    "icons": {
+      "type": "string",
+      "title": "Icons",
+      "description": "nerd uses Nerd Font glyphs for git, folder, model and memory, which need a Nerd Font in the terminal. unicode uses plain arrows and marks",
+      "options": [
+        "nerd",
+        "unicode"
+      ],
+      "default": "nerd"
+    },
+    "barColor": {
+      "type": "string",
+      "title": "Bar colors",
+      "description": "gradient gives each bar cell the color of its place, green to red (the default). solid paints the whole bar one color that slides from green to red with the percent. tone keeps the three threshold colors of the colors option",
+      "options": [
+        "gradient",
+        "solid",
+        "tone"
+      ],
+      "default": "gradient"
+    }
+  }
+}
