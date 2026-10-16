@@ -201,9 +201,9 @@ def first_session():
 {term(SPINNER_SAMPLE)}
 <p>The label says what the line is. <code>Now:</code> is where the session stands. <code>Mods:</code> is a tip about the mods you have.</p>
 <h2 id="first-panel">The session panel</h2>
-<p><code>panel</code> starts a local web page with a card for every session on the machine. Type <code>/panel</code> for its address.</p>
+<p><code>panel</code> starts a local web page with every session on the machine. Type <code>/panel</code> for its address.</p>
 {term(PANEL_SAMPLE)}
-<p>Open the address in a browser. A session that waits for you comes first, with the options it offered as buttons. <a href="#panel-guide">The session panel</a> walks through the page.</p>
+<p>Open the address in a browser. A session that waits for you comes first, with the options it offered as buttons. <a href="#panel-guide">The session panel</a> walks through the page and its five views.</p>
 <h2 id="first-try">Commands to try</h2>
 <table><thead><tr><th>Command</th><th>What you get</th></tr></thead><tbody>
 <tr><td><code>/limit</code></td><td>Both plan windows, when each resets, and what the mod holds back near the limit.</td></tr>
@@ -214,29 +214,38 @@ def first_session():
 def panel_guide():
     return f'''
 <p class="lead">The panel is a local web page with every Claude Code session on your computer, the computer itself, and an audit of the mods. Open it in a browser tab beside your sessions.</p>
-{shot('panel-light.png', 'panel-dark.png', 'The Cockpit panel: the strip with plan usage, memory and CPU, the session cards, and the machine column')}
+{shot('panel-light.png', 'panel-dark.png', 'The Cockpit panel in the Inbox view: the machine in the header, the sessions by urgency on the left, and the selected session on the right')}
 <h2 id="pg-open">Open the page</h2>
 <p>The server starts with the first session after you install the mod, and keeps running after that session ends. Type <code>/panel</code> in any session for the address, which is <code>http://localhost:7777</code> by default.</p>
 <p>The page listens only on <code>127.0.0.1</code>, so only your own computer reaches it. When the sessions run on another machine, see <a href="#server">Running on a server</a>.</p>
 <h2 id="pg-read">Read the page</h2>
 <div class="feature-grid">
-<div><b>The strip</b><span>The plan's 5-hour and weekly usage, the sessions that need you, memory, the CPU over the last minute, disk, and the tokens of the last 24 hours by hour.</span></div>
-<div><b>The session cards</b><span>The state, a summary of where the task stands, what it needs from you, the tool running now, git, context and memory.</span></div>
-<div><b>The side column</b><span>The latest actions of the guards, what each did today, and the summaries made today with their API price. On Linux, also memory by cgroup and systemd services.</span></div>
+<div><b>The header</b><span>The plan's 5-hour and weekly usage, memory, the CPU over the last minute, disk, and the tokens of the last 24 hours by hour. On a narrow screen only the 5-hour usage stays.</span></div>
+<div><b>The views</b><span>Five layouts of the same sessions, with the same actions in each. Each session shows its state, a summary of where the task stands, what it needs from you, the tool running now, git, context and memory.</span></div>
+<div><b>The Mods drawer</b><span>The computer in full, the latest actions of the guards, what each did today, the summaries made today with their API price, and the audit of the mods. On Linux, also memory by cgroup and systemd services.</span></div>
 </div>
-<p>A card's state comes from two places. <b>Working</b> comes from Claude Code itself, as soon as a turn starts. <b>Waiting for you</b>, <b>Blocked</b>, <b>Done</b> and <b>Idle</b> come from the summary, which <code>claude -p</code> writes from the session's transcript. A summary is written 20 seconds after a turn ends, every 5 minutes for a session that changed, and when you press <b>Refresh</b>. An amber dot beside <b>Summarized</b> means the session moved on since then.</p>
+<h2 id="pg-views">Pick a view</h2>
+<p>The switcher under the header picks the view, and the page remembers your choice. The address also takes the view as its hash, such as <code>#board</code>.</p>
+<table><thead><tr><th>View</th><th>What it shows</th><th>Keys</th></tr></thead><tbody>
+<tr><td><b>Inbox</b></td><td>The default. The sessions by urgency on the left, and the selected one in full on the right. Ended sessions wait in a closed group at the bottom.</td><td><code>j</code> and <code>k</code> or the arrows move, <code>1</code> to <code>4</code> pick an option, <code>r</code> goes to the reply field</td></tr>
+<tr><td><b>Board</b></td><td>Columns by state, with small cards. A card opens the full session in a side drawer, with arrows to the previous and next session. The <b>Ended</b> button adds a column for ended sessions.</td><td><code>1</code> to <code>4</code> pick an option in the drawer, the arrows move, <code>esc</code> closes it</td></tr>
+<tr><td><b>Deck</b></td><td>A grid of full cards, with filters for all sessions, the ones that need you, working, done and ended.</td><td></td></tr>
+<tr><td><b>Focus</b></td><td>One large card for the session that needs you most, and the others below. When nothing needs you, it says so.</td><td><code>n</code> and <code>p</code> or the arrows move, <code>1</code> to <code>4</code> pick an option</td></tr>
+<tr><td><b>Timeline</b></td><td>A row per session with its tokens hour by hour over the last 24 hours, and a row for all sessions together. A row opens in place to show the full session.</td><td></td></tr>
+</tbody></table>
+<p>A session's state comes from two places. <b>Working</b> comes from Claude Code itself, as soon as a turn starts. <b>Waiting for you</b>, <b>Blocked</b>, <b>Done</b> and <b>Idle</b> come from the summary, which <code>claude -p</code> writes from the session's transcript. A summary is written 20 seconds after a turn ends, every 5 minutes for a session that changed, and when you press <b>Refresh</b>. An amber dot beside <b>Summarized</b> means the session moved on since then.</p>
 <p>The bars turn amber at 75% and red at 90%. The context bar fills toward the point where Claude Code compacts the conversation, not toward the model's full window. <b>CPU, last minute</b> is the share of CPU time that was not idle over the last minute, across all cores; on Linux, the share spent waiting on disk shows under it when it reaches 5%.</p>
 <h2 id="pg-answer">Answer a session</h2>
-<p>When a session waits for a decision, its card lists the options the agent offered, the recommended one first. Press an option, check the text in the dialog, and press <b>Send</b>. The <b>Reply</b> field sends any text the same way.</p>
+<p>When a session waits for a decision, every view lists the options the agent offered, with the recommended one marked. Press an option, or its number key, check the text in the dialog, and press <b>Send</b>. The reply field sends any text the same way. Once sent, the answer shows in place of the question until the next summary arrives.</p>
 <p>The page leaves the text in the session's inbox. The <code>panel</code> mod in that session checks the inbox every 2 seconds and submits the text as your prompt, and Claude Code runs it once the session is idle. This works in any session that runs the mod, with or without tmux.</p>
-{note('info', 'No send buttons on a card', '<p>A card shows send buttons only when its session checked the inbox in the last 15 seconds. A session that loaded an older <code>panel</code> mod has none until you run <code>/reload-plugins</code> in it. When a session does not take a message within 6 seconds, the page withdraws it and says so.</p>')}
+{note('info', 'Options you cannot press', '<p>A session takes answers only when its session checked the inbox in the last 15 seconds. Until then its options are greyed out and its reply field is hidden. A session that loaded an older <code>panel</code> mod stays that way until you run <code>/reload-plugins</code> in it. When a session does not take a message within 6 seconds, the page withdraws it and says so.</p>')}
 <h2 id="pg-mods">Audit the mods</h2>
-<p>The <b>Mods</b> tab reads every Cockpit mod's diary for the last day, 7 days or 30 days. Each row shows what the mod did, its failures in red, the time its hooks added per tool call, its slowest call, and the API cost of its model calls. Click a row to see its recent actions with their details.</p>
+<p>The <b>Mods</b> button opens a drawer with the computer in full and, below it, the audit of the mods. The audit reads every Cockpit mod's diary for the last day, 7 days or 30 days. Each row shows what the mod did, its failures in red, the time its hooks added per tool call, its slowest call, and the API cost of its model calls. Click a row to see its recent actions with their details.</p>
 <p>The API cost is what the same calls would cost at Anthropic's API list prices. On a Pro or Max plan they spend plan usage, not money. Only <code>panel</code> and <code>spinner-status</code> call a model.</p>
-{shot('panel-mods.png', None, 'The Mods tab: one row per mod with its actions, failures and time per tool call')}
+{shot('panel-mods.png', None, 'The Mods drawer: the computer, the guards, and one row per mod with its actions, failures and time per tool call')}
 <p>Use it to decide what earns its place. A mod with nothing recorded for a week does no work on your machine. A slowest call over 10 seconds, shown in red, is worth a look in the mod's diary.</p>
 <h2 id="pg-notify">Get notified</h2>
-<p>Press <b>Notify</b> and allow notifications. The browser then tells you when a session starts waiting for you or gets blocked, while the tab stays open. The tab title also counts the sessions that need you, as <code>(2) Cockpit</code>. Press <code>r</code> to summarize every session again.</p>
+<p>Press <b>Notify</b> and allow notifications. The browser then tells you when a session starts waiting for you or gets blocked, while the tab stays open. The tab title also counts the sessions that need you, as <code>(2) Cockpit</code>. Press <code>r</code> to summarize every session again; in Inbox, where <code>r</code> goes to the reply field, press <code>R</code>.</p>
 <p>The <a href="#mod-panel">panel reference</a> lists every option and environment variable, and where each figure on the page comes from.</p>'''
 
 def server():
@@ -258,7 +267,7 @@ Restart=always""", 'ini')}
 <h2 id="srv-memory">Memory limits</h2>
 <p>When sessions run under a cgroup v2 memory limit, as a systemd service or a container sets, <code>memory-guard</code> keeps heavy commands under the tightest limit, the <code>hud</code> shows the room left under it, <code>/ram</code> shows each group, and the panel shows each group's memory and the state of its systemd services.</p>
 <h2 id="srv-remote">Remote Control and tmux</h2>
-<p>Every Cockpit command also answers in plain text, so it works when you drive a session over Remote Control from claude.ai or the mobile app, where no pane is drawn. A panel card links to the session on claude.ai when the session runs with Remote Control. For a session that runs in tmux, the card's <b>tmux</b> button copies the command that attaches to its pane.</p>'''
+<p>Every Cockpit command also answers in plain text, so it works when you drive a session over Remote Control from claude.ai or the mobile app, where no pane is drawn. The panel links a session to claude.ai when the session runs with Remote Control. For a session that runs in tmux, its <b>tmux</b> button copies the command that attaches to its pane.</p>'''
 
 def statusline_page():
     gal = ''
@@ -325,7 +334,7 @@ def commands():
 <h2 id="cmd-keys">Keys inside a pane</h2>
 <p>A pane opens on the right side of the screen. Press <code>r</code> to refresh it and <code>esc</code> to close it.</p>
 <h2 id="cmd-panel-keys">Keys on the panel page</h2>
-<p>Press <code>r</code> to summarize every session again, and <code>esc</code> to close the send dialog.</p>'''
+<p>Press <code>r</code> to summarize every session again, or <code>R</code> in Inbox. <code>esc</code> closes the send dialog, then the Mods drawer, then the Board drawer. Each view adds its own keys, listed in <a href="#pg-views">Pick a view</a>.</p>'''
 
 def privacy():
     return f'''<p class="lead">Cockpit runs inside Claude Code on your machine. Two mods send an excerpt of the session to a model, through your own account. Everything else stays local.</p>
@@ -355,8 +364,8 @@ def troubleshooting():
         ('The mod options are gone', '<p>Removing a marketplace deletes the saved options of its plugins. Run <code>/cockpit:setup</code> again to write them back.</p>'),
         ('global-memory does nothing on a Team or Enterprise plan', '<p>Those plans run a built-in guard that skips user-installed plugins on the hooks <code>global-memory</code> needs. It must run as an organization plugin; its <a href="#mod-global-memory">page</a> shows the managed settings.</p>'),
         ('/panel says the page server is not running', '<p>The server starts when a session starts, unless <b>Start the page</b> (<code>autostart</code>) is off. Check that Python 3.9 or later is installed as <code>python3</code>, <code>python</code> or <code>py</code>, and that <code>curl</code> runs, then start a new session. The server writes its errors to <code>~/.local/state/mods/panel/server.log</code>. If a service manager runs the server, check the service.</p>'),
-        ('The panel shows no send buttons on a card', '<p>The session has not checked its inbox in the last 15 seconds, usually because it loaded an older <code>panel</code> mod. Run <code>/reload-plugins</code> in that session.</p>'),
-        ('The panel shows no memory or services column', '<p>That is expected on macOS and Windows. The page shows memory by group only for Linux cgroup v2 groups with a memory limit, and services only under systemd. Elsewhere it shows the machine\'s memory alone, in the strip.</p>'),
+        ('The panel greys out the options of a session', '<p>The session has not checked its inbox in the last 15 seconds, usually because it loaded an older <code>panel</code> mod. Run <code>/reload-plugins</code> in that session.</p>'),
+        ('The Mods drawer shows no memory or services box', '<p>That is expected on macOS and Windows. The page shows memory by group only for Linux cgroup v2 groups with a memory limit, and services only under systemd. Elsewhere it shows the machine\'s memory alone, in the header and the drawer.</p>'),
         ('/ram says there is no memory reading', '<p><code>memory-guard</code> found no <code>/proc/meminfo</code>, and the system command failed: <code>sysctl</code> and <code>vm_stat</code> on macOS, or PowerShell on Windows, missing or slower than its timeout. Until a reading works, heavy commands run as written.</p>'),
         ('A git command was refused with a list of files', '<p><code>collision-guard</code> held it, because another session on this machine has uncommitted edits in the same repo, under the paths the command names. Name your own files instead, or run the same command again within 2 minutes.</p>'),
     ]
