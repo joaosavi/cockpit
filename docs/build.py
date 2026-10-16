@@ -260,7 +260,7 @@ def server():
 <p>Instead of letting a session start the page, run it under systemd. Set the <code>panel</code> option <b>Start the page</b> (<code>autostart</code>) to off, then run the server as a unit:</p>
 {code("""[Service]
 User=you
-ExecStart=/usr/bin/python3 -I %h/.claude/plugins/marketplaces/cockpit/mods/panel/server/panel.py
+ExecStart=/usr/bin/python3 -I %h/.claude/plugins/marketplaces/cockpit/panel/server/panel.py
 Environment=PANEL_CLAUDE=%h/.local/bin/claude
 Restart=always""", 'ini')}
 <p>Set <code>PANEL_GROUPS</code> to a comma-separated list of cgroup paths, such as <code>agents.slice</code>, to show those groups and everything under them on the page.</p>
@@ -285,7 +285,7 @@ def statusline_page():
 <p>With a Nerd Font, the branch, pull request and model use small icons. Without one, they show as boxes; set <b>Icons</b> to <code>unicode</code> to use plain arrows and marks that every terminal draws.</p>
 <h2 id="sl-settings">What the setup writes</h2>
 <p>A plugin cannot draw under the prompt by itself. That row belongs to the <code>statusLine</code> setting, so the setup points it at the script the <code>hud</code> ships:</p>
-{code('{"statusLine": {"type": "command", "command": "~/.claude/plugins/marketplaces/cockpit/mods/hud/statusline/statusline.sh", "refreshInterval": 5}}', 'json')}
+{code('{"statusLine": {"type": "command", "command": "~/.claude/plugins/marketplaces/cockpit/hud/statusline/statusline.sh", "refreshInterval": 5}}', 'json')}
 <p><code>refreshInterval</code> redraws the line every 5 seconds, so git and the countdowns stay current while the session is idle. The <a href="#mod-hud">hud reference</a> lists every option, including bar glyphs, colors and fields to hide.</p>'''
 
 def configuration():
@@ -447,7 +447,7 @@ def build():
         pager += f'<a class="prev" href="#{prev_[0]}"><small>Previous</small><span>{prev_[1]}</span></a>' if prev_ else '<span></span>'
         pager += f'<a class="next" href="#{next_[0]}"><small>Next</small><span>{next_[1]}</span></a>' if next_ else '<span></span>'
         pager += '</nav>'
-        src = f'<a class="src" href="https://github.com/{REPO}/blob/main/mods/{pid[4:]}/README.md" target="_blank" rel="noopener">Edit this page on GitHub</a>' if fn is None else ''
+        src = f'<a class="src" href="https://github.com/{REPO}/blob/main/{pid[4:]}/README.md" target="_blank" rel="noopener">Edit this page on GitHub</a>' if fn is None else ''
         pages += f'<article class="page" id="p-{pid}" data-title="{html.escape(title)}" data-section="{section}" hidden><div class="crumb">{section}</div><h1>{title_html}</h1>{body}{src}{pager}</article>'
     tpl = open(os.path.join(HERE, 'shell.html')).read()
     out = tpl.replace('{{NAV}}', nav).replace('{{PAGES}}', pages)

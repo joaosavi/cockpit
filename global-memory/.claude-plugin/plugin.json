@@ -1,6 +1,6 @@
 {
   "name": "global-memory",
-  "version": "1.0.0-beta.7",
+  "version": "1.0.0",
   "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md.",
   "author": {
     "name": "João Savi",

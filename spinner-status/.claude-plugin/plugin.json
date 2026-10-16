@@ -1,6 +1,6 @@
 {
   "name": "spinner-status",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0",
   "description": "Replaces the tip under the spinner with one short line from Haiku: where this session stands, or a tip about your mods and their commands that fits the moment",
   "author": {
     "name": "João Savi"

@@ -17,13 +17,13 @@ Collect these facts in one command, before asking anything:
 
 - `claude --version`, and `node --version`. The hud status line needs Node 22.18 or later. On macOS and Linux it runs through `sh`; on Windows it runs `node` on `statusline.ts` directly, since Claude Code may run the command in PowerShell.
 - `claude plugin list`: which `@cockpit` mods are installed and enabled.
-- The marketplace entry: `installLocation`, `source` and `autoUpdate` of `cockpit` in `<config>/plugins/known_marketplaces.json`. The status line script is `<installLocation>/mods/hud/statusline/statusline.sh`, and beside it `statusline.ts`. Check that the files exist. On Windows, write `installLocation` with forward slashes wherever it goes into a command: Git Bash drops backslashes.
+- The marketplace entry: `installLocation`, `source` and `autoUpdate` of `cockpit` in `<config>/plugins/known_marketplaces.json`. The status line script is `<installLocation>/hud/statusline/statusline.sh`, and beside it `statusline.ts`. Check that the files exist. On Windows, write `installLocation` with forward slashes wherever it goes into a command: Git Bash drops backslashes.
 - In the settings: `extraKnownMarketplaces.cockpit`, `statusLine`, `spinnerTipsEnabled`, `autoCompactWindow`, `enabledPlugins["claude-hud@claude-hud"]`, and `pluginConfigs` entries ending in `@cockpit`.
 - The system time zone: `node -e 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'`.
 - The style previews: each style drawn by the real script, with the user's own folder and branch, narrow enough to fit the question's preview box. Run this from the user's working folder:
 
 	```sh
-	sh=<installLocation>/mods/hud/statusline/statusline.sh; p=$(mktemp -d); now=$(date +%s)
+	sh=<installLocation>/hud/statusline/statusline.sh; p=$(mktemp -d); now=$(date +%s)
 	for s in refined blocks minimal compact; do
 	  printf '{"pluginConfigs":{"hud@cockpit":{"options":{"style":"%s","icons":"unicode"}}}}' $s > $p/settings.json
 	  echo "== $s"
@@ -32,7 +32,7 @@ Collect these facts in one command, before asking anything:
 	done; rm -rf $p
 	```
 
-	On Windows, set `sh="node <installLocation>/mods/hud/statusline/statusline.ts"` instead; the loop needs the Bash tool (Git Bash). Without it, draw the four previews with the same inputs from a short Node script that runs `statusline.ts` once per style.
+	On Windows, set `sh="node <installLocation>/hud/statusline/statusline.ts"` instead; the loop needs the Bash tool (Git Bash). Without it, draw the four previews with the same inputs from a short Node script that runs `statusline.ts` once per style.
 
 Done when you can say, for each section below, what is set today, and you hold the four previews.
 
@@ -58,7 +58,7 @@ Merge exactly what the user chose:
 
 | Choice | Keys |
 | :- | :- |
-| HUD under the prompt (the default) | `statusLine: { "type": "command", "command": "<installLocation>/mods/hud/statusline/statusline.sh", "refreshInterval": 5 }`; on Windows the command is `node <installLocation>/mods/hud/statusline/statusline.ts`, with forward slashes. Then `pluginConfigs["hud@cockpit"].options.band: "off"`. If `claude-hud@claude-hud` is enabled, set it to `false`, because its status line is the one replaced. If another status line is set, show it to the user and confirm before you replace it. |
+| HUD under the prompt (the default) | `statusLine: { "type": "command", "command": "<installLocation>/hud/statusline/statusline.sh", "refreshInterval": 5 }`; on Windows the command is `node <installLocation>/hud/statusline/statusline.ts`, with forward slashes. Then `pluginConfigs["hud@cockpit"].options.band: "off"`. If `claude-hud@claude-hud` is enabled, set it to `false`, because its status line is the one replaced. If another status line is set, show it to the user and confirm before you replace it. |
 | HUD above the prompt | `pluginConfigs["hud@cockpit"].options.band: "panel"`. Leave `statusLine` as it is. |
 | Style and icons | `style`, and `icons` (`nerd` or `unicode`), under `pluginConfigs["hud@cockpit"].options`; when chosen, `bar`, `barColor`, `colors` (space-separated) and `hide` (comma-separated) |
 | Time zone | `timeZone` under the `hud@cockpit` and `usage-limit@cockpit` options |

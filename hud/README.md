@@ -15,7 +15,7 @@ styles. `/cockpit:setup` writes it for you. To set it by hand, on macOS or Linux
 
 ```json
 {
-  "statusLine": { "type": "command", "command": "~/.claude/plugins/marketplaces/cockpit/mods/hud/statusline/statusline.sh", "refreshInterval": 5 },
+  "statusLine": { "type": "command", "command": "~/.claude/plugins/marketplaces/cockpit/hud/statusline/statusline.sh", "refreshInterval": 5 },
   "pluginConfigs": { "hud@cockpit": { "options": { "band": "off", "style": "refined", "icons": "nerd" } } }
 }
 ```
@@ -31,7 +31,7 @@ through PowerShell otherwise, and PowerShell cannot run a `.sh` file. Point the 
 instead, with forward slashes, which work in both shells:
 
 ```json
-{ "statusLine": { "type": "command", "command": "node ~/.claude/plugins/marketplaces/cockpit/mods/hud/statusline/statusline.ts", "refreshInterval": 5 } }
+{ "statusLine": { "type": "command", "command": "node ~/.claude/plugins/marketplaces/cockpit/hud/statusline/statusline.ts", "refreshInterval": 5 } }
 ```
 
 Run this way, the script takes the 4 padding columns off `COLUMNS` itself.

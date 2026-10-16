@@ -1,6 +1,6 @@
 {
   "name": "collision-guard",
-  "version": "1.0.0-beta.7",
+  "version": "1.0.0",
   "description": "Warns when two Claude Code sessions on this machine edit the same file, and holds a git command once when it would stage, commit, stash or discard another session's uncommitted edits.",
   "author": {
     "name": "João Savi",

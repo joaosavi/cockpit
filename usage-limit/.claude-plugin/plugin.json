@@ -1,6 +1,6 @@
 {
   "name": "usage-limit",
-  "version": "1.0.0-beta.7",
+  "version": "1.0.0",
   "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a commit of the work in progress at 97%, a pause that keeps the last 2% for you, and an automatic resume when the window resets.",
   "author": {
     "name": "João Savi",

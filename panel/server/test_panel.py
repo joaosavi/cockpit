@@ -1,4 +1,4 @@
-"""Tests for the panel server's pure parts: python3 -I mods/panel/server/test_panel.py"""
+"""Tests for the panel server's pure parts: python3 -I panel/server/test_panel.py"""
 
 import json
 import os
