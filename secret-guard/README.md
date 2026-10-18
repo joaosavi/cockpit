@@ -8,7 +8,8 @@ A secret that reaches the transcript is sent to the model and kept in the sessio
 
 ## What it does
 
-- The values come from the secrets file, from every `.env*` file under the `.env` root (5 levels deep) when you set one, from environment variables with a secret-looking name (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH` and others), and from the password of every `scheme://user:password@` URL. Known token formats are hidden even when no list has them: GitHub, Anthropic, OpenAI, AWS, Google, Stripe, Slack, JWT and private key blocks. They show as `<hidden:github>`, `<hidden:jwt>` and so on.
+- The values come from the secrets file and every file in the folder beside it named like it plus `.d` (`~/.secrets.d/` by default), from every `.env*` file under the `.env` root (5 levels deep) when you set one, from environment variables with a secret-looking name (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH` and others), and from the password of every `scheme://user:password@` URL. Known token formats are hidden even when no list has them: GitHub, Anthropic, OpenAI, AWS, Google, Stripe, Slack, JWT and private key blocks. They show as `<hidden:github>`, `<hidden:jwt>` and so on.
+- A tool that hands out secrets, such as a password vault CLI, can keep its own `NAME="value"` list in a file in the secrets folder, and the mod hides those values without that tool touching your secrets file. A file whose name starts with a dot is skipped, so the tool can write a temporary file and rename it into place.
 - A value that also appears in a `.example` file is already public and stays visible.
 - When the agent writes `<hidden:NAME>` into a `.env` file or the secrets file, the mod writes the real value in its place. The agent can edit those files without ever seeing a value.
 - When the agent writes `<hidden:NAME>` in a Bash command, the mod runs the command with the real value, and the output comes back hidden as usual. The transcript keeps the command as written. The agent can call an API with a token it never sees.
@@ -25,7 +26,7 @@ None.
 | :- | :- | :- |
 | `secretsFile` | `~/.secrets` | `KEY=value` file whose every value is a secret, whatever its name. |
 | `envRoot` | empty | Folder searched for `.env` files, 5 levels deep. Empty searches none. |
-| `minLength` | `12` | Shorter values are left alone, except known token formats. |
+| `minLength` | `12` | Shorter values are left alone, except known token formats and the values of the secrets files. |
 
 By default the mod reads no `.env` files: the list holds the secrets file, the environment variables, their URL passwords, and the known token formats. To cover your projects' `.env` files too, set `envRoot` to the folder that holds your repos, such as `~/code`. The mod then scans it at start, checks its folders for new `.env` files at most once a minute, and rebuilds the list at least every 10 minutes.
 
@@ -39,7 +40,7 @@ The hook added about 64 ms per tool call on the author's Linux machine (60 calls
 
 ## Limits
 
-- A secret shorter than `minLength` that matches no known format stays visible.
+- A secret shorter than `minLength` that matches no known format stays visible. A value from the secrets file or its folder is hidden from 6 characters, because a vault hands out passwords of 8 to 11; under 6, a value is a PIN or a word, and hiding it would garble ordinary output.
 - A secret that the agent already saw before this mod loaded is still in the transcript.
 - A `.env` file outside `envRoot` is not read, so its values stay visible unless another source has them.
 - Filling a placeholder in a command lets the agent use a secret, including sending it to a server. It cannot do more than it already could with `source .env`, but the command runs without a prompt of its own.

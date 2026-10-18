@@ -23,6 +23,7 @@ import {
   parseFind,
   isEnvPath,
   isExample,
+  isSecretsDirEntry,
   DIRS_CHECK_MS,
   MAX_AGE_MS,
   type Options,
@@ -34,6 +35,7 @@ import {
   RESTORED_NOTICE,
   restoreText,
   SCAN_DEPTH,
+  secretsDirOf,
   SKIPPED_DIRS,
   sortedNames,
   type Table,
@@ -54,8 +56,9 @@ type Scan = { envFiles: string[]; dirs: string[]; at: number }
 type Built = {
   table: Table
   builtAt: number
-  // The source files the list was read from, and whether each existed then: the secrets file and every
-  // `.env*` the scan found. Their mtimes are checked on every call.
+  // The source files the list was read from, and whether each existed then: the secrets file, its folder
+  // and the files in it, and every `.env*` the scan found. Their mtimes are checked on every call; the
+  // folder's moves when a file in it is created, removed or renamed.
   files: ReadonlyMap<string, boolean>
   scan: Scan
   // When the folders' mtimes were last checked.
@@ -109,6 +112,25 @@ async function isFile($: Api, path: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+// The files of the secrets folder, and whether the folder exists. A missing folder is not listed.
+async function secretsDirFiles($: Api, dir: string): Promise<{ exists: boolean; files: EnvFile[] }> {
+  let kind
+  try {
+    kind = (await $.fs.stat(dir)).kind
+  } catch {
+    return { exists: false, files: [] }
+  }
+  if (kind !== 'dir') return { exists: false, files: [] }
+  const files: EnvFile[] = []
+  for (const entry of await $.fs.list(dir)) {
+    const path = `${dir}/${entry.name}`
+    if (!isSecretsDirEntry(entry.name) || !(entry.kind === 'file' || (entry.isLink && (await isFile($, path))))) continue
+    const text = await readOrNull($, path)
+    if (text !== null) files.push({ path, text })
+  }
+  return { exists: true, files: files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)) }
 }
 
 // The `.env*` files under `dir`, and the folders whose mtime is watched, as the Perl hook's folder scan found them.
@@ -186,6 +208,8 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
   }
   const files = s.envFiles
   const secrets = await readOrNull($, p.secretsFile)
+  const secretsDir = secretsDirOf(p.secretsFile)
+  const fromDir = await secretsDirFiles($, secretsDir)
   const envFiles: EnvFile[] = []
   for (const path of files) {
     const text = await readOrNull($, path)
@@ -193,12 +217,17 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
   }
   // `$.env.get` takes only literal names, so the names come from the process's own environment.
   const environ = parseEnviron(await environText($))
-  const table = buildTable({ secrets, envFiles, environ, minLength: o.minLength })
-  const known = new Map<string, boolean>([[p.secretsFile, secrets !== null], ...envFiles.map((f): [string, boolean] => [f.path, true])])
+  const table = buildTable({ secrets, secretsDirFiles: fromDir.files, envFiles, environ, minLength: o.minLength })
+  const known = new Map<string, boolean>([
+    [p.secretsFile, secrets !== null],
+    [secretsDir, fromDir.exists],
+    ...[...fromDir.files, ...envFiles].map((f): [string, boolean] => [f.path, true]),
+  ])
   await log($, {
     event: 'list-built',
     scanned: prior === null,
     values: table.nameOf.size,
+    secretsDirFiles: fromDir.files.length,
     envFiles: envFiles.filter((f) => !isExample(f.path)).length,
     exampleFiles: envFiles.filter((f) => isExample(f.path)).length,
     environment: environ.length,

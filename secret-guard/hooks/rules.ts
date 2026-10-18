@@ -1,7 +1,7 @@
 // The rules of the secret-guard mod, without the mods API, so the tests can run them directly.
 //
-// Ported from an earlier Perl hook. The values come from the secrets file, from the `.env*` files under
-// the env root when one is set, from the environment variables with a secret-looking name, and from
+// Ported from an earlier Perl hook. The values come from the secrets file and the files in its `.d`
+// folder, from the `.env*` files under the env root when one is set, from the environment variables with a secret-looking name, and from
 // the password of every `scheme://user:password@` URL. A value is replaced by `<hidden:NAME>` in every tool result.
 
 export type Options = {
@@ -15,6 +15,23 @@ export type Options = {
 }
 
 export const DEFAULTS: Options = { secretsFile: '~/.secrets', envRoot: '', minLength: 12 }
+
+// A value the secrets files declare whole is hidden from this length, below `minLength`, because a tool
+// that hands out passwords, such as a vault, writes there passwords of 8 to 11 characters. Shorter
+// than this, a value is a PIN or a word, and hiding it would garble ordinary output.
+export const SECRETS_MIN_LENGTH = 6
+
+// The folder beside the secrets file whose every file is a secrets file too, so a tool can keep its own
+// list there without editing yours.
+export function secretsDirOf(secretsFile: string): string {
+  return `${secretsFile}.d`
+}
+
+// A file in the secrets folder counts unless its name starts with a dot, which is where a tool writes
+// the temporary file it then renames into place.
+export function isSecretsDirEntry(name: string): boolean {
+  return !name.startsWith('.')
+}
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -202,6 +219,8 @@ export type EnvFile = { path: string; text: string }
 export type Sources = {
   // The secrets file's text, or null when it does not exist.
   secrets: string | null
+  // The files in the secrets folder.
+  secretsDirFiles: readonly EnvFile[]
   envFiles: readonly EnvFile[]
   environ: readonly Pair[]
   minLength: number
@@ -218,30 +237,39 @@ export function buildTable(s: Sources): Table {
     for (const [name, value] of assignments(f.text)) for (const [, v] of candidates(name, value, true)) published.add(v)
   }
 
-  const pairs: Pair[] = []
-  if (s.secrets !== null) for (const [n, v] of assignments(s.secrets)) pairs.push(...candidates(n, v, true))
+  // Each candidate with the minimum length it must reach. From a secrets file, the whole value and its URL
+  // passwords take the lower floor; the pieces `candidates` cuts from it keep `minLength`.
+  const low = Math.min(SECRETS_MIN_LENGTH, s.minLength)
+  const secretTexts = [...(s.secrets === null ? [] : [s.secrets]), ...s.secretsDirFiles.map((f) => f.text)]
+  const pairs: Array<readonly [name: string, value: string, min: number]> = []
+  for (const text of secretTexts) {
+    for (const [n, v] of assignments(text)) {
+      const isUrl = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(v)
+      for (const [name, value] of candidates(n, v, true)) pairs.push([name, value, isUrl || value === v ? low : s.minLength])
+    }
+  }
   for (const f of s.envFiles.filter((f) => !isExample(f.path))) {
-    for (const [n, v] of assignments(f.text)) pairs.push(...candidates(n, v, false))
+    for (const [n, v] of assignments(f.text)) for (const [name, value] of candidates(n, v, false)) pairs.push([name, value, s.minLength])
   }
   const environ = s.environ.filter(([n]) => !n.startsWith(IGNORED_ENV_PREFIX)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-  for (const [n, v] of environ) pairs.push(...candidates(n, v, false))
+  for (const [n, v] of environ) for (const [name, value] of candidates(n, v, false)) pairs.push([name, value, s.minLength])
 
   // The whole value of each assignment, before the pieces `candidates` adds.
   const wholes = new Map<string, Set<string>>()
-  const whole = (n: string, v: string, anyName: boolean) => {
+  const whole = (n: string, v: string, anyName: boolean, min: number) => {
     const first = candidates(n, v, anyName)[0]
-    if (first === undefined || published.has(first[1]) || !accepts(first[1], s.minLength)) return
+    if (first === undefined || published.has(first[1]) || !accepts(first[1], min)) return
     wholes.set(first[0], (wholes.get(first[0]) ?? new Set()).add(first[1]))
   }
-  if (s.secrets !== null) for (const [n, v] of assignments(s.secrets)) whole(n, v, true)
-  for (const f of s.envFiles.filter((f) => !isExample(f.path))) for (const [n, v] of assignments(f.text)) whole(n, v, false)
-  for (const [n, v] of environ) whole(n, v, false)
+  for (const text of secretTexts) for (const [n, v] of assignments(text)) whole(n, v, true, low)
+  for (const f of s.envFiles.filter((f) => !isExample(f.path))) for (const [n, v] of assignments(f.text)) whole(n, v, false, s.minLength)
+  for (const [n, v] of environ) whole(n, v, false, s.minLength)
   const ambiguous = new Set([...wholes].filter(([, vs]) => vs.size > 1).map(([n]) => n))
 
   const nameOf = new Map<string, string>()
   const valueOf = new Map<string, string>()
-  for (const [name, value] of pairs) {
-    if (published.has(value) || !accepts(value, s.minLength)) continue
+  for (const [name, value, min] of pairs) {
+    if (published.has(value) || !accepts(value, min)) continue
     if (!nameOf.has(value)) nameOf.set(value, name)
     if (!valueOf.has(name)) valueOf.set(name, value)
   }

@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { accepts, buildTable, candidates, expandHome, fillCommand, findArgs, parseFind, type Found, options, redactedNotice, redactText } from '../hooks/rules.ts'
+import { accepts, buildTable, candidates, SECRETS_MIN_LENGTH, expandHome, fillCommand, findArgs, parseFind, type Found, options, redactedNotice, redactText } from '../hooks/rules.ts'
 
 // Every secret here is fake and assembled at run time, so no file of the mod holds a string that looks
 // like a real token, and the tests never touch the real filesystem or environment.
@@ -440,7 +440,7 @@ test('the rules: candidates, accepts, options', () => {
   expect(options({ minLength: 8, secretsFile: '~/s' })).toEqual({ secretsFile: '~/s', envRoot: '', minLength: 8 })
   expect(options({ envRoot: ' ~/repos ' }).envRoot).toBe('~/repos')
   expect(expandHome('~/repos', HOME)).toBe(`${HOME}/repos`)
-  const t = buildTable({ secrets: null, envFiles: [], environ: [['SEGREDO_CACHE_TOKEN', 'ignored-perl-test-var'], ['API_KEY', 'env-api-key-value-fake']], minLength: 12 })
+  const t = buildTable({ secrets: null, secretsDirFiles: [], envFiles: [], environ: [['SEGREDO_CACHE_TOKEN', 'ignored-perl-test-var'], ['API_KEY', 'env-api-key-value-fake']], minLength: 12 })
   expect([...t.nameOf]).toEqual([['env-api-key-value-fake', 'API_KEY']])
 })
 
@@ -477,8 +477,8 @@ test('a call with no source change lists no folder, and stats only the known sou
   const [lists, stats] = [w.lists, w.stats]
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(w.lists - lists).toBe(0)
-  // ~/.secrets, bi/apps/bi/.env and bi/.env.example.
-  expect(w.stats - stats).toBe(3)
+  // ~/.secrets, ~/.secrets.d, bi/apps/bi/.env and bi/.env.example.
+  expect(w.stats - stats).toBe(4)
 })
 
 test('a changed known file rebuilds the list on the next call, without a folder scan', REPOS, async ($, on) => {
@@ -584,7 +584,7 @@ const FAKE_JWT = 'ey' + 'J' + 'hbGciOiJIUzI1NiJ9' + '.' + 'ey' + 'J' + 'zdWIiOiI
 const FAKE_PEM = '-----BEGIN ' + 'RSA PRIVATE KEY-----\nMIIEfake\n-----END ' + 'RSA PRIVATE KEY-----'
 
 test('the new token formats are hidden by kind, and a plain sk- word or a short eyJ is left alone', () => {
-  const t = buildTable({ secrets: null, envFiles: [], environ: [], minLength: 12 })
+  const t = buildTable({ secrets: null, secretsDirFiles: [], envFiles: [], environ: [], minLength: 12 })
   const found: Found = new Map()
   const out = redactText([FAKE_OPENAI, FAKE_GOOGLE, FAKE_STRIPE, FAKE_JWT, FAKE_PEM, FAKE_ANTHROPIC].join('\n'), t, found)
   expect(out).toBe(['<hidden:openai>', '<hidden:google>', '<hidden:stripe>', '<hidden:jwt>', '<hidden:private-key>', '<hidden:anthropic>'].join('\n'))
@@ -594,6 +594,7 @@ test('the new token formats are hidden by kind, and a plain sk- word or a short 
 test('a name with two different values is ambiguous, and a token known only by its format cannot be filled', () => {
   const t = buildTable({
     secrets: null,
+    secretsDirFiles: [],
     envFiles: [{ path: '/a/.env', text: `API_TOKEN=${FAKE_AUTH}\n` }, { path: '/b/.env', text: `API_TOKEN=${FAKE_NEW}\nOTHER_TOKEN=${FAKE_API}\n` }],
     environ: [],
     minLength: 12,
@@ -641,4 +642,56 @@ test('the find scan keeps the .env files and the folders the walk watches, and s
   const args = findArgs('/r')
   expect(args.slice(0, 4)).toEqual(['find', '/r', '-maxdepth', '6'])
   expect(args).toContain('node_modules')
+})
+
+// --- the secrets folder, where a tool such as a vault keeps its own list ------------------------------
+
+const SECRETS_DIR = `${SECRETS}.d`
+const VAULT = `${SECRETS_DIR}/vault`
+// A vault password of 8 characters, under the 12 of `minLength`, a 5-character one under the folder's
+// floor, and a value whose pieces are short.
+const FAKE_VAULT_SHORT = 'fk8chars'
+const FAKE_VAULT_TINY = 'fk5ch'
+const FAKE_VAULT_PIECES = 'fake ab|cd vault'
+
+test('a file in the secrets folder hides every value whatever its name, down to the folder floor', REPOS, async ($, on) => {
+  const w = freshWorld()
+  w.files.set(VAULT, { text: `SITE_EXAMPLE_COM="${FAKE_VAULT_SHORT}"\nPIN_ITEM="${FAKE_VAULT_TINY}"\nNOTE_ITEM="${FAKE_VAULT_PIECES}"\n`, mtimeMs: 0 })
+  w.answers.push(bash(`login ${FAKE_VAULT_SHORT}\npin ${FAKE_VAULT_TINY}\nnote ${FAKE_VAULT_PIECES}\npiece ab\n`))
+  setup(on, w)
+  const s = stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))
+  expect(FAKE_VAULT_TINY.length).toBeLessThan(SECRETS_MIN_LENGTH)
+  expect(s).toBe(`login <hidden:SITE_EXAMPLE_COM>\npin ${FAKE_VAULT_TINY}\nnote <hidden:NOTE_ITEM>\npiece ab\n`)
+})
+
+test('a value under minLength stays visible when it comes from a .env, not from a secrets file', REPOS, async ($, on) => {
+  const w = freshWorld()
+  w.files.set(ENV_BI, { text: envBi(`OTHER_TOKEN=${FAKE_VAULT_SHORT}`), mtimeMs: 0 })
+  w.answers.push(bash(FAKE_VAULT_SHORT))
+  setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe(FAKE_VAULT_SHORT)
+})
+
+test('a secrets folder that appears later is read on the next call, and a dot file in it is skipped', REPOS, async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash('first'), bash(`${FAKE_VAULT_SHORT} ${FAKE_NEW}\n`))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  w.files.set(VAULT, { text: `SITE_EXAMPLE_COM="${FAKE_VAULT_SHORT}"\n`, mtimeMs: clock.now() })
+  w.files.set(`${SECRETS_DIR}/.vault.tmp`, { text: `HALF_WRITTEN="${FAKE_NEW}"\n`, mtimeMs: clock.now() })
+  w.dirMtimes.set(SECRETS_DIR, clock.now())
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'vault names' }))).toBe(`<hidden:SITE_EXAMPLE_COM> ${FAKE_NEW}\n`)
+})
+
+test('a vault value rewritten in the secrets folder replaces the old one on the next call', REPOS, async ($, on) => {
+  const w = freshWorld()
+  const rotated = 'fake-rotated-pw'
+  w.files.set(VAULT, { text: `SITE_EXAMPLE_COM="${FAKE_VAULT_SHORT}"\n`, mtimeMs: 0 })
+  w.answers.push(bash('first'), bash(`${FAKE_VAULT_SHORT} ${rotated}\n`))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  await clock.advance(1000)
+  w.files.set(VAULT, { text: `SITE_EXAMPLE_COM="${rotated}"\n`, mtimeMs: clock.now() })
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'x' }))).toBe(`${FAKE_VAULT_SHORT} <hidden:SITE_EXAMPLE_COM>\n`)
 })
