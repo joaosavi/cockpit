@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { bandRows, DEFAULTS, formatTime, isCommitCommand, limitReport, options, statusText, windowName } from '../hooks/rules.ts'
+import { bandRows, classify, commitDue, DEFAULTS, formatTime, isCommitCommand, limitReport, options, statusText, throttledSubagentText, windowName } from '../hooks/rules.ts'
 
 const NOW = Date.parse('2026-10-06T20:00:00Z')
 const RESET = '2026-10-06T22:30:00.000Z'
@@ -8,12 +8,14 @@ const RESET = '2026-10-06T22:30:00.000Z'
 const SAO_PAULO = { options: { timeZone: 'America/Sao_Paulo' } }
 const O = { ...DEFAULTS, timeZone: 'America/Sao_Paulo' }
 
-type Stubs = { submitted: string[]; running: number; initialUsage: number | null; stored?: Record<string, unknown>; written?: string[]; contexts?: string[] }
+type Stubs = { submitted: string[]; running: number; initialUsage: number | null; sevenDay?: number; stored?: Record<string, unknown>; written?: string[]; contexts?: string[] }
 
-function windows(fiveHour: number) {
+const WEEK_RESET = '2026-10-11T16:00:00.000Z'
+
+function windows(fiveHour: number, sevenDay = 40) {
   return [
     { kind: 'five_hour', percentUsed: fiveHour, resetsAt: RESET },
-    { kind: 'seven_day', percentUsed: 40, resetsAt: '2026-10-11T16:00:00.000Z' },
+    { kind: 'seven_day', percentUsed: sevenDay, resetsAt: WEEK_RESET },
   ]
 }
 
@@ -23,7 +25,7 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], s: Stubs) {
   mock.env(on, { HOME: '/home' })
   mock.store(on, s.stored ?? {})
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
-  on('session.usage', () => ({ value: { startedAt: NOW, context: { tokens: 0, window: 200000, percent: 0 }, rateLimits: s.initialUsage === null ? [] : windows(s.initialUsage) } }))
+  on('session.usage', () => ({ value: { startedAt: NOW, context: { tokens: 0, window: 200000, percent: 0 }, rateLimits: s.initialUsage === null ? [] : windows(s.initialUsage, s.sevenDay) } }))
   on('command.register', () => ({ value: undefined }))
   on('fs.read', () => ({ deny: 'no file' }))
   on('fs.write', ($, e) => {
@@ -120,26 +122,30 @@ test('/limit shows the windows and the state', SAO_PAULO, async ($, on) => {
   await $.session.start(start)
   const r = await $.command.run({ command: 'limit', args: '' })
   expect(r.text).toBe(
-    'Throttled at 91%, one subagent at a time from 90%\n5-hour window: 91%, resets Oct 6, 19:30\n7-day window: 40%, resets Oct 11, 13:00',
+    [
+      'Throttled at 91% of the 5-hour window, one subagent at a time from 90%',
+      '5-hour window: 91%, resets Oct 6, 19:30. One subagent from 90%, commit at 97%, pause at 98%',
+      '7-day window: 40%, resets Oct 11, 13:00. One subagent from 97%, commit at 98%, pause at 99%',
+    ].join('\n'),
   )
 })
 
 test('/limit reads in plain words in every state', () => {
   const none = { isResumeScheduled: false, held: 0 }
   expect(limitReport([], { kind: 'free' }, O, none)).toBe('No reading yet. It arrives with the first model response.')
-  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Normal, one subagent at a time from 90%, pause at 98%')
+  expect(limitReport(windows(50), { kind: 'free' }, O, none).split('\n')[0]).toBe('Normal')
   const paused = { kind: 'paused', window: windows(98)[0] ?? { kind: 'five_hour', percentUsed: 98 } } as const
   expect(limitReport(windows(98), paused, O, { isResumeScheduled: true, held: 2 })).toBe(
     [
-      'Paused at 98% (2% reserve), resumes Oct 6, 19:30',
-      '5-hour window: 98%, resets Oct 6, 19:30',
-      '7-day window: 40%, resets Oct 11, 13:00',
+      'Paused at 98% of the 5-hour window (2% reserve), resumes Oct 6, 19:30',
+      '5-hour window: 98%, resets Oct 6, 19:30. One subagent from 90%, commit at 97%, pause at 98%',
+      '7-day window: 40%, resets Oct 11, 13:00. One subagent from 97%, commit at 98%, pause at 99%',
       'Resume scheduled for the window reset.',
       '2 messages held for the resume.',
     ].join('\n'),
   )
   expect(statusText({ kind: 'free' }, O)).toBeUndefined()
-  expect(statusText(paused, O)).toBe('Usage limit: paused at 98% (2% reserve), resumes Oct 6, 19:30')
+  expect(statusText(paused, O)).toBe('Usage limit: paused at 98% of the 5-hour window (2% reserve), resumes Oct 6, 19:30')
   expect(windowName('seven_day_opus')).toBe('seven day opus window')
 })
 
@@ -347,8 +353,8 @@ test('a prompt at 97% carries the request to commit, and commitAt 0 turns it off
   const r = await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'bridge' } })
   expect(r).toMatchObject({ text: 'go on' })
   expect(s.contexts).toEqual([expect.stringContaining('commit the work in progress')])
-  expect(options({ commitAt: 0 }).commitAt).toBe(0)
-  expect(options({}).commitAt).toBe(97)
+  expect(options({ commitAt: 0 }).fiveHour.commit.on).toBe(false)
+  expect(options({}).fiveHour.commit).toEqual({ on: true, at: 97 })
 })
 
 test('commitAt 0 never asks to commit', { options: { commitAt: 0 } }, async ($, on) => {
@@ -400,4 +406,151 @@ test('the old resumeOnError setting still turns the resume off', () => {
   expect(options({ resumeOnError: false }).resume).toBe(false)
   expect(options({ resume: true, resumeOnError: false }).resume).toBe(true)
   expect(options({}).resume).toBe(true)
+})
+
+const subagent = { prompt: 'read', description: 'read', subagentType: 'Explore' }
+const measure = (five: number, seven: number) => ({ rateLimits: windows(five, seven), context: { tokens: 0, window: 200000, percent: 0 }, changed: ['rateLimits' as const] })
+
+test('each window has its own defaults: 5-hour 90, 97, 98 and 7-day 97, 98, 99, all on', () => {
+  expect(options({})).toEqual(DEFAULTS)
+  expect(DEFAULTS.fiveHour).toEqual({ throttle: { on: true, at: 90 }, commit: { on: true, at: 97 }, pause: { on: true, at: 98 } })
+  expect(DEFAULTS.sevenDay).toEqual({ throttle: { on: true, at: 97 }, commit: { on: true, at: 98 }, pause: { on: true, at: 99 } })
+})
+
+test('the 7-day window at 96% lets subagents run in parallel, and throttles from 97%', async ($, on) => {
+  const s = { submitted: [], running: 1, initialUsage: 50, sevenDay: 96 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.agent.spawn(subagent)).toMatchObject({ agentId: 'new1' })
+  await $.session.measure(measure(50, 97))
+  const refusal = await $.agent.spawn(subagent)
+  expect(refusal).toMatchObject({ deny: expect.stringContaining('the 7-day window is at 97%, and from 97% only one subagent') })
+})
+
+test('the 7-day window asks to commit at 98% and pauses at 99%, with a 1% reserve', async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 50, sevenDay: 97 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toEqual({ result: 'ran' })
+  await $.session.measure(measure(50, 98))
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ context: [expect.stringContaining('the 7-day window is at 98%, and the session pauses at 99%')] })
+  await $.session.measure(measure(50, 99))
+  const refusal = await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(refusal).toMatchObject({ deny: expect.stringContaining("paused at 99% of the 7-day window, to keep the user's 1% reserve") })
+})
+
+test('a per-model weekly window follows the 7-day limits', () => {
+  const opus = (pct: number) => [{ kind: 'seven_day_opus', percentUsed: pct, resetsAt: WEEK_RESET }]
+  expect(classify(opus(95), O)).toEqual({ kind: 'free' })
+  expect(classify(opus(97), O)).toMatchObject({ kind: 'throttled' })
+  expect(commitDue(opus(98), O)).toMatchObject({ kind: 'seven_day_opus' })
+  expect(classify(opus(99), O)).toMatchObject({ kind: 'paused' })
+  expect(throttledSubagentText(opus(97)[0] ?? { kind: '', percentUsed: 0 }, O)).toContain('seven day opus window is at 97%')
+})
+
+test('the most restrictive window decides, and the paused window that resets last holds the session', () => {
+  // 5-hour throttled, 7-day paused: paused, by the 7-day window.
+  expect(classify(windows(91, 99), O)).toMatchObject({ kind: 'paused', window: { kind: 'seven_day' } })
+  // 5-hour paused, 7-day only throttled: paused, by the 5-hour window.
+  expect(classify(windows(98, 97), O)).toMatchObject({ kind: 'paused', window: { kind: 'five_hour' } })
+  // Both paused: the 7-day window resets later, so the resume waits for it.
+  expect(classify(windows(99, 99), O)).toMatchObject({ kind: 'paused', window: { kind: 'seven_day' } })
+  // 5-hour at 95% is past its 90% throttle; 7-day at 96% is below its 97%.
+  expect(classify(windows(95, 96), O)).toMatchObject({ kind: 'throttled', window: { kind: 'five_hour' } })
+  // The commit is due for the window past its commit stage, never for one already paused.
+  expect(commitDue(windows(97, 50), O)).toMatchObject({ kind: 'five_hour' })
+  expect(commitDue(windows(98, 50), O)).toBeNull()
+  expect(commitDue(windows(50, 97), O)).toBeNull()
+})
+
+test('fiveHourThrottle off: subagents run in parallel past 90%', { options: { fiveHourThrottle: false } }, async ($, on) => {
+  const s = { submitted: [], running: 1, initialUsage: 95 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.agent.spawn(subagent)).toMatchObject({ agentId: 'new1' })
+})
+
+test('fiveHourCommit off: no request to commit at 97%', { options: { fiveHourCommit: false } }, async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 97 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toEqual({ result: 'ran' })
+})
+
+test('fiveHourPause off: the 5-hour window at 99% only throttles, and its bar has no pause mark', { options: { fiveHourPause: false } }, async ($, on) => {
+  const s = { submitted: [], running: 1, initialUsage: 99 }
+  setup(on, s)
+  await $.session.start(start)
+  // With no pause ahead, the commit request still comes, and names the limit itself.
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ result: 'ran', context: [expect.stringContaining('the limit stops the session at 100%')] })
+  expect(await $.agent.spawn(subagent)).toMatchObject({ deny: expect.stringContaining('only one subagent') })
+  const o = options({ fiveHourPause: false })
+  const [five, seven] = bandRows(windows(99), 80, o)
+  expect(five?.runs.some((r) => r.kind === 'mark')).toBe(false)
+  expect(five?.tone).toBe('warning')
+  expect(seven?.runs.some((r) => r.kind === 'mark')).toBe(true)
+})
+
+test('sevenDayPause off: the 7-day window at 100% never pauses the session', { options: { sevenDayPause: false } }, async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 50, sevenDay: 100 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'sub1' })).toEqual({ result: 'ran' })
+})
+
+test('the 7-day throttle and commit switches turn off their own stage only', () => {
+  const noThrottle = options({ sevenDayThrottle: false })
+  expect(classify(windows(50, 98), noThrottle)).toEqual({ kind: 'free' })
+  expect(classify(windows(91, 98), noThrottle)).toMatchObject({ kind: 'throttled', window: { kind: 'five_hour' } })
+  const noCommit = options({ sevenDayCommit: false })
+  expect(commitDue(windows(50, 98), noCommit)).toBeNull()
+  expect(commitDue(windows(97, 98), noCommit)).toMatchObject({ kind: 'five_hour' })
+  expect(classify(windows(50, 98), noCommit)).toMatchObject({ kind: 'throttled' })
+})
+
+test('each percentage moves its own stage', { options: { fiveHourThrottleAt: 80, fiveHourPauseAt: 95 } }, async ($, on) => {
+  const s = { submitted: [], running: 1, initialUsage: 85 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.agent.spawn(subagent)).toMatchObject({ deny: expect.stringContaining('from 80%') })
+  await $.session.measure(measure(95, 40))
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining("5% reserve") })
+})
+
+test('the old alert, commitAt and reserve apply to both windows when the new options are unset', () => {
+  const o = options({ alert: 85, commitAt: 95, reserve: 3 })
+  for (const l of [o.fiveHour, o.sevenDay]) {
+    expect(l).toEqual({ throttle: { on: true, at: 85 }, commit: { on: true, at: 95 }, pause: { on: true, at: 97 } })
+  }
+  // A new option wins over the old one for its own stage and window only.
+  const mixed = options({ alert: 85, reserve: 3, sevenDayThrottleAt: 96, fiveHourPause: false })
+  expect(mixed.fiveHour.throttle.at).toBe(85)
+  expect(mixed.sevenDay.throttle.at).toBe(96)
+  expect(mixed.fiveHour.pause).toEqual({ on: false, at: 97 })
+  expect(mixed.sevenDay.pause).toEqual({ on: true, at: 97 })
+  // commitAt 0 turns the commit off in both windows, unless the window's own commit options say otherwise.
+  const off = options({ commitAt: 0, fiveHourCommitAt: 96, sevenDayCommit: true })
+  expect(off.fiveHour.commit).toEqual({ on: true, at: 96 })
+  expect(off.sevenDay.commit).toEqual({ on: true, at: 98 })
+  expect(options({ commitAt: 0 }).sevenDay.commit.on).toBe(false)
+})
+
+test('the old reserve still pauses the 7-day window too', { options: { reserve: 5 } }, async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 50, sevenDay: 95 }
+  setup(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toMatchObject({ deny: expect.stringContaining("paused at 95% of the 7-day window, to keep the user's 5% reserve") })
+})
+
+test('the band colors each window by its own limits', () => {
+  const [five, seven] = bandRows(windows(92, 92), 80, O)
+  expect(five?.tone).toBe('warning')
+  expect(seven?.tone).toBe('success')
+  expect(bandRows(windows(50, 99), 80, O)[1]?.tone).toBe('error')
+})
+
+test('/limit shows a stage that is off', SAO_PAULO, () => {
+  const o = { ...options({ sevenDayThrottle: false, sevenDayCommit: false, sevenDayPause: false }), timeZone: 'America/Sao_Paulo' }
+  const report = limitReport(windows(50), { kind: 'free' }, o, { isResumeScheduled: false, held: 0 })
+  expect(report.split('\n')[2]).toBe('7-day window: 40%, resets Oct 11, 13:00. No subagent limit, no commit request, no pause')
 })

@@ -1,7 +1,7 @@
 {
   "name": "usage-limit",
-  "version": "1.0.0",
-  "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a commit of the work in progress at 97%, a pause that keeps the last 2% for you, and an automatic resume when the window resets.",
+  "version": "1.2.0",
+  "description": "Keeps the account usage limit from running out mid-task, with separate limits for the 5-hour and the 7-day windows: one subagent at a time (90% and 97%), a commit of the work in progress (97% and 98%), a pause that keeps the rest for you (98% and 99%), each one switchable, and an automatic resume when the window resets.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
@@ -18,35 +18,83 @@
     "mod"
   ],
   "userConfig": {
-    "reserve": {
-      "type": "number",
-      "title": "Reserve (%)",
-      "description": "Share of the usage limit kept for you. The session pauses at 100 minus this value.",
-      "default": 2,
-      "min": 0,
-      "max": 20
+    "fiveHourThrottle": {
+      "type": "boolean",
+      "title": "5-hour throttle",
+      "description": "In the 5-hour window, from its throttle percentage, only one subagent runs at a time. Unset is on, or off for the commit when the old commitAt is 0."
     },
-    "alert": {
+    "fiveHourThrottleAt": {
       "type": "number",
-      "title": "Alert (%)",
-      "description": "From this share of the usage limit, only one subagent runs at a time.",
-      "default": 90,
-      "min": 50,
-      "max": 99
+      "title": "5-hour throttle from (%)",
+      "description": "The 5-hour throttle percentage. Unset is 90, or the old alert when set.",
+      "min": 1,
+      "max": 100
+    },
+    "fiveHourCommit": {
+      "type": "boolean",
+      "title": "5-hour commit",
+      "description": "In the 5-hour window, from its commit percentage, the agent is asked once per window to commit its work in progress, without pushing. Unset is on, or off for the commit when the old commitAt is 0."
+    },
+    "fiveHourCommitAt": {
+      "type": "number",
+      "title": "5-hour commit from (%)",
+      "description": "The 5-hour commit percentage. Unset is 97, or the old commitAt when set.",
+      "min": 1,
+      "max": 100
+    },
+    "fiveHourPause": {
+      "type": "boolean",
+      "title": "5-hour pause",
+      "description": "In the 5-hour window, from its pause percentage, the session stops calling tools and keeps the rest of the window for you. Unset is on, or off for the commit when the old commitAt is 0."
+    },
+    "fiveHourPauseAt": {
+      "type": "number",
+      "title": "5-hour pause from (%)",
+      "description": "The 5-hour pause percentage. Unset is 98, or the old 100 minus reserve when set.",
+      "min": 1,
+      "max": 100
+    },
+    "sevenDayThrottle": {
+      "type": "boolean",
+      "title": "7-day throttle",
+      "description": "In the 7-day window, from its throttle percentage, only one subagent runs at a time. Unset is on, or off for the commit when the old commitAt is 0. Per-model weekly windows follow it."
+    },
+    "sevenDayThrottleAt": {
+      "type": "number",
+      "title": "7-day throttle from (%)",
+      "description": "The 7-day throttle percentage. Unset is 97, or the old alert when set. Per-model weekly windows follow it.",
+      "min": 1,
+      "max": 100
+    },
+    "sevenDayCommit": {
+      "type": "boolean",
+      "title": "7-day commit",
+      "description": "In the 7-day window, from its commit percentage, the agent is asked once per window to commit its work in progress, without pushing. Unset is on, or off for the commit when the old commitAt is 0. Per-model weekly windows follow it."
+    },
+    "sevenDayCommitAt": {
+      "type": "number",
+      "title": "7-day commit from (%)",
+      "description": "The 7-day commit percentage. Unset is 98, or the old commitAt when set. Per-model weekly windows follow it.",
+      "min": 1,
+      "max": 100
+    },
+    "sevenDayPause": {
+      "type": "boolean",
+      "title": "7-day pause",
+      "description": "In the 7-day window, from its pause percentage, the session stops calling tools and keeps the rest of the window for you. Unset is on, or off for the commit when the old commitAt is 0. Per-model weekly windows follow it."
+    },
+    "sevenDayPauseAt": {
+      "type": "number",
+      "title": "7-day pause from (%)",
+      "description": "The 7-day pause percentage. Unset is 99, or the old 100 minus reserve when set. Per-model weekly windows follow it.",
+      "min": 1,
+      "max": 100
     },
     "timeZone": {
       "type": "string",
       "title": "Time zone",
       "description": "IANA time zone for the times shown, such as America/New_York. Empty uses the system time zone.",
       "default": ""
-    },
-    "commitAt": {
-      "type": "number",
-      "title": "Commit from (%)",
-      "description": "From this share of the usage limit, the agent is asked once per window to commit its work in progress, without pushing. 0 turns it off.",
-      "default": 97,
-      "min": 0,
-      "max": 99
     },
     "resume": {
       "type": "boolean",
@@ -61,6 +109,27 @@
       "default": 75,
       "min": 0,
       "max": 100
+    },
+    "alert": {
+      "type": "number",
+      "title": "Alert (%), old",
+      "description": "Before 1.2: the throttle percentage of every window. Applies where the window's own option is unset.",
+      "min": 1,
+      "max": 100
+    },
+    "commitAt": {
+      "type": "number",
+      "title": "Commit from (%), old",
+      "description": "Before 1.2: the commit percentage of every window, 0 off. Applies where the window's own options are unset.",
+      "min": 0,
+      "max": 100
+    },
+    "reserve": {
+      "type": "number",
+      "title": "Reserve (%), old",
+      "description": "Before 1.2: every window pauses at 100 minus this value. Applies where the window's own option is unset.",
+      "min": 0,
+      "max": 50
     }
   }
 }

@@ -47,7 +47,7 @@ The setup turns on auto-update for `cockpit`, so new versions install by themsel
 | `pipefail` | Adds `set -o pipefail;` to a test, typecheck or lint run piped into `tail`, `head` or `grep`, so a failed run cannot exit 0. |
 | `memory-guard` | Keeps typecheck, build, test and Playwright runs under the memory limit: it runs them with one process, waits, or refuses. It reruns a command killed with exit 137 with one process. |
 | `loop-breaker` | Tells the agent to stop and change approach when it repeats the same error, the same fix or the same call. |
-| `usage-limit` | Allows one subagent at a time from 90% of the plan's usage limit, asks for a work-in-progress commit at 97%, pauses at 98%, and resumes when the window resets. |
+| `usage-limit` | Limits each plan window on its own: one subagent at a time (5-hour 90%, 7-day 97%), a work-in-progress commit (97%, 98%), a pause (98%, 99%), each switchable, and a resume when the window resets. |
 
 ### Instruments
 

@@ -11,7 +11,7 @@ claude plugin install cockpit@cockpit
 
 ## The mods
 
-- `usage-limit`: one subagent at a time from 90% of the usage limit, a pause that keeps the last 2% for you, and an automatic resume when the window resets. `/limit`.
+- `usage-limit`: per window, one subagent at a time (5-hour 90%, 7-day 97%), a work-in-progress commit (97%, 98%), a pause (98%, 99%), each switchable, and an automatic resume when the window resets. `/limit`.
 - `memory-guard`: keeps typecheck, build, test and Playwright runs under the memory limit, with one process, a wait, or a refusal, and reruns a command killed with exit 137 with one process. `/ram`.
 - `skill-loader`: delivers the right skill when the agent touches a file or commits, and reminds it to load diagnosing-bugs when you paste an error.
 - `loop-breaker`: tells the agent to stop and change approach when it goes in circles.

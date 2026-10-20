@@ -13,7 +13,7 @@
     {
       "name": "usage-limit",
       "source": "./usage-limit",
-      "description": "Keeps the account usage limit from running out mid-task: one subagent at a time from 90%, a commit of the work in progress at 97%, a pause that keeps the last 2% for you, and an automatic resume when the window resets."
+      "description": "Keeps the account usage limit from running out mid-task, with separate limits for the 5-hour and the 7-day windows: one subagent at a time (90% and 97%), a commit of the work in progress (97% and 98%), a pause that keeps the rest for you (98% and 99%), each one switchable, and an automatic resume when the window resets."
     },
     {
       "name": "memory-guard",

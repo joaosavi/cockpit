@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, loop, secret, collision and pipefail guards, the session panel, the HUD and the spinner status line.",
   "author": {
     "name": "João Savi",

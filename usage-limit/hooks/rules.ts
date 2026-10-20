@@ -11,16 +11,23 @@ export type Zone =
   | { kind: 'throttled'; window: Window }
   | { kind: 'paused'; window: Window }
 
+// One stage of a window: whether it acts, and from which percentage.
+export type Stage = { on: boolean; at: number }
+
+// The three stages of a window. `throttle`: one subagent at a time. `commit`: the agent is asked once per
+// window to commit its work in progress, without pushing. `pause`: the session stops calling tools, so
+// the rest of the window stays the user's.
+export type Limits = { throttle: Stage; commit: Stage; pause: Stage }
+
+// The two groups of windows with their own limits. A per-model weekly window, such as `seven_day_opus`,
+// follows `sevenDay`.
+export type Group = 'fiveHour' | 'sevenDay'
+
 export type Options = {
-  // Below 100 - reserve, the session works. Above it, it pauses.
-  reserve: number
-  // Above this percentage, only one subagent runs at a time.
-  alert: number
+  fiveHour: Limits
+  sevenDay: Limits
   // Time zone of the times the agent and the user read.
   timeZone: string
-  // From this percentage, the agent is asked once per window to commit its work in progress, without
-  // pushing, before the pause. 0 turns it off.
-  commitAt: number
   // Resumes the session when the window resets, after the pause or after the limit error (a burst of
   // parallel requests can jump past the pause). Off, the user resumes it.
   resume: boolean
@@ -28,48 +35,110 @@ export type Options = {
   bandFrom: number
 }
 
-export const DEFAULTS: Options = { reserve: 2, alert: 90, timeZone: '', commitAt: 97, resume: true, bandFrom: 75 }
+// 10% of the 7-day window is a lot of work on the bigger plans, so it throttles and pauses later than
+// the 5-hour one. The commit comes one point before each pause.
+export const DEFAULTS: Options = {
+  fiveHour: { throttle: { on: true, at: 90 }, commit: { on: true, at: 97 }, pause: { on: true, at: 98 } },
+  sevenDay: { throttle: { on: true, at: 97 }, commit: { on: true, at: 98 }, pause: { on: true, at: 99 } },
+  timeZone: '',
+  resume: true,
+  bandFrom: 75,
+}
 
 // Margin after the reset time, because the server can release the limit a few seconds late.
 export const MARGIN_MS = 2 * 60_000
 
+const STAGES = ['throttle', 'commit', 'pause'] as const
+type StageName = (typeof STAGES)[number]
+
+// The option names of a stage: `fiveHourThrottle` switches it, `fiveHourThrottleAt` sets its percentage.
+function stageKey(group: Group, stage: StageName): string {
+  return `${group}${stage.charAt(0).toUpperCase()}${stage.slice(1)}`
+}
+
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
-  const number = (key: string, fallback: number): number => {
-    const v: unknown = Reflect.get(values, key)
-    return typeof v === 'number' && Number.isFinite(v) ? v : fallback
+  const get = (key: string): unknown => Reflect.get(values, key)
+  const number = (key: string): number | undefined => {
+    const v = get(key)
+    return typeof v === 'number' && Number.isFinite(v) ? v : undefined
   }
-  const timeZone: unknown = Reflect.get(values, 'timeZone')
+  const timeZone = get('timeZone')
   // `resumeOnError` is the option's name before 1.5, kept so older settings still apply.
-  const resume: unknown = Reflect.get(values, 'resume') ?? Reflect.get(values, 'resumeOnError')
+  const resume = get('resume') ?? get('resumeOnError')
+  // The options before 1.2 set every window alike: `alert` throttles, `commitAt` commits (0 off) and
+  // `reserve` pauses at 100 minus it. They apply to a stage whose own options are unset.
+  const reserve = number('reserve')
+  const commitAt = number('commitAt')
+  const legacy: Record<StageName, number | undefined> = {
+    throttle: number('alert'),
+    commit: commitAt === 0 ? undefined : commitAt,
+    pause: reserve === undefined ? undefined : 100 - reserve,
+  }
+  const limits = (group: Group): Limits => {
+    const stage = (name: StageName): Stage => {
+      const key = stageKey(group, name)
+      const at = number(`${key}At`)
+      const on = get(key)
+      return {
+        on: typeof on === 'boolean' ? on : !(name === 'commit' && at === undefined && commitAt === 0),
+        at: at ?? legacy[name] ?? DEFAULTS[group][name].at,
+      }
+    }
+    return { throttle: stage('throttle'), commit: stage('commit'), pause: stage('pause') }
+  }
+  const bandFrom = number('bandFrom')
   return {
-    reserve: number('reserve', DEFAULTS.reserve),
-    alert: number('alert', DEFAULTS.alert),
+    fiveHour: limits('fiveHour'),
+    sevenDay: limits('sevenDay'),
     timeZone: typeof timeZone === 'string' ? validTimeZone(timeZone.trim()) : DEFAULTS.timeZone,
-    commitAt: number('commitAt', DEFAULTS.commitAt),
     resume: typeof resume === 'boolean' ? resume : DEFAULTS.resume,
-    bandFrom: number('bandFrom', DEFAULTS.bandFrom),
+    bandFrom: bandFrom ?? DEFAULTS.bandFrom,
   }
 }
 
-// The fullest window decides the zone, because any of them reaching 100% stops the account.
+export function group(kind: string): Group {
+  return kind.startsWith('five_hour') ? 'fiveHour' : 'sevenDay'
+}
+
+export function limitsFor(window: Window, o: Pick<Options, Group>): Limits {
+  return o[group(window.kind)]
+}
+
+// Whether a window has reached a stage that is on.
+export function reached(window: Window, stage: Stage): boolean {
+  return stage.on && window.percentUsed >= stage.at
+}
+
+// The fullest window, the one the limit error reports.
 export function fullest(windows: readonly Window[]): Window | null {
   return windows.reduce<Window | null>((a, w) => (a === null || w.percentUsed > a.percentUsed ? w : a), null)
 }
 
-export function classify(windows: readonly Window[], o: Pick<Options, 'reserve' | 'alert'>): Zone {
-  const full = fullest(windows)
-  if (full === null) return { kind: 'free' }
-  if (full.percentUsed >= 100 - o.reserve) return { kind: 'paused', window: full }
-  if (full.percentUsed >= o.alert) return { kind: 'throttled', window: full }
+function resetMs(w: Window): number {
+  return w.resetsAt === undefined ? Number.POSITIVE_INFINITY : Date.parse(w.resetsAt)
+}
+
+// Each window is judged by its own limits, and the most restrictive result applies, because any window
+// reaching 100% stops the account. Among paused windows, the one that resets last holds the session,
+// so the resume does not wake into a window still paused.
+export function classify(windows: readonly Window[], o: Pick<Options, Group>): Zone {
+  const paused = windows.filter((w) => reached(w, limitsFor(w, o).pause))
+  const last = paused.reduce<Window | null>((a, w) => (a === null || resetMs(w) > resetMs(a) ? w : a), null)
+  if (last !== null) return { kind: 'paused', window: last }
+  const throttled = fullest(windows.filter((w) => reached(w, limitsFor(w, o).throttle)))
+  if (throttled !== null) return { kind: 'throttled', window: throttled }
   return { kind: 'free' }
 }
 
-// The window to commit before, when the fullest one is past `commitAt` and short of the pause.
-export function commitDue(windows: readonly Window[], o: Pick<Options, 'commitAt' | 'reserve'>): Window | null {
-  const full = fullest(windows)
-  if (full === null || o.commitAt <= 0) return null
-  return full.percentUsed >= o.commitAt && full.percentUsed < 100 - o.reserve ? full : null
+// The window to commit before: past its own commit stage and short of its own pause.
+export function commitDue(windows: readonly Window[], o: Pick<Options, Group>): Window | null {
+  return fullest(
+    windows.filter((w) => {
+      const l = limitsFor(w, o)
+      return reached(w, l.commit) && !reached(w, l.pause)
+    }),
+  )
 }
 
 // One request to commit per window and reset time: the next cycle of the same window asks again.
@@ -110,9 +179,11 @@ export function msUntilReset(window: Window, now: number): number | null {
   return Math.max(0, Date.parse(window.resetsAt) - now) + MARGIN_MS
 }
 
-export function commitText(window: Window, o: Pick<Options, 'reserve'>): string {
+export function commitText(window: Window, o: Pick<Options, Group>): string {
+  const pause = limitsFor(window, o).pause
+  const ahead = pause.on ? `the session pauses at ${pause.at}%` : 'the limit stops the session at 100%'
   return (
-    `usage-limit: the ${windowName(window.kind)} is at ${window.percentUsed}%, and the session pauses at ${100 - o.reserve}%. ` +
+    `usage-limit: the ${windowName(window.kind)} is at ${window.percentUsed}%, and ${ahead}. ` +
     'At the next safe point, commit the work in progress in each git repository you changed in this session, ' +
     'with a message that starts with `wip:`. Stage only the files you changed, by name, not `git add -A`: another ' +
     'session may be editing the same repository. Do not push. If a pre-commit hook fails on the unfinished work, ' +
@@ -121,7 +192,7 @@ export function commitText(window: Window, o: Pick<Options, 'reserve'>): string 
 }
 
 // A command that only stages and commits, chained with `&&`: the one Bash call the pause lets through, so
-// the work gets committed even when a burst of requests jumps from below `commitAt` straight to the pause.
+// the work gets committed even when a burst of requests jumps from below the commit stage straight to the pause.
 // Anything that pushes, pipes, substitutes or runs another program is refused like any other tool.
 const COMMIT_STEP = /^(cd [^\s;&|`$()<>]+|git( -C [^\s;&|`$()<>]+)? (add|commit|status)( [^;&|`$<>]*)?)$/
 
@@ -138,9 +209,14 @@ function backText(window: Window, o: Pick<Options, 'timeZone' | 'resume'>): stri
   return `The session resumes ${back}.`
 }
 
+// The share of a window the pause keeps for the user.
+export function reserveOf(window: Window, o: Pick<Options, Group>): number {
+  return Math.max(0, 100 - limitsFor(window, o).pause.at)
+}
+
 export function pauseText(window: Window, o: Options): string {
   return (
-    `usage-limit: paused at ${window.percentUsed}% of the ${windowName(window.kind)}, to keep the user's ${o.reserve}% reserve. ` +
+    `usage-limit: paused at ${window.percentUsed}% of the ${windowName(window.kind)}, to keep the user's ${reserveOf(window, o)}% reserve. ` +
     'Stop calling tools. If the work in progress is not committed yet, commit it first in each git repository you ' +
     'changed (`git add` of the files you changed and `git commit` only, message starting with `wip:`, `--no-verify` if a hook fails; do not push). ' +
     `Then write in up to 3 lines where you stopped and what is left. ${backText(window, o)}`
@@ -158,9 +234,9 @@ export function reserveSubagentText(): string {
   return 'usage-limit: no subagents in the reserve. Do the task directly, reading only the parts you need.'
 }
 
-export function throttledSubagentText(window: Window, o: Pick<Options, 'alert'>): string {
+export function throttledSubagentText(window: Window, o: Pick<Options, Group>): string {
   return (
-    `usage-limit: usage at ${window.percentUsed}%, and from ${o.alert}% only one subagent runs at a time. ` +
+    `usage-limit: the ${windowName(window.kind)} is at ${window.percentUsed}%, and from ${limitsFor(window, o).throttle.at}% only one subagent runs at a time. ` +
     'Wait for the running one or do the task directly.'
   )
 }
@@ -194,12 +270,12 @@ export function stateText(zone: Zone, o: Options): string {
     case 'paused': {
       const at = zone.window.resetsAt
       const back = !o.resume ? 'resume off' : at === undefined ? 'no reset time' : `resumes ${formatTime(at, o.timeZone)}`
-      return `paused at ${zone.window.percentUsed}% (${o.reserve}% reserve), ${back}`
+      return `paused at ${zone.window.percentUsed}% of the ${windowName(zone.window.kind)} (${reserveOf(zone.window, o)}% reserve), ${back}`
     }
     case 'throttled':
-      return `throttled at ${zone.window.percentUsed}%, one subagent at a time from ${o.alert}%`
+      return `throttled at ${zone.window.percentUsed}% of the ${windowName(zone.window.kind)}, one subagent at a time from ${limitsFor(zone.window, o).throttle.at}%`
     case 'free':
-      return `normal, one subagent at a time from ${o.alert}%, pause at ${100 - o.reserve}%`
+      return 'normal'
     default: {
       const exhaustive: never = zone
       return exhaustive
@@ -212,6 +288,16 @@ export function statusText(zone: Zone, o: Options): string | undefined {
   return zone.kind === 'free' ? undefined : `Usage limit: ${stateText(zone, o)}`
 }
 
+// A window's stages in plain words: `one subagent from 90%, commit at 97%, pause at 98%`.
+export function stagesText(l: Limits): string {
+  const parts = [
+    l.throttle.on ? `One subagent from ${l.throttle.at}%` : 'No subagent limit',
+    l.commit.on ? `commit at ${l.commit.at}%` : 'no commit request',
+    l.pause.on ? `pause at ${l.pause.at}%` : 'no pause',
+  ]
+  return parts.join(', ')
+}
+
 // What the mod is holding for the resume, as /limit reports it.
 export type Pending = { isResumeScheduled: boolean; held: number }
 
@@ -221,7 +307,7 @@ export function limitReport(windows: readonly Window[], zone: Zone, o: Options, 
   if (windows.length === 0) return 'No reading yet. It arrives with the first model response.'
   const lines = windows.map((w) => {
     const back = w.resetsAt === undefined ? '' : `, resets ${formatTime(w.resetsAt, o.timeZone)}`
-    return `${windowName(w.kind)}: ${w.percentUsed}%${back}`
+    return `${windowName(w.kind)}: ${w.percentUsed}%${back}. ${stagesText(limitsFor(w, o))}`
   })
   if (pending.isResumeScheduled) lines.push('Resume scheduled for the window reset.')
   if (pending.held > 0) lines.push(`${plural(pending.held, 'message')} held for the resume.`)
@@ -282,12 +368,14 @@ export function showsBand(windows: readonly Window[], zone: Zone, o: Pick<Option
   return zone.kind !== 'free' || full.percentUsed >= o.bandFrom
 }
 
-// Theme colors: green below the alert, yellow from the alert, red from the pause.
+// Theme colors, by the window's own limits: green before its first stage, yellow from the throttle or
+// the commit, red from the pause.
 export type Tone = 'success' | 'warning' | 'error'
 
-export function tone(percent: number, o: Pick<Options, 'alert' | 'reserve'>): Tone {
-  if (percent >= 100 - o.reserve) return 'error'
-  if (percent >= o.alert) return 'warning'
+export function tone(window: Window, o: Pick<Options, Group>): Tone {
+  const l = limitsFor(window, o)
+  if (reached(window, l.pause)) return 'error'
+  if (reached(window, l.throttle) || reached(window, l.commit)) return 'warning'
   return 'success'
 }
 
@@ -337,8 +425,8 @@ export function bandRows(windows: readonly Window[], columns: number, o: Options
   width = Math.max(5, Math.min(BAR_MAX, width))
   return rows.map((r) => ({
     label: r.label.padEnd(labelWidth),
-    runs: bar(width, r.w.percentUsed, 100 - o.reserve),
-    tone: tone(r.w.percentUsed, o),
+    runs: bar(width, r.w.percentUsed, limitsFor(r.w, o).pause.on ? limitsFor(r.w, o).pause.at : null),
+    tone: tone(r.w, o),
     percent: r.percent,
     reset: showReset ? r.reset : '',
   }))

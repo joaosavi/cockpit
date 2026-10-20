@@ -1,11 +1,13 @@
 // Guards the account usage limit before it runs out.
 //
-// Above the alert (90%), only one subagent runs at a time. From `commitAt` (97%), the agent is asked once
-// per window to commit its work in progress, without pushing. At the reserve (98%), the session stops
-// calling tools except a commit, the agent writes where it stopped, and the mod schedules the resume for
-// the time the window resets, unless `resume` is off. A prompt the user types during the pause gets one turn without subagents, spent from
-// the reserve. An automatic prompt (routine, another session, task notification) is held and goes into
-// the resume.
+// Each window has its own limits: the 5-hour one, and the 7-day ones (per-model weekly windows
+// included). Past its throttle stage (5-hour 90%, 7-day 97%), only one subagent runs at a time. Past its
+// commit stage (97%, 98%), the agent is asked once per window to commit its work in progress, without
+// pushing. At its pause (98%, 99%), the session stops calling tools except a commit, the agent writes
+// where it stopped, and the mod schedules the resume for the time the window resets, unless `resume` is
+// off. The most restrictive window decides. A prompt the user types during the pause gets one turn
+// without subagents, spent from the reserve. An automatic prompt (routine, another session, task
+// notification) is held and goes into the resume.
 //
 // At the end of each session, one summary line in the diary counts the tool calls the mod saw, what it
 // held back, and the time its tool.call hook spent outside `next`.
