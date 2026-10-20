@@ -93,6 +93,7 @@ async function watchInbox($: Api): Promise<void> {
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     try {
@@ -101,7 +102,7 @@ export function register(on: On, values: PluginOptions) {
       // the command is a convenience; the server still starts
     }
     try {
-      await watchInbox($)
+      if (o.answers) await watchInbox($)
     } catch {
       // without the inbox the page cannot answer this session; everything else works
     }

@@ -347,6 +347,13 @@ test('a measure past the thresholds turns ctx red and 5h yellow', async ($, on) 
   expect(await segment(ui, ' 80%')).toMatchObject({ props: { color: 'warning' } })
 })
 
+test('disabled, the band draws nothing of the hud', { options: { enabled: false } }, async ($, on) => {
+  setup(on)
+  await $.session.start(START)
+  const ui = await $.ui.mount(band(120, false))
+  expect(await ui.find({ type: 'Text', text: 'my-app' })).toBeUndefined()
+})
+
 const LINE_MODE = { options: { band: 'line' }, timeoutMs: 5000 }
 
 test('line band draws one row with separators', LINE_MODE, async ($, on) => {

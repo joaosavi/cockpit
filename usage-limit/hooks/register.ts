@@ -189,6 +189,7 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd

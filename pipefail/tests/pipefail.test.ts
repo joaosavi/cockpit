@@ -31,6 +31,8 @@ test('an extra runner from the options gets pipefail, and is left alone without 
 
 test('extraRunners reads a list or a comma separated string, and drops what is not a script name', () => {
   expect(options({}).extraRunners).toEqual([])
+  expect(options({}).enabled).toBe(true)
+  expect(options({ enabled: false }).enabled).toBe(false)
   expect(options({ extraRunners: ['verify', ' rules ', 'verify', 'a|b', ''] }).extraRunners).toEqual(['verify', 'rules'])
   expect(options({ extraRunners: 'verify, rules' }).extraRunners).toEqual(['verify', 'rules'])
 })

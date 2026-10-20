@@ -163,6 +163,48 @@ test('a command that died with 137 runs again with a single process', async ($, 
   expect(r).toMatchObject({ text: 'ok', context: [expect.stringContaining('died of memory')] })
 })
 
+test('with reduce off, a command that only fits with one process waits instead', { options: { reduce: false } }, async ($, on) => {
+  const c = { used: [LIMIT - 500 * MB, LIMIT - 2 * GB], commands: [], responses: [] }
+  setup(on, c)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn turbo run test' })
+  expect(c.commands).toEqual(['yarn turbo run test'])
+})
+
+test('with wait off, a command that does not fit is refused at once', { options: { wait: false } }, async ($, on) => {
+  const c = { used: [LIMIT - 100 * MB, LIMIT - 2 * GB], commands: [], responses: [] }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(c.commands).toEqual([])
+  expect(r).toMatchObject({ deny: expect.stringContaining('after waiting 0s') })
+})
+
+test('with refuse off, a command that never fits runs as written after the wait', { options: { refuse: false } }, async ($, on) => {
+  const c = { used: [LIMIT - 100 * MB], commands: [], responses: [] }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(c.commands).toEqual(['npx tsc --noEmit'])
+  expect(r).not.toHaveProperty('deny')
+})
+
+test('with retry137 off, a command that died with 137 is not run again', { options: { retry137: false } }, async ($, on) => {
+  const c = { used: [LIMIT - 2 * GB], commands: [], responses: ['Exit code 137\nKilled', 'ok'] }
+  setup(on, c)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn turbo run test' })
+  expect(c.commands).toEqual(['yarn turbo run test'])
+})
+
+test('disabled, a heavy command runs as it came, whatever the memory', { options: { enabled: false } }, async ($, on) => {
+  const c = { used: [LIMIT - 100 * MB], commands: [], responses: [] }
+  setup(on, c)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(c.commands).toEqual(['npx tsc --noEmit'])
+})
+
 test('a previously measured peak beats the estimate', async ($, on) => {
   // tsc estimated at 1 GB would not fit in 500 MB, but the measured peak was 300 MB.
   const c = { used: [LIMIT - 500 * MB], commands: [], responses: [], peaks: { 'npx tsc': [200 * MB, 300 * MB] } }

@@ -1,9 +1,10 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import { countsOf, DEFAULTS, inboxMessage, installPathOf, options, panelText, PYTHONS, serverEnv, startArgs } from '../hooks/rules.ts'
 
 test('options keep valid values and fall back to the defaults', () => {
   expect(options({})).toEqual(DEFAULTS)
-  expect(options({ port: 8080, model: 'haiku', refreshMinutes: 10, autostart: false })).toEqual({ port: 8080, model: 'haiku', refreshMinutes: 10, autostart: false })
+  expect(options({ port: 8080, model: 'haiku', refreshMinutes: 10, autostart: false })).toEqual({ ...DEFAULTS, port: 8080, model: 'haiku', refreshMinutes: 10, autostart: false })
+  expect(options({ enabled: false, answers: false })).toMatchObject({ enabled: false, answers: false })
   expect(options({ port: 80, model: 'x; rm -rf /', refreshMinutes: 0 })).toEqual(DEFAULTS)
 })
 
@@ -46,4 +47,36 @@ test('an inbox message needs an id and some text', () => {
   expect(inboxMessage('{"id":"a1","text":"  "}')).toBeNull()
   expect(inboxMessage('{"text":"no id"}')).toBeNull()
   expect(inboxMessage('{')).toBeNull()
+})
+
+function inboxScene(on: Parameters<Parameters<typeof test>[1]>[1], writes: string[]) {
+  const clock = mock.clock(on, { now: 0 })
+  mock.env(on, { HOME: '/home' })
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('command.register', () => ({ value: undefined }))
+  on('fs.read', () => ({ deny: 'no file' }))
+  on('fs.write', ($, e) => {
+    writes.push(e.path)
+    return { value: undefined }
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  return clock
+}
+
+const start = { surface: 'terminal', isInteractive: true, cwd: '/work' } as const
+
+test('the session checks its inbox every 2 seconds, so the page can answer it', { options: { autostart: false } }, async ($, on) => {
+  const writes: string[] = []
+  const clock = inboxScene(on, writes)
+  await $.session.start(start)
+  await clock.advance(2100)
+  expect(writes.some((p) => p.endsWith('/inbox/abcdef123456.seen'))).toBe(true)
+})
+
+test('with answers off, the session never checks its inbox', { options: { autostart: false, answers: false } }, async ($, on) => {
+  const writes: string[] = []
+  const clock = inboxScene(on, writes)
+  await $.session.start(start)
+  await clock.advance(6000)
+  expect(writes).toEqual([])
 })

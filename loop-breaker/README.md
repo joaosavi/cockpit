@@ -24,9 +24,13 @@ None.
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: no count, no nudge. Takes effect in the next session, or after `/reload-plugins`. |
 | `editLimit` | `5` | Fix attempts on one file in one turn before the nudge. |
 | `errorLimit` | `3` | Times the same error may come back in one turn before the nudge. |
 | `repeatLimit` | `3` | Identical tool calls in a row before the nudge. |
+| `editCheck` | `true` | Nudge after `editLimit` fix attempts on one file. |
+| `errorCheck` | `true` | Nudge after the same error comes back `errorLimit` times. |
+| `repeatCheck` | `true` | Nudge after `repeatLimit` identical calls in a row. |
 
 ## What it records
 

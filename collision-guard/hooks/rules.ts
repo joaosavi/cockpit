@@ -9,6 +9,10 @@
 export type GitMode = 'confirm' | 'note' | 'off'
 
 export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
+  // Off, edits are still recorded for the other sessions, and only the note and the toast are left out.
+  editWarnings: boolean
   git: GitMode
   // How long another session's edit to a file outside any git repo counts, in minutes. Inside a repo,
   // an edit counts while git still shows the file as changed.
@@ -17,13 +21,15 @@ export type Options = {
   expireHours: number
 }
 
-export const DEFAULTS: Options = { git: 'confirm', windowMinutes: 30, expireHours: 24 }
+export const DEFAULTS: Options = { enabled: true, editWarnings: true, git: 'confirm', windowMinutes: 30, expireHours: 24 }
 
 export function options(values: Readonly<Record<string, unknown>>): Options {
   const git = values.git
   const window = Number(values.windowMinutes)
   const expire = Number(values.expireHours)
   return {
+    enabled: values.enabled !== false,
+    editWarnings: values.editWarnings !== false,
     git: git === 'note' || git === 'off' || git === 'confirm' ? git : DEFAULTS.git,
     windowMinutes: Number.isFinite(window) && window > 0 ? window : DEFAULTS.windowMinutes,
     expireHours: Number.isFinite(expire) && expire > 0 ? expire : DEFAULTS.expireHours,

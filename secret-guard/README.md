@@ -24,9 +24,11 @@ None.
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: every value shows in tool output as it is. Takes effect in the next session, or after `/reload-plugins`. |
 | `secretsFile` | `~/.secrets` | `KEY=value` file whose every value is a secret, whatever its name. |
 | `envRoot` | empty | Folder searched for `.env` files, 5 levels deep. Empty searches none. |
 | `minLength` | `12` | Shorter values are left alone, except known token formats and the values of the secrets files. |
+| `fillCommands` | `true` | Run a Bash command that names `<hidden:NAME>` with the real value. Off, such a command does not run, and the agent is told to read the value inside the command. |
 
 By default the mod reads no `.env` files: the list holds the secrets file, the environment variables, their URL passwords, and the known token formats. To cover your projects' `.env` files too, set `envRoot` to the folder that holds your repos, such as `~/code`. The mod then scans it at start, checks its folders for new `.env` files at most once a minute, and rebuilds the list at least every 10 minutes.
 

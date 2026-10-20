@@ -18,7 +18,7 @@ Collect these facts in one command, before asking anything:
 - `claude --version`, and `node --version`. The hud status line needs Node 22.18 or later. On macOS and Linux it runs through `sh`; on Windows it runs `node` on `statusline.ts` directly, since Claude Code may run the command in PowerShell.
 - `claude plugin list`: which `@cockpit` mods are installed and enabled.
 - The marketplace entry: `installLocation`, `source` and `autoUpdate` of `cockpit` in `<config>/plugins/known_marketplaces.json`. The status line script is `<installLocation>/hud/statusline/statusline.sh`, and beside it `statusline.ts`. Check that the files exist. On Windows, write `installLocation` with forward slashes wherever it goes into a command: Git Bash drops backslashes.
-- In the settings: `extraKnownMarketplaces.cockpit`, `statusLine`, `spinnerTipsEnabled`, `autoCompactWindow`, `enabledPlugins["claude-hud@claude-hud"]`, and `pluginConfigs` entries ending in `@cockpit`.
+- In the settings: which mods have `enabled: false`, `extraKnownMarketplaces.cockpit`, `statusLine`, `spinnerTipsEnabled`, `autoCompactWindow`, `enabledPlugins["claude-hud@claude-hud"]`, and `pluginConfigs` entries ending in `@cockpit`.
 - The system time zone: `node -e 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'`.
 - The style previews: each style drawn by the real script, with the user's own folder and branch, narrow enough to fit the question's preview box. Run this from the user's working folder:
 
@@ -51,6 +51,7 @@ Ask about these only when the user asked, or the setup calls for them:
 - Bars and colors: `bar` (`dots` `●○`, the default, `blocks` `▰▱`, `solid` `█░`, `line` `━─`, `squares` `■□`), `barColor` (`gradient`, the default, `solid` or `tone`), `colors` for ok, warning and critical, and fields to hide (`model`, `project`, `branch`, `age`, `calls`, `ctx`, `5h`, `7d`, `reset`, `mem`).
 - `secret-guard`: `secretsFile` (default `~/.secrets`) and `envRoot`, the folder whose `.env` files hold secrets.
 - `pipefail`: `extraRunners`, script names that run tests besides the usual ones.
+- Mods to turn off. Each mod has an `enabled` option, and each guard has switches for its own steps (listed in its README). When the user wants a mod off, ask in a second AskUserQuestion call, with `multiSelect` on and every mod a checked box means off: "Guards (1 of 2)" with `secret-guard`, `collision-guard`, `pipefail`, `memory-guard`; "Guards (2 of 2)" with `loop-breaker`, `usage-limit`; "Instruments" with `hud`, `spinner-status`, `panel`, `skill-loader`; "Memory" with `global-memory`. Describe each option by what stops: hidden secrets, held git commands, the status line, the session page. Write `enabled: false` for each checked mod, and remove `enabled` for a mod the user turns back on. Turning `hud` off also empties the status line, so leave `statusLine` as it is.
 
 ## 3. Write the settings
 
@@ -62,6 +63,7 @@ Merge exactly what the user chose:
 | HUD above the prompt | `pluginConfigs["hud@cockpit"].options.band: "panel"`. Leave `statusLine` as it is. |
 | Style and icons | `style`, and `icons` (`nerd` or `unicode`), under `pluginConfigs["hud@cockpit"].options`; when chosen, `bar`, `barColor`, `colors` (space-separated) and `hide` (comma-separated) |
 | Time zone | `timeZone` under the `hud@cockpit` and `usage-limit@cockpit` options |
+| Mods turned off | `enabled: false` under `pluginConfigs["<mod>@cockpit"].options`, one per mod the user turned off |
 | Spinner tip | `spinnerTipsEnabled: false` whenever `spinner-status@cockpit` is enabled, so the mod's line replaces Claude Code's tip instead of sitting under it |
 | When to compact | top-level `autoCompactWindow: <tokens>` |
 | Updates (always, no question) | `extraKnownMarketplaces.cockpit: { "source": <the source from known_marketplaces.json, copied exactly>, "autoUpdate": true }`. Claude Code refuses a marketplace whose settings entry names a different source, so copy it as it is. If the entry exists, set only `autoUpdate`. With this on, every mod updates by itself a few minutes after the first message of a session. |

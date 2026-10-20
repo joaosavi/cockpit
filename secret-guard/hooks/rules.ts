@@ -5,6 +5,10 @@
 // the password of every `scheme://user:password@` URL. A value is replaced by `<hidden:NAME>` in every tool result.
 
 export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
+  // Off, a Bash command that names a placeholder does not run, instead of running with the value.
+  fillCommands: boolean
   // A KEY=value file whose every value is a secret, whatever the name.
   secretsFile: string
   // The folder searched for `.env*` files. Empty searches none.
@@ -14,7 +18,7 @@ export type Options = {
   minLength: number
 }
 
-export const DEFAULTS: Options = { secretsFile: '~/.secrets', envRoot: '', minLength: 12 }
+export const DEFAULTS: Options = { enabled: true, fillCommands: true, secretsFile: '~/.secrets', envRoot: '', minLength: 12 }
 
 // A value the secrets files declare whole is hidden from this length, below `minLength`, because a tool
 // that hands out passwords, such as a vault, writes there passwords of 8 to 11 characters. Shorter
@@ -41,6 +45,8 @@ export function options(values: unknown): Options {
   }
   const v: unknown = Reflect.get(values, 'minLength')
   return {
+    enabled: Reflect.get(values, 'enabled') !== false,
+    fillCommands: Reflect.get(values, 'fillCommands') !== false,
     secretsFile: text('secretsFile', DEFAULTS.secretsFile),
     envRoot: text('envRoot', DEFAULTS.envRoot),
     minLength: typeof v === 'number' && Number.isFinite(v) && v >= 1 ? v : DEFAULTS.minLength,
@@ -373,6 +379,13 @@ export function unfilledText(names: readonly string[], t: Table): string {
   const why = names.map((n) => (t.ambiguous.has(n) ? `${n} has two different values in your files` : `the value of ${n} is not known, only its format`))
   return (
     `secret-guard: did not run the command, because it cannot fill in ${names.map(placeholder).join(', ')}: ${why.join('; ')}. ` +
+    'Read the value inside the command instead, from its variable or .env file (for example `set -a; . ./.env; set +a` before the command), so it never shows in the transcript.'
+  )
+}
+
+export function fillOffText(names: readonly string[]): string {
+  return (
+    `secret-guard: did not run the command, because filling placeholders in commands is off, and it names ${names.map(placeholder).join(', ')}. ` +
     'Read the value inside the command instead, from its variable or .env file (for example `set -a; . ./.env; set +a` before the command), so it never shows in the transcript.'
   )
 }

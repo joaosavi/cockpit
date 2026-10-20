@@ -1,6 +1,6 @@
 {
   "name": "hud",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, and memory headroom. /hud opens the full view",
   "author": {
     "name": "João Savi"
@@ -18,6 +18,12 @@
     "activity"
   ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Draw the band, the activity row and /hud, and the status line script. Off, the mod draws nothing and the status line prints an empty line.",
+      "default": true
+    },
     "band": {
       "type": "string",
       "title": "Band",

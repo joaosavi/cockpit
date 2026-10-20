@@ -27,7 +27,11 @@ None.
 
 ## Options
 
-None.
+| Option | Default | Meaning |
+| :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: no skill is delivered and nothing is held. Takes effect in the next session, or after `/reload-plugins`. |
+| `holdWrites` | `true` | Hold a write, a commit or a PR once, with the skill in the refusal, so the agent redoes it following the skill. Off, the call runs and the skill comes with its result. |
+| `diagnoseReminder` | `true` | Remind the agent to load `diagnosing-bugs` when your prompt carries an error or says something broke. |
 
 ## The skills
 

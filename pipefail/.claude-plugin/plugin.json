@@ -1,6 +1,6 @@
 {
   "name": "pipefail",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Adds set -o pipefail to a command that pipes a test, typecheck or lint run into tail, head or grep, so a failing run cannot exit 0 and read as a pass.",
   "author": {
     "name": "João Savi",
@@ -17,6 +17,12 @@
     "mod"
   ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Rewrite piped test, typecheck and lint runs. Off, the mod does nothing.",
+      "default": true
+    },
     "extraRunners": {
       "type": "string",
       "multiple": true,

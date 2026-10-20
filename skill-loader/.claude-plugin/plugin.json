@@ -1,6 +1,6 @@
 {
   "name": "skill-loader",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Loads the right skill at the right moment, so CLAUDE.md needs no load-this-skill rules: typescript-best-practices for .ts, writing-for-agents for SKILL.md, AGENTS.md and CLAUDE.md, domain-modeling for CONTEXT.md and ADRs, technical-writing for READMEs, commits and PRs, and a diagnosing-bugs reminder when you paste an error.",
   "author": {
     "name": "João Savi",
@@ -15,5 +15,25 @@
     "typescript",
     "technical-writing",
     "mod"
-  ]
+  ],
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Deliver skills when the agent touches a matching file or writes a commit. Off, the mod does nothing.",
+      "default": true
+    },
+    "holdWrites": {
+      "type": "boolean",
+      "title": "Hold writes",
+      "description": "Hold a write, a commit or a PR once, with the skill in the refusal, so the agent redoes it following the skill. Off, the call runs and the skill comes with its result.",
+      "default": true
+    },
+    "diagnoseReminder": {
+      "type": "boolean",
+      "title": "Diagnose reminder",
+      "description": "Remind the agent to load diagnosing-bugs when your prompt carries an error or says something broke.",
+      "default": true
+    }
+  }
 }

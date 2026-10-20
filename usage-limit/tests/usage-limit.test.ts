@@ -68,6 +68,15 @@ test('above the alert, only one subagent runs at a time', async ($, on) => {
   expect(refusal).toMatchObject({ deny: expect.stringContaining('only one subagent') })
 })
 
+test('disabled, a tool runs in the reserve, and nothing is scheduled', { options: { enabled: false } }, async ($, on) => {
+  const s = { submitted: [], running: 0, initialUsage: 99 }
+  setup(on, s)
+  await $.session.start(start)
+  await $.session.measure({ rateLimits: windows(99), context: { tokens: 0, window: 200000, percent: 0 }, changed: ['rateLimits'] })
+  expect(await $.tool.call({ tool: 'Bash', command: 'ls' })).toEqual({ result: 'ran' })
+  expect(s.submitted.length).toBe(0)
+})
+
 test('in the reserve, refuses tools and resumes when the window resets', SAO_PAULO, async ($, on) => {
   const s = { submitted: [], running: 0, initialUsage: 97 }
   const clock = setup(on, s)

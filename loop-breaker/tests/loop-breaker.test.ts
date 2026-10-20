@@ -83,6 +83,23 @@ test('the same call three times in a row gets the nudge', async ($, on) => {
   expect(await $.tool.call({ tool: 'Bash', command: 'gh run view 1' })).toMatchObject({ context: [expect.stringContaining('same arguments 3 times in a row')] })
 })
 
+test('a check turned off gives no nudge, and the others still work', { options: { repeatCheck: false } }, async ($, on) => {
+  const s = { results: [{ text: 'file' }, { text: 'file' }, { text: 'file' }, FAIL, FAIL, FAIL] }
+  prepare(on, s)
+  await $.session.start(start)
+  for (let i = 0; i < 3; i += 1) expect(hasNudge(await $.tool.call({ tool: 'Read', file_path: '/w/a.ts' }))).toBe(false)
+  await $.tool.call({ tool: 'Bash', command: 'yarn test a' })
+  await $.tool.call({ tool: 'Bash', command: 'yarn test b' })
+  expect(hasNudge(await $.tool.call({ tool: 'Bash', command: 'yarn test c' }))).toBe(true)
+})
+
+test('disabled, the mod adds no nudge', { options: { enabled: false } }, async ($, on) => {
+  const s = { results: [FAIL, FAIL, FAIL] }
+  prepare(on, s)
+  await $.session.start(start)
+  for (const c of ['a', 'b', 'c']) expect(hasNudge(await $.tool.call({ tool: 'Bash', command: `yarn test ${c}` }))).toBe(false)
+})
+
 test('the end of the turn resets the counts', async ($, on) => {
   const s = { results: [FAIL, FAIL, FAIL] }
   prepare(on, s)

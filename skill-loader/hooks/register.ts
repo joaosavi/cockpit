@@ -10,8 +10,8 @@
 // skills it loaded by name, the calls it refused so the agent would redo them with the skill, and the
 // time its tool.call hook spent outside `next`.
 
-import type { Hook, On } from 'claude-code'
-import { alreadyDeliveredText, asSkill, bareSkill, installPathOf, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
+import type { Hook, On, PluginOptions, ToolCallResult } from 'claude-code'
+import { alreadyDeliveredText, DEFAULTS, options, type Options, asSkill, bareSkill, installPathOf, BUG_REMINDER, byCommand, byTool, loadedText, looksLikeError, READ_TOOLS, refusalText, WRITE_TOOLS } from './rules.ts'
 import { countAction, countCall, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -96,6 +96,12 @@ async function load($: Api, skill: string, reason: string): Promise<string | nul
   return text
 }
 
+// With holdWrites off, the call ran, and the skill comes along with its result.
+function withSkill(r: ToolCallResult, skill: string, text: string): ToolCallResult {
+  if (r.deny !== undefined || r.isError === true) return r
+  return { ...r, context: [...(r.context ?? []), loadedText(skill, text)] }
+}
+
 function pathOf(e: { tool: string }): string {
   const v: unknown = Reflect.get(e, e.tool === 'NotebookEdit' ? 'notebook_path' : 'file_path')
   return typeof v === 'string' ? v : ''
@@ -120,7 +126,12 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
   }
 }
 
-export function register(on: On) {
+let o: Options = DEFAULTS
+
+export function register(on: On, values: PluginOptions) {
+  o = options(values)
+  if (!o.enabled) return
+
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
@@ -160,6 +171,7 @@ export function register(on: On) {
         if (t === null || loaded.has(t.skill)) return pass(e)
         const text = await load($, t.skill, 'command')
         if (text === null) return pass(e)
+        if (!o.holdWrites) return withSkill(await pass(e), t.skill, text)
         countAction(tally, 'refused')
         await log($, { event: 'refused', skill: t.skill, tool: e.tool })
         return { deny: refusalText(t.skill, 'commit messages and pull request descriptions', text) }
@@ -178,6 +190,7 @@ export function register(on: On) {
       if (WRITE_TOOLS.has(e.tool)) {
         const text = await load($, t.skill, `write to ${path}`)
         if (text === null) return pass(e)
+        if (!o.holdWrites) return withSkill(await pass(e), t.skill, text)
         countAction(tally, 'refused')
         await log($, { event: 'refused', skill: t.skill, tool: e.tool })
         return { deny: refusalText(t.skill, path, text) }
@@ -187,7 +200,7 @@ export function register(on: On) {
   )
 
   on('prompt.submit', async ($, e, next) => {
-    if (AUTOMATIC_ORIGINS.has(e.origin.kind) || loaded.has('diagnosing-bugs') || !looksLikeError(e.text)) return next(e)
+    if (!o.diagnoseReminder || AUTOMATIC_ORIGINS.has(e.origin.kind) || loaded.has('diagnosing-bugs') || !looksLikeError(e.text)) return next(e)
     countAction(tally, 'reminded-diagnosing-bugs')
     await log($, { event: 'reminded-diagnosing-bugs' })
     return next({ ...e, context: [...(e.context ?? []), BUG_REMINDER] })

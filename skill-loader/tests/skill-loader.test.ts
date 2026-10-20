@@ -113,6 +113,24 @@ test('writing without a prior read refuses once, with the skill in the refusal',
   expect(c.calls).toEqual(['Write'])
 })
 
+test('with holdWrites off, the write runs and the skill comes with its result', { options: { holdWrites: false } }, async ($, on) => {
+  const c = { read: [], calls: [] }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.tool.call({ tool: 'Write', file_path: '/w/new.ts', content: 'x' })
+  expect(r).toMatchObject({ text: 'ok', context: [expect.stringContaining('# Body of typescript-best-practices')] })
+  expect(await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })).toMatchObject({ text: 'ok', context: [expect.stringContaining('# Body of technical-writing')] })
+  expect(c.calls).toEqual(['Write', 'Bash'])
+})
+
+test('disabled, the mod delivers nothing and holds nothing', { options: { enabled: false } }, async ($, on) => {
+  const c = { read: [], calls: [] }
+  setup(on, c)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Write', file_path: '/w/new.ts', content: 'x' })).toMatchObject({ text: 'ok' })
+  expect(c.read).toEqual([])
+})
+
 test('a commit without technical-writing refuses once, with the skill in the refusal', async ($, on) => {
   const c = { read: [], calls: [] }
   setup(on, c)
@@ -166,6 +184,14 @@ test('an error pasted by the user gets the diagnosing-bugs reminder', async ($, 
   const auto = await $.prompt.submit({ text: 'TypeError: x', wait: false, origin: { kind: 'scheduled-trigger' } })
   expect(auto).toMatchObject({ text: 'TypeError: x' })
   expect('context' in auto && auto.context !== undefined).toBe(false)
+})
+
+test('with diagnoseReminder off, a pasted error gets no reminder', { options: { diagnoseReminder: false } }, async ($, on) => {
+  const c = { read: [], calls: [] }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.prompt.submit({ text: 'TypeError: x is not a function', wait: false, origin: { kind: 'bridge' } })
+  expect('context' in r && r.context !== undefined).toBe(false)
 })
 
 test('the agent asking again for a skill the mod delivered gets a short answer', async ($, on) => {

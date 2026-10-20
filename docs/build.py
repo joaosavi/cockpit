@@ -260,8 +260,8 @@ def server():
 <p>Instead of letting a session start the page, run it under systemd. Set the <code>panel</code> option <b>Start the page</b> (<code>autostart</code>) to off, then run the server as a unit:</p>
 {code("""[Service]
 User=you
-ExecStart=/usr/bin/python3 -I %h/.claude/plugins/marketplaces/cockpit/panel/server/panel.py
-Environment=PANEL_CLAUDE=%h/.local/bin/claude
+ExecStart=/usr/bin/python3 -I /home/you/.claude/plugins/marketplaces/cockpit/panel/server/panel.py
+Environment=PANEL_CLAUDE=/home/you/.local/bin/claude
 Restart=always""", 'ini')}
 <p>Set <code>PANEL_GROUPS</code> to a comma-separated list of cgroup paths, such as <code>agents.slice</code>, to show those groups and everything under them on the page.</p>
 <h2 id="srv-memory">Memory limits</h2>
@@ -305,9 +305,9 @@ def configuration():
 </tbody></table>
 <p>Run <code>/cockpit:setup</code> again at any time to change your answers. It reads what is set and asks only about what you want to change.</p>
 <h2 id="configuration-off">Turn one mod off</h2>
-<p>Claude Code refuses to disable a plugin that an enabled plugin requires, and the <code>cockpit</code> bundle requires every mod. Disable the bundle first, then the mod:</p>
+<p>Every mod has an <b>Enabled</b> option in <code>/config</code>: turn it off, then start a new session or run <code>/reload-plugins</code>. The guards also have one switch per step, listed on each mod's page. To remove a mod's hooks entirely, disable the bundle first, then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires:</p>
 {code('claude plugin disable cockpit@cockpit' + chr(10) + 'claude plugin disable pipefail@cockpit')}
-<p>The other mods stay on. Enabling the bundle again turns the mod back on. <code>spinner-status</code> also has an <b>Enabled</b> option in <code>/config</code>, which turns it off without touching the bundle.</p>'''
+<p>The other mods stay on. Enabling the bundle again turns the mod back on.</p>'''
 
 def mods_index():
     out = '<p class="lead">Eleven mods in three groups. The <code>cockpit</code> bundle installs all of them.</p>'

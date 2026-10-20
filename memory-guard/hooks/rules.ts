@@ -22,13 +22,21 @@ export type Level = {
 }
 
 export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
+  // Each step of the plan can be turned off on its own: a single process, the wait, the refusal, and
+  // the rerun after exit 137. Without the refusal, a command that never fits runs as written.
+  reduce: boolean
+  wait: boolean
+  refuse: boolean
+  retry137: boolean
   // Percentage of each group's max that stays free.
   margin: number
   // How long the command can wait for memory to drop before it is refused.
   waitSeconds: number
 }
 
-export const DEFAULTS: Options = { margin: 2, waitSeconds: 120 }
+export const DEFAULTS: Options = { enabled: true, reduce: true, wait: true, refuse: true, retry137: true, margin: 2, waitSeconds: 120 }
 
 const MB = 1024 * 1024
 const GB = 1024 * MB
@@ -50,7 +58,16 @@ export function options(values: unknown): Options {
     const v: unknown = Reflect.get(values, key)
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback
   }
-  return { margin: number('margin', DEFAULTS.margin), waitSeconds: number('waitSeconds', DEFAULTS.waitSeconds) }
+  const on = (key: string): boolean => Reflect.get(values, key) !== false
+  return {
+    enabled: on('enabled'),
+    reduce: on('reduce'),
+    wait: on('wait'),
+    refuse: on('refuse'),
+    retry137: on('retry137'),
+    margin: number('margin', DEFAULTS.margin),
+    waitSeconds: number('waitSeconds', DEFAULTS.waitSeconds),
+  }
 }
 
 // Each rule matches a runner that actually runs, at the start of the command or after `;`, `&&`, `|` or `(`.

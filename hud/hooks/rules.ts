@@ -25,6 +25,8 @@ export const FIELDS = ['model', 'project', 'branch', 'age', 'calls', 'ctx', '5h'
 export type Field = (typeof FIELDS)[number]
 
 export type Options = {
+  // Off, the mod registers no hook and the status line script prints nothing.
+  enabled: boolean
   band: BandMode
   activity: boolean
   memory: boolean
@@ -40,6 +42,7 @@ export type Options = {
 }
 
 export const DEFAULTS: Options = {
+  enabled: true,
   band: 'panel',
   activity: true,
   memory: true,
@@ -72,6 +75,7 @@ export function options(values: unknown): Options {
   const widthOf: unknown = Reflect.get(values, 'barWidth')
   const barWidth = typeof widthOf === 'number' ? widthOf : Number(widthOf)
   return {
+    enabled: flag('enabled', DEFAULTS.enabled),
     band: band === 'line' || band === 'off' ? band : 'panel',
     activity: flag('activity', DEFAULTS.activity),
     memory: flag('memory', DEFAULTS.memory),

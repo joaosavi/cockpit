@@ -32,7 +32,7 @@ function other(edits: Entry['edits'], over: Partial<Entry> = {}): Entry {
 
 test('options fall back to their defaults', () => {
   expect(options({})).toEqual(DEFAULTS)
-  expect(options({ git: 'note', windowMinutes: 10, expireHours: 2 })).toEqual({ git: 'note', windowMinutes: 10, expireHours: 2 })
+  expect(options({ git: 'note', windowMinutes: 10, expireHours: 2 })).toEqual({ ...DEFAULTS, git: 'note', windowMinutes: 10, expireHours: 2 })
   expect(options({ git: 'block', windowMinutes: -1, expireHours: 'x' })).toEqual(DEFAULTS)
 })
 
@@ -201,6 +201,25 @@ test('no note when git shows the other edit as committed, or another file was ed
   await $.session.start(start)
   expect(await $.tool.call({ tool: 'Edit', file_path: `${REPO}/a.ts`, old_string: 'a', new_string: 'b' })).not.toHaveProperty('context')
   expect(await $.tool.call({ tool: 'Write', file_path: `${REPO}/b.ts`, content: 'x' })).not.toHaveProperty('context')
+  expect(s.toasts).toEqual([])
+})
+
+test('with edit warnings off, the edit gets no note but is still recorded for the others', { options: { editWarnings: false } }, async ($, on) => {
+  const s = scene({ [`${REPO}/a.ts`]: { at: NOW - 4 * MIN, root: REPO } })
+  prepare(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Edit', file_path: `${REPO}/a.ts`, old_string: 'a', new_string: 'b' })).not.toHaveProperty('context')
+  expect(s.toasts).toEqual([])
+  const mine = parseEntry(s.files.get(`${DIR}/this-session-0002.json`) ?? '')
+  expect(Object.keys(mine?.edits ?? {})).toEqual([`${REPO}/a.ts`])
+})
+
+test('disabled, the mod neither warns nor holds git', { options: { enabled: false } }, async ($, on) => {
+  const s = scene({ [`${REPO}/a.ts`]: { at: NOW - 4 * MIN, root: REPO } })
+  prepare(on, s)
+  await $.session.start(start)
+  expect(await $.tool.call({ tool: 'Edit', file_path: `${REPO}/a.ts`, old_string: 'a', new_string: 'b' })).not.toHaveProperty('context')
+  expect(await $.tool.call({ tool: 'Bash', command: 'git add -A' })).toMatchObject({ result: 'ok' })
   expect(s.toasts).toEqual([])
 })
 

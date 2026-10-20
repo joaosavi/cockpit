@@ -34,6 +34,7 @@ The 7-day limits also apply to the per-model weekly windows, such as `seven_day_
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: no throttle, commit, pause or resume, and `/limit` is gone. Takes effect in the next session, or after `/reload-plugins`. |
 | `fiveHourThrottle` | `true` | Throttle in the 5-hour window. |
 | `fiveHourThrottleAt` | `90` | From this share of the 5-hour window, one subagent at a time. |
 | `fiveHourCommit` | `true` | Commit request in the 5-hour window. |
@@ -47,7 +48,7 @@ The 7-day limits also apply to the per-model weekly windows, such as `seven_day_
 | `sevenDayPause` | `true` | Pause in the 7-day windows. |
 | `sevenDayPauseAt` | `99` | The session pauses at this share of a 7-day window. |
 | `timeZone` | empty | IANA time zone of the reset times shown, such as `America/New_York`. Empty uses the system time zone. |
-| `resume` | `true` | Resume the session when the window resets, after the pause or after the limit error. Off, you resume it, and automatic prompts that arrive during the pause are dropped instead of held. The pre-1.5 name `resumeOnError` still works. |
+| `resume` | `true` | Resume the session when the window resets, after the pause or after the limit error. Off, you resume it, and automatic prompts that arrive during the pause are dropped instead of held. The name before 1.2, `resumeOnError`, still works. |
 | `bandFrom` | `75` | Show the band from this share of the fullest window. |
 
 The window options have no default in the manifest, so the settings from before 1.2 still apply where they are unset. `alert` sets the throttle of every window, `commitAt` the commit (`0` turns it off), and `reserve` the pause at 100 minus its value. A window option always wins over them for its own stage.

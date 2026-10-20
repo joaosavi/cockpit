@@ -1,6 +1,6 @@
 {
   "name": "panel",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "A local web page with a card for every Claude Code session on this machine: whether it waits for you, what it needs, what it is doing, with a summary from claude -p every few minutes and a refresh button.",
   "author": {
     "name": "João Savi",
@@ -9,8 +9,20 @@
   "homepage": "https://github.com/joaosavi/cockpit/tree/main/panel",
   "repository": "https://github.com/joaosavi/cockpit",
   "license": "MIT",
-  "keywords": ["sessions", "dashboard", "summary", "remote", "mod"],
+  "keywords": [
+    "sessions",
+    "dashboard",
+    "summary",
+    "remote",
+    "mod"
+  ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Register /panel, start the page server and listen for answers. Off, the mod does nothing; a server already running keeps running.",
+      "default": true
+    },
     "port": {
       "type": "number",
       "title": "Port",
@@ -23,7 +35,11 @@
       "type": "string",
       "title": "Summary model",
       "description": "The model claude -p uses to write each card",
-      "options": ["sonnet", "haiku", "opus"],
+      "options": [
+        "sonnet",
+        "haiku",
+        "opus"
+      ],
       "default": "sonnet"
     },
     "refreshMinutes": {
@@ -38,6 +54,12 @@
       "type": "boolean",
       "title": "Start the page",
       "description": "Start the page server when a session starts and it is not running. Off when a service manager such as systemd runs it",
+      "default": true
+    },
+    "answers": {
+      "type": "boolean",
+      "title": "Answers from the page",
+      "description": "Let the page send text to this session as your prompt. Off, the page shows this session's options greyed out and no reply field.",
       "default": true
     }
   }

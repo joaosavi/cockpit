@@ -144,6 +144,7 @@ Set the options in `/config`, or under `pluginConfigs` in `~/.claude/settings.js
 
 | Option | Default | What it does |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: no band, no activity row, no `/hud`, and the status line script prints an empty line. Takes effect in the next session, or after `/reload-plugins`. |
 | `band` | `panel` | `panel` draws the two rows above. `line` draws one row. `off` leaves the band to the other mods and to the activity row, and `/hud` still works. Use `off` with the status line. |
 | `activity` | `true` | Shows the activity row while a turn runs |
 | `memory` | `true` | Shows the memory headroom in the band and the `MEMORY` row |

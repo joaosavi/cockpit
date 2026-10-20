@@ -64,6 +64,8 @@ async function loadGlobal($: Api): Promise<Global | null> {
 
 export function register(on: On, options: PluginOptions) {
   values = options
+  // Off, the mod registers no hook, and the memory section stays as Claude Code wrote it.
+  if (values.enabled === false) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd

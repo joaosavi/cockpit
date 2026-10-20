@@ -495,6 +495,7 @@ function endTurn() {
 export function register(on: On, values: PluginOptions) {
   o = options(values)
   style = styleOf(o)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd

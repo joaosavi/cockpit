@@ -1,5 +1,22 @@
 // The rules of the skill-loader mod, without the mods API, so the tests can run them directly.
 
+export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
+  // Off, a write, a commit or a PR runs at once, and the skill comes with its result instead of in a refusal.
+  holdWrites: boolean
+  // Off, an error pasted in the prompt gets no diagnosing-bugs reminder.
+  diagnoseReminder: boolean
+}
+
+export const DEFAULTS: Options = { enabled: true, holdWrites: true, diagnoseReminder: true }
+
+export function options(values: unknown): Options {
+  if (typeof values !== 'object' || values === null) return DEFAULTS
+  const on = (key: string): boolean => Reflect.get(values, key) !== false
+  return { enabled: on('enabled'), holdWrites: on('holdWrites'), diagnoseReminder: on('diagnoseReminder') }
+}
+
 export type Trigger = {
   skill: string
   // A file that, when read, edited or written, calls for the skill.

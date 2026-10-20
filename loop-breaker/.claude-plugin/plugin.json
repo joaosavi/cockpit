@@ -1,6 +1,6 @@
 {
   "name": "loop-breaker",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Notices when the agent goes in circles (repeated fix attempts on one file, the same error coming back, the same call repeated) and tells it to stop and change approach; refuses nothing.",
   "author": {
     "name": "João Savi",
@@ -17,6 +17,12 @@
     "mod"
   ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Watch for loops and nudge the agent. Off, the mod does nothing.",
+      "default": true
+    },
     "editLimit": {
       "type": "number",
       "title": "Fix attempts",
@@ -40,6 +46,24 @@
       "default": 3,
       "min": 2,
       "max": 20
+    },
+    "editCheck": {
+      "type": "boolean",
+      "title": "Fix attempts check",
+      "description": "Nudge after editLimit fix attempts on one file in one turn.",
+      "default": true
+    },
+    "errorCheck": {
+      "type": "boolean",
+      "title": "Repeated error check",
+      "description": "Nudge after the same error comes back errorLimit times in one turn.",
+      "default": true
+    },
+    "repeatCheck": {
+      "type": "boolean",
+      "title": "Repeated call check",
+      "description": "Nudge after repeatLimit identical tool calls in a row.",
+      "default": true
     }
   }
 }

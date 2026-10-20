@@ -30,7 +30,7 @@ On a Team or Enterprise plan, `global-memory` installs but does nothing until yo
 
 ## Turn one mod off
 
-To turn one mod off, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`. The other mods stay on, and enabling the bundle again turns the mod back on. `spinner-status` also has an **Enabled** option in `/config`.
+To turn one mod off, set its **Enabled** option to off in `/config`, or `"enabled": false` under its `pluginConfigs` entry, and start a new session or run `/reload-plugins`. The guards also have one switch per step, such as the wait and the refusal of `memory-guard` or each signal of `loop-breaker`; each mod's README lists them. To remove a mod's hooks entirely, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`.
 
 ## Where the mods write
 

@@ -70,6 +70,7 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
@@ -108,7 +109,7 @@ export function register(on: On, values: PluginOptions) {
         const file = filePath(e)
         const count = (t.fixes.get(file) ?? 0) + 1
         t.fixes.set(file, count)
-        if (count >= o.editLimit) {
+        if (o.editCheck && count >= o.editLimit) {
           nudge = { kind: 'edits', file, count }
           t.fixes.set(file, 0)
         }
@@ -117,12 +118,12 @@ export function register(on: On, values: PluginOptions) {
         const sig = `${e.tool}: ${signature(r.text ?? '')}`
         const count = (t.errors.get(sig) ?? 0) + 1
         t.errors.set(sig, count)
-        if (count >= o.errorLimit) {
+        if (o.errorCheck && count >= o.errorLimit) {
           nudge = { kind: 'error', count }
           t.errors.set(sig, 0)
         }
       }
-      if (nudge === null && t.repeats >= o.repeatLimit) {
+      if (nudge === null && o.repeatCheck && t.repeats >= o.repeatLimit) {
         nudge = { kind: 'repeat', tool: e.tool, count: t.repeats }
         t.repeats = 0
       }

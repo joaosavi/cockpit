@@ -1,6 +1,6 @@
 {
   "name": "memory-guard",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Keeps typecheck, build, test and Playwright runs under the memory limit, the tightest cgroup limit on Linux or the machine's memory on Linux, macOS and Windows: runs them with one process, waits for memory or refuses, and reruns a command killed with exit 137.",
   "author": {
     "name": "João Savi",
@@ -20,6 +20,12 @@
     "mod"
   ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Check the memory headroom before heavy commands. Off, the mod does nothing and /ram is gone.",
+      "default": true
+    },
     "margin": {
       "type": "number",
       "title": "Margin (%)",
@@ -35,6 +41,30 @@
       "default": 120,
       "min": 0,
       "max": 600
+    },
+    "reduce": {
+      "type": "boolean",
+      "title": "Run with one process",
+      "description": "When only a single process fits, add --concurrency=1, --workers=1 or --maxWorkers=1.",
+      "default": true
+    },
+    "wait": {
+      "type": "boolean",
+      "title": "Wait for memory",
+      "description": "When nothing fits, wait up to waitSeconds for memory to free up. Off, the next step comes at once.",
+      "default": true
+    },
+    "refuse": {
+      "type": "boolean",
+      "title": "Refuse",
+      "description": "When memory does not free up, refuse the command. Off, the command runs as written and may be killed.",
+      "default": true
+    },
+    "retry137": {
+      "type": "boolean",
+      "title": "Rerun after exit 137",
+      "description": "Rerun with one process a command killed with exit 137.",
+      "default": true
     }
   }
 }

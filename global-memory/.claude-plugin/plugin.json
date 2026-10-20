@@ -1,6 +1,6 @@
 {
   "name": "global-memory",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md.",
   "author": {
     "name": "João Savi",
@@ -17,6 +17,12 @@
     "mod"
   ],
   "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Add the machine-wide memory folder to every session. Off, the memory section stays as Claude Code wrote it.",
+      "default": true
+    },
     "globalDir": {
       "type": "string",
       "title": "Global memory folder",

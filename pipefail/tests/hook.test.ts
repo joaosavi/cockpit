@@ -67,6 +67,15 @@ test('the diary names the runner of each rewrite, and the session ends with one 
 
 const EXTRA = { options: { extraRunners: ['verify', 'rules'] } }
 
+test('disabled, the mod leaves the command alone and writes no diary', { options: { enabled: false } }, async ($, on) => {
+  const s = { ran: [], written: new Map<string, string>() }
+  prepare(on, s)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Bash', command: 'yarn vitest run 2>&1 | tail -5' })
+  expect(s.ran).toEqual(['yarn vitest run 2>&1 | tail -5'])
+  expect(s.written.has(DIARY)).toBe(false)
+})
+
 test('with extraRunners set, a piped repo check script is rewritten', EXTRA, async ($, on) => {
   const s = { ran: [], written: new Map<string, string>() }
   prepare(on, s)

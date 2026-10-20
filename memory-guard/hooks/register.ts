@@ -261,8 +261,8 @@ type Plan = { command: string; isReduced: boolean }
 // `held.ms` gets the time spent waiting.
 async function fit($: Api, command: string, h: Heavy, held: { ms: number }): Promise<Plan | null> {
   const peaks = await readPeaks($)
-  const smaller = reduced(command, h)
-  const deadline = (await $.clock.now()) + o.waitSeconds * 1000
+  const smaller = o.reduce ? reduced(command, h) : null
+  const deadline = (await $.clock.now()) + (o.wait ? o.waitSeconds * 1000 : 0)
   let waited = false
   for (;;) {
     const free = await headroomNow($)
@@ -276,6 +276,11 @@ async function fit($: Api, command: string, h: Heavy, held: { ms: number }): Pro
       return { command: smaller, isReduced: true }
     }
     if ((await $.clock.now()) >= deadline) {
+      if (!o.refuse) {
+        countAction(tally, 'let-through')
+        await log($, { event: 'let-through', key: h.key, headroom: mb(free), waited })
+        return { command, isReduced: false }
+      }
       countAction(tally, 'refused')
       await log($, { event: 'refused', key: h.key, headroom: mb(free), cost: mb(cost(h, smaller !== null, peaks)) })
       return null
@@ -314,6 +319,7 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
@@ -369,7 +375,7 @@ export function register(on: On, values: PluginOptions) {
       if (h === null) return pass(e)
       const plan = await fit($, e.command, h, held)
       if (plan === null) {
-        return { deny: refusalText(h, o.waitSeconds, report(await readLevels($), await readMachine($), o.margin)) }
+        return { deny: refusalText(h, o.wait ? o.waitSeconds : 0, report(await readLevels($), await readMachine($), o.margin)) }
       }
       const notice: string[] = []
       if (plan.isReduced) notice.push(reducedNotice(plan.command))
@@ -385,7 +391,7 @@ export function register(on: On, values: PluginOptions) {
       ticker?.cancel()
       if (base !== null && ticker !== null) await storePeak($, peakKey(h, plan.isReduced), highest - base)
 
-      const smaller = reduced(e.command, h)
+      const smaller = o.retry137 ? reduced(e.command, h) : null
       if (!plan.isReduced && smaller !== null && diedOfMemory(r.text ?? '')) {
         countAction(tally, 'retried-after-137')
         await log($, { event: 'retried-after-137', key: h.key })

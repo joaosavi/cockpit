@@ -17,7 +17,7 @@ import {
   expandHome,
   fillCommand,
   findArgs,
-  filledNotice,
+  filledNotice, fillOffText,
   type Found,
   isEnvFileName,
   parseFind,
@@ -384,6 +384,7 @@ async function timed<I, R>($: Api, next: (input: I) => Promise<R>, body: (pass: 
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
@@ -422,6 +423,11 @@ export function register(on: On, values: PluginOptions) {
       const before = e.tool === 'Bash' && /<(?:hidden|oculto):/.test(e.command) ? await currentTable($) : null
       const f = e.tool === 'Bash' && before !== null ? fillCommand(e.command, before) : null
       if (before !== null && f !== null && f.filled.length + f.unfilled.length > 0) {
+        if (!o.fillCommands) {
+          countAction(tally, 'fill-off')
+          await log($, { event: 'fill-off', names: [...f.filled, ...f.unfilled] })
+          return { deny: fillOffText([...f.filled, ...f.unfilled]) }
+        }
         if (f.unfilled.length > 0) {
           countAction(tally, 'unfilled')
           await log($, { event: 'unfilled', names: f.unfilled })
@@ -429,7 +435,8 @@ export function register(on: On, values: PluginOptions) {
         }
         countAction(tally, 'filled')
         await log($, { event: 'filled', names: f.filled })
-        input = { ...e, command: f.command }
+        // `f` exists only for Bash, and the check repeats it so the input keeps its Bash type.
+        if (e.tool === 'Bash') input = { ...e, command: f.command }
         notes.push(filledNotice(f.filled))
       }
       const r = await pass(input)

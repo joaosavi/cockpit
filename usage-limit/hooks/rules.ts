@@ -24,6 +24,8 @@ export type Limits = { throttle: Stage; commit: Stage; pause: Stage }
 export type Group = 'fiveHour' | 'sevenDay'
 
 export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
   fiveHour: Limits
   sevenDay: Limits
   // Time zone of the times the agent and the user read.
@@ -38,6 +40,7 @@ export type Options = {
 // 10% of the 7-day window is a lot of work on the bigger plans, so it throttles and pauses later than
 // the 5-hour one. The commit comes one point before each pause.
 export const DEFAULTS: Options = {
+  enabled: true,
   fiveHour: { throttle: { on: true, at: 90 }, commit: { on: true, at: 97 }, pause: { on: true, at: 98 } },
   sevenDay: { throttle: { on: true, at: 97 }, commit: { on: true, at: 98 }, pause: { on: true, at: 99 } },
   timeZone: '',
@@ -64,7 +67,7 @@ export function options(values: unknown): Options {
     return typeof v === 'number' && Number.isFinite(v) ? v : undefined
   }
   const timeZone = get('timeZone')
-  // `resumeOnError` is the option's name before 1.5, kept so older settings still apply.
+  // `resumeOnError` is the option's name before 1.2, kept so older settings still apply.
   const resume = get('resume') ?? get('resumeOnError')
   // The options before 1.2 set every window alike: `alert` throttles, `commitAt` commits (0 off) and
   // `reserve` pauses at 100 minus it. They apply to a stage whose own options are unset.
@@ -89,6 +92,7 @@ export function options(values: unknown): Options {
   }
   const bandFrom = number('bandFrom')
   return {
+    enabled: get('enabled') !== false,
     fiveHour: limits('fiveHour'),
     sevenDay: limits('sevenDay'),
     timeZone: typeof timeZone === 'string' ? validTimeZone(timeZone.trim()) : DEFAULTS.timeZone,

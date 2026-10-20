@@ -180,6 +180,7 @@ async function afterEdit($: Api, path: string, r: ToolCallResult): Promise<ToolC
   mine.edits[path] = { at: now, root }
   mine.seenAt = now
   await save($, mine)
+  if (!o.editWarnings) return r
   const others = liveOthers(await entries($), mine.session, now, o)
   const fresh = hitsForPath(path, others, now, o).filter((h) => !warned.has(`${h.path}|${h.session}|${h.at}`))
   if (fresh.length === 0) return r
@@ -253,6 +254,7 @@ async function removeFiles($: Api, paths: readonly string[]): Promise<void> {
 
 export function register(on: On, values: PluginOptions) {
   o = options(values)
+  if (!o.enabled) return
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd

@@ -437,7 +437,7 @@ test('the rules: candidates, accepts, options', () => {
   expect(accepts('<oculto:GITHUB_TOKEN>', 12)).toBe(false)
   expect(accepts('<hidden:GITHUB_TOKEN>', 12)).toBe(false)
   expect(accepts('long-enough-value', 12)).toBe(true)
-  expect(options({ minLength: 8, secretsFile: '~/s' })).toEqual({ secretsFile: '~/s', envRoot: '', minLength: 8 })
+  expect(options({ minLength: 8, secretsFile: '~/s' })).toEqual({ enabled: true, fillCommands: true, secretsFile: '~/s', envRoot: '', minLength: 8 })
   expect(options({ envRoot: ' ~/repos ' }).envRoot).toBe('~/repos')
   expect(expandHome('~/repos', HOME)).toBe(`${HOME}/repos`)
   const t = buildTable({ secrets: null, secretsDirFiles: [], envFiles: [], environ: [['SEGREDO_CACHE_TOKEN', 'ignored-perl-test-var'], ['API_KEY', 'env-api-key-value-fake']], minLength: 12 })
@@ -622,6 +622,22 @@ test('a Bash command that only searches for the placeholder text runs as written
   const r = await $.tool.call({ tool: 'Bash', command })
   expect(w.calls[0]?.command).toBe(command)
   expect(dump(r)).not.toContain('filled in the real value')
+})
+
+test('with fillCommands off, a Bash command with a placeholder does not run', { options: { envRoot: '~/repos', fillCommands: false } }, async ($, on) => {
+  const w = freshWorld()
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'curl -H "Authorization: token <hidden:GITHUB_TOKEN>" api' })
+  expect(w.calls).toEqual([])
+  expect(r).toMatchObject({ deny: expect.stringContaining('filling placeholders in commands is off') })
+})
+
+test('disabled, a token in the output stays as it is', { options: { envRoot: '~/repos', enabled: false } }, async ($, on) => {
+  const w = freshWorld()
+  w.answers.push(bash(`token ${FAKE_GH}\n`))
+  setup(on, w)
+  const r = await $.tool.call({ tool: 'Bash', command: 'echo token' })
+  expect(stdoutOf(r)).toBe(`token ${FAKE_GH}\n`)
 })
 
 test('a Bash command with a placeholder the mod cannot fill does not run', REPOS, async ($, on) => {

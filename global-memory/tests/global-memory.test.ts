@@ -173,6 +173,16 @@ test('without the global folder, the section and the context stay as core sent t
   expect((await $.prompt.context({ blocks: [], instructionFiles: FILES })).instructionFiles).toEqual(FILES)
 })
 
+test('disabled, the section and the context stay as core sent them, with the global folder in place', { options: { enabled: false } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true }
+  prepare(on, s)
+  on('prompt.section', () => ({ text: coreSection(PROJECT) }))
+  on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: FILES }))
+  await $.session.start(start)
+  expect((await $.prompt.section({ name: 'memory', text: coreSection(PROJECT) })).text).toBe(coreSection(PROJECT))
+  expect((await $.prompt.context({ blocks: [], instructionFiles: FILES })).instructionFiles).toEqual(FILES)
+})
+
 test('the context gets the global MEMORY.md as a memory instruction file after the project index', async ($, on) => {
   const s = { written: new Map<string, string>(), globalExists: true }
   prepare(on, s)

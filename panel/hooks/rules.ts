@@ -1,15 +1,18 @@
 // The pure part of the panel mod: its options, where the server is, and the text of /panel. Nothing here
 // touches `$`, so the tests cover it without stubs.
 
-export type Options = { port: number; model: string; refreshMinutes: number; autostart: boolean }
+// `enabled` off registers no hook. `answers` off leaves the inbox unread, so the page cannot type into this session.
+export type Options = { enabled: boolean; answers: boolean; port: number; model: string; refreshMinutes: number; autostart: boolean }
 
-export const DEFAULTS: Options = { port: 7777, model: 'sonnet', refreshMinutes: 5, autostart: true }
+export const DEFAULTS: Options = { enabled: true, answers: true, port: 7777, model: 'sonnet', refreshMinutes: 5, autostart: true }
 
 export function options(values: Readonly<Record<string, unknown>>): Options {
   const port = Number(values.port)
   const refresh = Number(values.refreshMinutes)
   const model = values.model
   return {
+    enabled: values.enabled !== false,
+    answers: values.answers !== false,
     port: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : DEFAULTS.port,
     model: typeof model === 'string' && /^[a-z0-9.\-[\]]+$/i.test(model) ? model : DEFAULTS.model,
     refreshMinutes: Number.isFinite(refresh) && refresh >= 1 ? refresh : DEFAULTS.refreshMinutes,

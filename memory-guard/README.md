@@ -27,8 +27,13 @@ Without a cgroup limit, as on most Linux desktops and laptops, the headroom is `
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: heavy commands run as written, and `/ram` is gone. Takes effect in the next session, or after `/reload-plugins`. |
 | `margin` | `2` | Share of memory kept free: of each cgroup's `memory.max`, or of the machine's total without a cgroup limit. The high mark counts only for a cgroup with no max. |
 | `waitSeconds` | `120` | How long a heavy command waits for memory before it is refused. |
+| `reduce` | `true` | When only a single process fits, add `--concurrency=1`, `--workers=1` or `--maxWorkers=1`. |
+| `wait` | `true` | When nothing fits, wait up to `waitSeconds`. Off, the next step comes at once. |
+| `refuse` | `true` | When memory does not free up, refuse the command. Off, it runs as written and may be killed. |
+| `retry137` | `true` | Rerun with a single process a command killed with exit 137. |
 
 ## What it records
 

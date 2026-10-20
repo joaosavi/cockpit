@@ -71,10 +71,12 @@ The server sends the digest to `claude -p --safe-mode --tools "" --no-session-pe
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: no `/panel`, no server start, no answers; a server already running keeps running. Takes effect in the next session, or after `/reload-plugins`. |
 | `port` | `7777` | The port the page listens on, on `127.0.0.1`. |
 | `model` | `sonnet` | The model `claude -p` uses for each summary: `sonnet`, `haiku` or `opus`. |
 | `refreshMinutes` | `5` | A session whose transcript changed gets a new summary this often. |
 | `autostart` | `true` | Start the server when a session starts and the port does not answer. Turn it off when a service manager runs the server. |
+| `answers` | `true` | Let the page send text to this session as your prompt. Off, the page shows the session's options greyed out and no reply field. |
 
 ## Start the server by hand
 

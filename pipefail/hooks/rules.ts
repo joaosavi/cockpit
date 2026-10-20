@@ -1,12 +1,14 @@
 // The pipefail mod's rules, with no mods API, so the tests run them directly.
 
 export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
   // Script names that also count as runners when a package manager calls them, such as a repo's own
   // `check-all` script: `yarn check-all`, `npm run check-all`, `pnpm check-all`, `bun run check-all`.
   extraRunners: readonly string[]
 }
 
-export const DEFAULTS: Options = { extraRunners: [] }
+export const DEFAULTS: Options = { enabled: true, extraRunners: [] }
 
 // A script name as package.json allows it. Anything else is dropped rather than put in a regex.
 const SCRIPT_NAME = /^[\w@:./-]+$/
@@ -17,7 +19,7 @@ export function options(values: unknown): Options {
   const raw: unknown = Reflect.get(values, 'extraRunners')
   const items = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/[\s,]+/) : []
   const names = items.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter((v) => SCRIPT_NAME.test(v))
-  return { extraRunners: [...new Set(names)] }
+  return { enabled: Reflect.get(values, 'enabled') !== false, extraRunners: [...new Set(names)] }
 }
 
 // A runner whose exit code says whether the code works: tests, type checks, lint, and the extra script

@@ -1,6 +1,12 @@
 // The loop-breaker mod's rules, with no mods API, so the tests run them directly.
 
 export type Options = {
+  // Off, the mod registers no hook.
+  enabled: boolean
+  // Each signal can be turned off on its own.
+  editCheck: boolean
+  errorCheck: boolean
+  repeatCheck: boolean
   // Fix attempts on one file (edits that follow a failed command) before the nudge.
   editLimit: number
   // Times the same error may come back before the nudge.
@@ -9,7 +15,7 @@ export type Options = {
   repeatLimit: number
 }
 
-export const DEFAULTS: Options = { editLimit: 5, errorLimit: 3, repeatLimit: 3 }
+export const DEFAULTS: Options = { enabled: true, editCheck: true, errorCheck: true, repeatCheck: true, editLimit: 5, errorLimit: 3, repeatLimit: 3 }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -17,7 +23,16 @@ export function options(values: unknown): Options {
     const v: unknown = Reflect.get(values, key)
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback
   }
-  return { editLimit: num('editLimit', DEFAULTS.editLimit), errorLimit: num('errorLimit', DEFAULTS.errorLimit), repeatLimit: num('repeatLimit', DEFAULTS.repeatLimit) }
+  const on = (key: string): boolean => Reflect.get(values, key) !== false
+  return {
+    enabled: on('enabled'),
+    editCheck: on('editCheck'),
+    errorCheck: on('errorCheck'),
+    repeatCheck: on('repeatCheck'),
+    editLimit: num('editLimit', DEFAULTS.editLimit),
+    errorLimit: num('errorLimit', DEFAULTS.errorLimit),
+    repeatLimit: num('repeatLimit', DEFAULTS.repeatLimit),
+  }
 }
 
 export const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])

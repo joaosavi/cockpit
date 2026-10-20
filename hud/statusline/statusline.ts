@@ -139,6 +139,8 @@ try {
 }
 const settings = userSettings()
 const o = hudOptions(settings)
+// The hud turned off in its options draws an empty status line, without reading git or memory.
+if (!o.enabled) process.exit(0)
 const style = styleOf(o)
 const compactWindow = o.contextBase === 'compact' ? compactWindowOf(process.env['CLAUDE_CODE_AUTO_COMPACT_WINDOW'], Reflect.get(settings, 'autoCompactWindow')) : null
 const id = statusSession(input)

@@ -23,9 +23,11 @@ None.
 
 | Option | Default | Meaning |
 | :- | :- | :- |
+| `enabled` | `true` | Off, the mod does nothing: no record, no warning, no git hold. Takes effect in the next session, or after `/reload-plugins`. |
 | `git` | `confirm` | `confirm` holds a risky git command once. `note` lets it run and tells the agent afterwards. `off` leaves git commands alone. |
 | `windowMinutes` | `30` | How long another session's edit to a file outside any git repo still counts. Inside a repo, an edit counts while git shows the file as changed. |
 | `expireHours` | `24` | A session silent this long counts as gone, and its record is removed. |
+| `editWarnings` | `true` | Tell the agent, and show a toast, when another session edited the same file. Off, edits are still recorded, so the other sessions and the git guard still see them. |
 
 ## What it records
 
