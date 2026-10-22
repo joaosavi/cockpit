@@ -1,5 +1,6 @@
 """Tests for the panel server's pure parts: python3 -I panel/server/test_panel.py"""
 
+import calendar
 import json
 import os
 import time
@@ -148,6 +149,68 @@ class Machine(unittest.TestCase):
             self.assertFalse((d / 's1.json').exists())
         finally:
             panel.INBOX, panel.live_sessions = old
+
+
+class Tasks(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.old = (panel.TASKS, panel.TODO_STATE, panel.TASK_LIST, panel.TASK_OWNER)
+        panel.TASKS, panel.TODO_STATE, panel.TASK_LIST, panel.TASK_OWNER = root / 'tasks', root / 'todo', 'requests', 'me'
+        self.write('requests', '1', '[a] P2 queued: clean the disk')
+        self.write('requests', '2', '[me] P0 sign the contract')
+        self.write('requests', '3', '[b] untagged work', status='in_progress')
+        self.write('requests', '4', '[c] wrong subject', meta={'priority': 'P1', 'state': 'espera'})
+        self.write('requests', '5', '[d] P1 fila: done already', status='completed')
+        self.write('requests', '.lock', 'x')
+        self.write('0f8fad5b-d9cb-469f-a165-70867728950e', '1', 'session work')
+        (panel.TODO_STATE).mkdir(parents=True)
+        lines = [{'at': '2026-10-22T10:00:00.000Z', 'event': 'archived', 'id': str(i), 'subject': f'[a] P1 fila: old {i}'} for i in range(40)]
+        (panel.TODO_STATE / 'requests.jsonl').write_text('\n'.join(json.dumps(x) for x in lines) + '\nnot json\n')
+
+    def tearDown(self):
+        panel.TASKS, panel.TODO_STATE, panel.TASK_LIST, panel.TASK_OWNER = self.old
+        self.tmp.cleanup()
+
+    def write(self, lst, tid, subject, status='pending', meta=None):
+        d = panel.TASKS / lst
+        d.mkdir(parents=True, exist_ok=True)
+        body = {'id': tid, 'subject': subject, 'status': status, 'description': 'why'}
+        if meta:
+            body['metadata'] = meta
+        (d / f'{tid}.json').write_text(json.dumps(body) if tid != '.lock' else subject)
+
+    def test_the_subject_gives_owner_priority_state_and_title(self):
+        t = panel.parse_task({'id': '1', 'subject': '[x] P1 fila: role hierarchy', 'status': 'pending'})
+        self.assertEqual((t['owner'], t['priority'], t['state'], t['stage'], t['title']), ('x', 'P1', 'fila', 'queued', 'role hierarchy'))
+        t = panel.parse_task({'id': '1', 'subject': '[x] note: keep the colon', 'status': 'pending'})
+        self.assertEqual((t['priority'], t['state'], t['title']), (None, None, 'note: keep the colon'))
+        self.assertIsNone(panel.parse_task({'id': 1, 'subject': 'x', 'status': 'pending'}))
+        self.assertIsNone(panel.parse_task({'id': '1', 'subject': 'x', 'status': 'deleted'}))
+
+    def test_the_list_is_sorted_by_priority_and_staged(self):
+        s = panel.tasks_snapshot(None)
+        self.assertEqual(s['list'], 'requests')
+        self.assertEqual([(t['id'], t['stage']) for t in s['tasks']], [('2', 'waiting'), ('4', 'waiting'), ('1', 'queued'), ('3', 'progress')])
+        self.assertEqual(s['tasks'][1]['priority'], 'P1')
+
+    def test_lists_put_the_named_one_first_and_unknown_names_fall_back(self):
+        s = panel.tasks_snapshot('../../etc')
+        self.assertEqual(s['list'], 'requests')
+        self.assertEqual([l['id'] for l in s['lists']], ['requests', '0f8fad5b-d9cb-469f-a165-70867728950e'])
+        self.assertTrue(s['lists'][1]['isSession'])
+        self.assertEqual(panel.tasks_snapshot('0f8fad5b-d9cb-469f-a165-70867728950e')['tasks'][0]['title'], 'session work')
+
+    def test_completed_tasks_come_newest_first_and_capped(self):
+        done = panel.tasks_snapshot('requests')['done']
+        self.assertEqual(len(done), panel.DONE_SHOWN)
+        self.assertEqual(done[0]['id'], '39')
+        self.assertEqual(done[0]['at'], calendar.timegm((2026, 10, 22, 10, 0, 0)))
+
+    def test_no_task_folder_gives_an_empty_tab(self):
+        panel.TASKS = Path(self.tmp.name) / 'missing'
+        s = panel.tasks_snapshot(None)
+        self.assertEqual({k: s[k] for k in ('lists', 'list', 'tasks', 'done')}, {'lists': [], 'list': None, 'tasks': [], 'done': []})
 
 
 class Portable(unittest.TestCase):

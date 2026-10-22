@@ -1114,6 +1114,145 @@ def git_state(cwd: str) -> dict | None:
 _panes_cache: tuple[float, dict[int, tuple[str, str]]] = (0.0, {})
 
 
+# --- the task lists ---
+
+# Claude Code's native task list: one JSON file per task in <config>/tasks/<list>/<id>.json, where the
+# list is CLAUDE_CODE_TASK_LIST_ID or the session id. The todo mod moves a completed task to
+# ~/.local/state/mods/todo/<list>.jsonl, so the folder holds open work and the log holds the rest.
+TASKS = CONFIG / 'tasks'
+TODO_STATE = HOME / '.local/state/mods/todo'
+# The list the tab opens on. Without it, the named list changed last.
+TASK_LIST = os.environ.get('PANEL_TASK_LIST', '').strip()
+# A task owned by this name waits for the user, whatever its state says.
+TASK_OWNER = os.environ.get('PANEL_TASK_OWNER', '').strip().lower()
+DONE_SHOWN = 30
+_UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+# `[owner] P1 waiting: what was asked`: owner, priority and state, each optional, then the subject.
+_SUBJECT = re.compile(r'^\s*(?:\[([^\]]*)\]\s*)?(?:(P\d+)\b\s*)?(?:([^\s:]+):\s+)?(.*)$', re.I | re.S)
+# State words that land in each filter, in the languages people write subjects in.
+STAGES = {
+    'progress': {'in_progress', 'andamento', 'working', 'doing', 'active', 'progress'},
+    'waiting': {'waiting', 'espera', 'blocked', 'bloqueado', 'review'},
+    'queued': {'queued', 'fila', 'queue', 'todo', 'backlog', 'next', 'pending'},
+}
+
+
+def parse_task(raw: Any) -> dict | None:
+    """One task file as the tab shows it, or None when the file is not a task."""
+    if not isinstance(raw, dict):
+        return None
+    tid, subject, status = raw.get('id'), raw.get('subject'), raw.get('status')
+    if not isinstance(tid, str) or not isinstance(subject, str) or status not in ('pending', 'in_progress', 'completed'):
+        return None
+    m = _SUBJECT.match(subject)
+    owner, ptag, stag, title = (m.group(1), m.group(2), m.group(3), m.group(4)) if m else (None, None, None, subject)
+    # The state word only counts after a priority, so `[a] note: x` keeps its colon in the title.
+    if stag and not ptag:
+        title, stag = f'{stag}: {title}', None
+    meta = raw.get('metadata') if isinstance(raw.get('metadata'), dict) else {}
+    p = meta.get('priority') if isinstance(meta.get('priority'), str) and meta['priority'].strip() else ptag
+    state = meta.get('state') if isinstance(meta.get('state'), str) and meta['state'].strip() else stag
+    priority = p.strip().upper() if p and re.fullmatch(r'P\d+', p.strip(), re.I) else None
+    state = state.strip().lower() if state else None
+    stage = 'other'
+    if TASK_OWNER and (owner or '').strip().lower() == TASK_OWNER:
+        stage = 'waiting'
+    elif state:
+        stage = next((k for k, words in STAGES.items() if state in words), 'other')
+    elif status == 'in_progress':
+        stage = 'progress'
+    elif status == 'pending':
+        stage = 'queued'
+    desc = raw.get('description')
+    return {
+        'id': tid, 'subject': subject, 'title': (title or subject).strip(), 'owner': (owner or '').strip() or None,
+        'priority': priority, 'state': state, 'stage': stage, 'status': status,
+        'description': desc if isinstance(desc, str) else '',
+    }
+
+
+def _task_key(t: dict) -> tuple:
+    p = int(t['priority'][1:]) if t.get('priority') else 10 ** 6
+    return (p, int(t['id']) if t['id'].isdigit() else 10 ** 9, t['id'])
+
+
+def read_list(folder: Path) -> list[dict]:
+    """The open tasks of one list, most urgent first, then by id."""
+    out = []
+    try:
+        files = list(folder.glob('*.json'))
+    except OSError:
+        return out
+    for f in files:
+        if f.name.startswith('.'):
+            continue
+        try:
+            t = parse_task(json.loads(f.read_text(encoding='utf-8')))
+        except (OSError, ValueError):
+            continue
+        if t and t['status'] != 'completed':
+            out.append(t)
+    return sorted(out, key=_task_key)
+
+
+def task_lists() -> list[dict]:
+    """The lists with open tasks: PANEL_TASK_LIST first, then named lists, then session lists, each by
+    the last change."""
+    rows = []
+    try:
+        dirs = [d for d in TASKS.iterdir() if d.is_dir()]
+    except OSError:
+        return rows
+    for d in dirs:
+        try:
+            files = [f for f in d.glob('*.json') if not f.name.startswith('.')]
+            changed = max((f.stat().st_mtime for f in files), default=0.0)
+        except OSError:
+            continue
+        open_ = read_list(d) if files else []
+        if open_ or d.name == TASK_LIST:
+            rows.append({'id': d.name, 'open': len(open_), 'changed': changed, 'isSession': bool(_UUID.match(d.name))})
+    rows.sort(key=lambda r: (r['id'] != TASK_LIST, r['isSession'], -r['changed']))
+    return rows
+
+
+def done_tasks(list_id: str, n: int = DONE_SHOWN) -> list[dict]:
+    """The last tasks the todo mod archived for this list, newest first."""
+    path = TODO_STATE / f'{list_id}.jsonl'
+    try:
+        with path.open('rb') as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 256_000))
+            lines = f.read().decode('utf-8', 'replace').splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in reversed(lines):
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(e, dict) or e.get('event') != 'archived' or not isinstance(e.get('subject'), str):
+            continue
+        t = parse_task({'id': str(e.get('id', '')), 'subject': e['subject'], 'status': 'completed', 'description': e.get('description')})
+        if t:
+            t['at'] = iso_to_epoch(e.get('at'))
+            out.append(t)
+        if len(out) >= n:
+            break
+    return out
+
+
+def tasks_snapshot(list_id: str | None) -> dict:
+    lists = task_lists()
+    ids = [r['id'] for r in lists]
+    cur = list_id if list_id in ids else (ids[0] if ids else None)
+    return {
+        'now': time.time(), 'lists': lists, 'list': cur,
+        'tasks': read_list(TASKS / cur) if cur else [], 'done': done_tasks(cur) if cur else [],
+    }
+
+
 INBOX = STATE / 'inbox'
 LISTENING_S = 15
 
@@ -1274,6 +1413,10 @@ class Handler(BaseHTTPRequestHandler):
             q = dict(x.split('=', 1) for x in urlparse(self.path).query.split('&') if '=' in x)
             days = max(1, min(30, int(q.get('days', '7')) if q.get('days', '7').isdigit() else 7))
             self._send(200, json.dumps({'days': days, 'mods': mods_report(days)}, ensure_ascii=False).encode(), 'application/json')
+        elif path == '/api/tasks':
+            q = dict(x.split('=', 1) for x in urlparse(self.path).query.split('&') if '=' in x)
+            want = q.get('list') or None
+            self._send(200, json.dumps(tasks_snapshot(want), ensure_ascii=False).encode(), 'application/json')
         elif path == '/api/health':
             self._send(200, b'{"ok":true}', 'application/json')
         else:

@@ -405,6 +405,43 @@ tr.mod:hover td { background: var(--sunk); }
 .events td td.nw { white-space: nowrap; }
 @media (max-width: 640px) { .c-opt { display: none; } }
 
+/* Tasks */
+.tasks { max-width: 1040px; margin: 0 auto; padding: 0 24px 48px; display: flex; flex-direction: column; gap: 22px; }
+.tk-group { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.tk-gh { display: flex; gap: 8px; align-items: center; padding: 11px 16px; font-size: 13px; font-weight: 600; color: var(--dim); border-bottom: 1px solid var(--line); background: var(--sunk); }
+.tk-gh span.n { color: var(--faint); font-weight: 400; }
+button.tk-gh { width: 100%; border: 0; text-align: left; }
+button.tk-gh:hover { color: var(--text); }
+button.tk-gh svg { width: 14px; height: 14px; transition: transform .15s; }
+button.tk-gh.open svg { transform: rotate(90deg); }
+.tk-gh.shut { border-bottom: 0; }
+.tk { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 20px; align-items: center; gap: 4px 12px; width: 100%; text-align: left; padding: 11px 16px; border: 0; border-bottom: 1px solid var(--line); background: none; min-height: 46px; }
+.tk:hover { background: var(--sunk); }
+.tk-group > .tk:last-child, .tk-group > .tk-more:last-child { border-bottom: 0; }
+.tk .t { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.tk .who { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--faint); white-space: nowrap; }
+.tk .who code { color: var(--dim); }
+.tk .chev { width: 14px; height: 14px; color: var(--faint); transition: transform .15s; }
+.tk.open .chev { transform: rotate(90deg); }
+.tk.done .t { color: var(--dim); }
+.pr { --c: var(--idle); justify-self: start; font-family: "Geist Mono", monospace; font-size: 13px; font-weight: 500; height: 22px; padding: 0 7px; border-radius: 6px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--c) 13%, transparent); color: var(--c); }
+.pr.p0 { --c: var(--bad); } .pr.p1 { --c: var(--warn); } .pr.p2 { --c: var(--accent); }
+.tk-more { padding: 4px 16px 16px 72px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.tk-more p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; color: var(--text); line-height: 1.55; }
+.tk-more .meta code { font-size: 13px; }
+.tk-more .meta .subj { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.tk-sel { display: inline-flex; gap: 2px; flex-wrap: wrap; }
+.tb .fls-t { display: inline-flex; gap: 2px; flex-wrap: wrap; align-items: center; }
+.tb .fls-t + .fls-t { margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--line); }
+@media (max-width: 760px) {
+  .tasks { padding: 0 16px 40px; }
+  .tk { grid-template-columns: 44px minmax(0, 1fr) 20px; padding: 11px 12px; }
+  .tk .who { grid-column: 2; grid-row: 2; }
+  .tk .chev { grid-column: 3; grid-row: 1; }
+  .tk-more { padding: 4px 12px 14px 12px; }
+  .tb .fls-t + .fls-t { margin-left: 0; padding-left: 0; border-left: 0; }
+}
+
 /* dialog and toast */
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 100; padding: 16px; }
 .dialog { background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .35); width: min(460px, 100%); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
@@ -437,7 +474,11 @@ const STATE = {
   done: ['Done', 'var(--done)'], idle: ['Idle', 'var(--idle)'], ended: ['Ended', 'var(--idle)'], unknown: ['No summary yet', 'var(--idle)'],
 }
 const ORDER = { waiting: 0, blocked: 0, working: 1, done: 2, idle: 2, unknown: 2, ended: 3 }
-const VIEWS = [['inbox', 'Inbox'], ['board', 'Board'], ['deck', 'Deck'], ['focus', 'Focus'], ['timeline', 'Timeline']]
+const VIEWS = [['inbox', 'Inbox'], ['board', 'Board'], ['deck', 'Deck'], ['focus', 'Focus'], ['timeline', 'Timeline'], ['tasks', 'Tasks']]
+// The Tasks tab: the groups of a list, and the filters over them.
+const STAGES = [['progress', 'In progress'], ['waiting', 'Waiting'], ['queued', 'Queued'], ['other', 'Other']]
+const PRIOS = [['All', () => true], ['P0', t => t.priority === 'P0'], ['P1', t => t.priority === 'P1'], ['P2', t => t.priority === 'P2'], ['No tag', t => !t.priority]]
+const TSTAGES = [['All', () => true], ['In progress', t => t.stage === 'progress'], ['Waiting', t => t.stage === 'waiting'], ['Queued', t => t.stage === 'queued']]
 // The groups Inbox and Board share, most urgent first.
 const GROUPS = [
   ['Needs you', s => s === 'waiting' || s === 'blocked', 'waiting'], ['Working', s => s === 'working', 'working'],
@@ -460,10 +501,12 @@ const I = {
   bell: '<svg class="i" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>',
 }
 
-let data = null, mods = null, days = 7, online = true
+let data = null, mods = null, tasks = null, days = 7, online = true
 let view = 'inbox'
 try { const v = localStorage.getItem('view'); if (VIEWS.some(x => x[0] === v)) view = v } catch {}
 const ui = { sel: null, drawer: null, focus: null, filter: 'All', showEnded: false, endedOpen: false, mods: false, enter: false, sideEnter: false }
+const tk = { list: null, prio: 'All', stage: 'All', doneOpen: false }
+const openTasks = new Set()
 const openDetails = new Set(), openRows = new Set(), openMods = new Set(), drafts = new Map(), sent = new Map()
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -623,8 +666,46 @@ function toolbar() {
   let h = `<div class="seg" role="tablist">${VIEWS.map(([k, name]) => `<button role="tab" class="${view === k ? 'on' : ''}" data-view="${k}" aria-selected="${view === k}">${name}</button>`).join('')}</div>`
   h += `<span class="count">${n ? `<b>${n}</b> need you, ` : ''}${w} working</span><div class="right">`
   if (view === 'deck') h += FILTERS.map(([name, test]) => { const k = xs.filter(test).length; return `<button class="fl ${ui.filter === name ? 'on' : ''}" data-filter="${name}">${name}<span class="num ${name === 'Needs you' && k ? 'hot' : ''}">${k}</span></button>` }).join('')
+  if (view === 'tasks') return taskToolbar(h)
   if ((view === 'board' || view === 'timeline') && ended) h += `<button class="fl ${ui.showEnded ? 'on' : ''}" data-ended>Ended<span class="num">${ended}</span></button>`
   document.getElementById('tb').innerHTML = h + '</div>'
+}
+
+/* ---------- Tasks ---------- */
+function taskToolbar(h) {
+  const el = document.getElementById('tb')
+  if (!tasks) { el.innerHTML = h.replace(/<span class="count">.*$/, '') + '<span class="count">Loading</span>'; return }
+  const ts = tasks.tasks, p0 = ts.filter(t => t.priority === 'P0').length
+  h = h.replace(/<span class="count">.*$/, '') + `<span class="count">${p0 ? `<b>${p0}</b> P0, ` : ''}${ts.length} open</span><div class="right">`
+  if (tasks.lists.length > 1) h += `<span class="fls-t">${tasks.lists.map(l => `<button class="fl ${l.id === tasks.list ? 'on' : ''}" data-tlist="${esc(l.id)}">${esc(l.isSession ? l.id.slice(0, 8) : l.id)}<span class="num">${l.open}</span></button>`).join('')}</span>`
+  h += `<span class="fls-t">${PRIOS.map(([name, test]) => `<button class="fl ${tk.prio === name ? 'on' : ''}" data-tprio="${name}">${name}<span class="num ${name === 'P0' && p0 ? 'hot' : ''}">${ts.filter(test).length}</span></button>`).join('')}</span>`
+  h += `<span class="fls-t">${TSTAGES.map(([name, test]) => `<button class="fl ${tk.stage === name ? 'on' : ''}" data-tstage="${name}">${name}<span class="num">${ts.filter(test).length}</span></button>`).join('')}</span>`
+  el.innerHTML = h + '</div>'
+}
+function taskRow(t, done) {
+  const key = `${done ? 'd' : 'o'}:${tasks.list}:${t.id}`, open = openTasks.has(key)
+  const pr = t.priority ? `<span class="pr ${t.priority.toLowerCase()}">${esc(t.priority)}</span>` : '<span class="pr" title="No priority">–</span>'
+  const when = done && t.at ? `<span>${esc(ago(t.at, tasks.now))}</span>` : ''
+  let h = `<button class="tk${open ? ' open' : ''}${done ? ' done' : ''}" data-task="${esc(key)}" aria-expanded="${open}">${pr}<span class="t">${esc(t.title)}</span><span class="who">${t.owner ? `<code>${esc(t.owner)}</code>` : ''}<span class="num">#${esc(t.id)}</span>${when}</span>${I.chev}</button>`
+  if (open) {
+    const facts = [t.status !== 'completed' ? `<span><span class="g">Status</span> ${esc(t.status === 'in_progress' ? 'in progress' : t.status)}</span>` : '', t.state ? `<span><span class="g">State</span> ${esc(t.state)}</span>` : '', `<span class="g subj"><code>${esc(t.subject)}</code></span>`]
+    h += `<div class="tk-more">${t.description ? `<p>${esc(t.description)}</p>` : '<p class="faint">No description</p>'}<div class="meta">${facts.join('')}</div></div>`
+  }
+  return h
+}
+function tasksView() {
+  if (!tasks) return '<div class="tasks"><div class="empty">Loading</div></div>'
+  if (!tasks.list) return '<div class="tasks"><div class="empty">No task list with open tasks</div></div>'
+  const p = PRIOS.find(x => x[0] === tk.prio)[1], s = TSTAGES.find(x => x[0] === tk.stage)[1]
+  const shown = tasks.tasks.filter(t => p(t) && s(t))
+  let h = ''
+  for (const [k, name] of STAGES) {
+    const xs = shown.filter(t => t.stage === k)
+    if (xs.length) h += `<section class="tk-group"><div class="tk-gh">${name}<span class="n">${xs.length}</span></div>${xs.map(t => taskRow(t, false)).join('')}</section>`
+  }
+  if (!h) h = `<div class="empty">${tasks.tasks.length ? 'No task matches these filters' : 'No open task'}</div>`
+  if (tasks.done.length) h += `<section class="tk-group"><button class="tk-gh${tk.doneOpen ? ' open' : ' shut'}" data-done-open aria-expanded="${tk.doneOpen}">${I.chev}Completed recently<span class="n">${tasks.done.length}</span></button>${tk.doneOpen ? tasks.done.map(t => taskRow(t, true)).join('') : ''}</section>`
+  return `<div class="tasks">${h}</div>`
 }
 
 /* ---------- Inbox ---------- */
@@ -833,7 +914,7 @@ function paintView() {
   // Typing in a reply box must survive the refresh: the view waits while a field has the focus.
   if (document.activeElement?.closest?.('#view form')) return
   const el = document.getElementById('view')
-  keepScroll(el, () => { el.innerHTML = ({ inbox, board, deck, focus, timeline })[view]() })
+  keepScroll(el, () => { el.innerHTML = ({ inbox, board, deck, focus, timeline, tasks: tasksView })[view]() })
   ui.enter = false
 }
 function render() { if (!data) return; header(); toolbar(); paintView(); if (!document.activeElement?.closest?.('#side form')) side(); signal() }
@@ -862,12 +943,19 @@ async function load() {
     // A slower answer for the range the user just left must not overwrite the new one.
     const d = days
     if (ui.mods) { const r = await (await fetch(`/api/mods?days=${d}`, { cache: 'no-store' })).json(); if (d === days) mods = r }
+    if (view === 'tasks') await loadTasks()
     online = true
     if (!document.querySelector('.scrim')) render()
   } catch {
     online = false
     const l = document.getElementById('live'); l.className = 'live off'; l.textContent = 'offline'
   }
+}
+async function loadTasks() {
+  const want = tk.list
+  const r = await (await fetch(`/api/tasks${want ? `?list=${encodeURIComponent(want)}` : ''}`, { cache: 'no-store' })).json()
+  // An answer for the list the user just left must not overwrite the new one.
+  if (want === tk.list) { tasks = r; if (!tk.list) tk.list = r.list }
 }
 const post = (path, body) => fetch(path, { method: 'POST', headers: { 'X-Cockpit': '1', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
 async function refresh(id) { await post(`/api/refresh/${id}`); load() }
@@ -903,6 +991,7 @@ function setView(v) {
   ui.drawer = null
   if (!ui.mods) history.replaceState(null, '', `#${v}`)
   render()
+  if (v === 'tasks') loadTasks().then(render).catch(() => {})
 }
 function toggleMods(on) {
   ui.mods = on; ui.sideEnter = on
@@ -919,7 +1008,7 @@ function fromHash() {
 }
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-view],[data-sel],[data-drawer],[data-step],[data-close],[data-close-mods],[data-focus],[data-fstep],[data-row],[data-ended],[data-ended-open],[data-refresh],[data-copy],[data-filter],[data-send],[data-days],[data-mod],#all,#notify,#modsbtn')
+  const t = e.target.closest('[data-view],[data-sel],[data-drawer],[data-step],[data-close],[data-close-mods],[data-focus],[data-fstep],[data-row],[data-ended],[data-ended-open],[data-refresh],[data-copy],[data-filter],[data-send],[data-days],[data-mod],[data-tlist],[data-tprio],[data-tstage],[data-task],[data-done-open],#all,#notify,#modsbtn')
   if (!t) return
   const d = t.dataset
   if (t.id === 'all') return refresh('all')
@@ -945,6 +1034,11 @@ document.addEventListener('click', e => {
   if (d.send) return confirmSend(d.send, d.text)
   if (d.refresh) return refresh(d.refresh)
   if (d.filter) { ui.filter = d.filter; toolbar(); return paintView() }
+  if (d.tlist) { tk.list = d.tlist; tasks = { ...tasks, list: d.tlist, tasks: [], done: [] }; render(); return loadTasks().then(render) }
+  if (d.tprio) { tk.prio = d.tprio; toolbar(); return paintView() }
+  if (d.tstage) { tk.stage = d.tstage; toolbar(); return paintView() }
+  if (d.task) { openTasks.has(d.task) ? openTasks.delete(d.task) : openTasks.add(d.task); return paintView() }
+  if ('doneOpen' in d) { tk.doneOpen = !tk.doneOpen; return paintView() }
   if (d.copy) navigator.clipboard?.writeText(d.copy).then(() => toast(`Copied ${d.copy}`))
 })
 function step(n) {

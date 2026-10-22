@@ -8,7 +8,7 @@ When several sessions run at once, you come back to each one without remembering
 
 ## What it does
 
-Type `/panel` in any session for the address, `http://localhost:7777` by default, and open it in your browser. The page has a header with the computer, five views of the sessions, and a drawer for the mods.
+Type `/panel` in any session for the address, `http://localhost:7777` by default, and open it in your browser. The page has a header with the computer, five views of the sessions, a Tasks view, and a drawer for the mods.
 
 - **The header** shows the computer in one line: the plan's 5-hour and weekly usage with the time left to each reset, memory, the CPU over the last minute, disk, and the tokens the sessions used in the last 24 hours, hour by hour. A figure turns amber at 75% and red at 90%. On a narrow screen only the 5-hour usage stays. On the right are **Notify**, **Refresh all** and **Mods**.
 - **The views** show the same sessions and the same actions in five layouts. Pick one with the switcher under the header; the page remembers it. Each session shows its state (`Working`, `Waiting for you`, `Blocked`, `Done`, `Idle`), a title, the project, the git branch with its changed files and commits ahead or behind, the model, your last message, the tool running now, the summary of where the task stands, the next step and what it finished. Four figures close it: the context used against the point where it compacts, the tokens of the last 24 hours, the memory of the session's processes, and how long it has run.
@@ -17,6 +17,7 @@ Type `/panel` in any session for the address, `http://localhost:7777` by default
   - **Deck** shows a grid of full cards, with filters for all sessions, the ones that need you, working, done and ended.
   - **Focus** shows one large card for the session that needs you most, and the other sessions below it. **Next** and the arrow before it move through the sessions, as do `n` and `p`. When nothing needs you, it says so.
   - **Timeline** gives each session a row with its tokens hour by hour over the last 24 hours, and a last row for all sessions together. A row opens in place to show the full session.
+- **Tasks** shows the open tasks of Claude Code's native task list, in groups: `In progress`, `Waiting`, `Queued` and `Other`. In each group, tasks go from P0 up, then the ones with no priority, then by id. Each row shows the priority, the subject, the owner and the task number, and opens in place to show the description. Filters above the list pick a priority (`P0`, `P1`, `P2`, `No tag`) and a group. When more than one list has open tasks, buttons above the filters switch lists. `Completed recently` opens the last 30 tasks the [`todo`](../todo) mod archived. The view reads the files again every 4 seconds and calls no model.
 - **The Mods drawer** opens from the **Mods** button. Its top half shows the computer in full: the plan usage, memory, CPU, disk and tokens, then the latest actions of the Cockpit guards, what each guard did today, and how many summaries the page made today with their tokens and their price at API list prices. On Linux it also shows the memory of each cgroup with a limit that the sessions run in, and the state of their systemd services.
 
 The drawer's lower half audits the mods, read from their diaries over the last day, 7 days or 30 days. Each row shows the mod's version, whether it is on, how many sessions it ran in, what it did, its failures in red, the time its hooks added per tool call, its slowest hook call, the API cost of its model calls, and its last action. Click a row to list its recent actions with their details.
@@ -37,6 +38,7 @@ Every figure is read on your computer. A figure the system cannot give is left o
 | Git | `git status` in each session's folder, every 30 seconds | A folder outside git shows no branch |
 | Guards | The Cockpit mods' diaries in `~/.local/state/mods/` | A mod that is not installed is left out |
 | Sending | The session's inbox, `~/.local/state/mods/panel/inbox/<session>.json`, which the `panel` mod in that session checks every 2 seconds | A session whose mod has not checked its inbox in the last 15 seconds has its options greyed out and no reply field |
+| Tasks | `~/.claude/tasks/<list>/<id>.json`, and `~/.local/state/mods/todo/<list>.jsonl` for the completed ones. Priority and state come from the task's `metadata.priority` and `metadata.state`, and without them from a subject such as `[owner] P1 waiting: what was asked`. A state such as `waiting`, `blocked` or `espera` goes in `Waiting`, `queued` or `fila` in `Queued`, and `in_progress` or `andamento` in `In progress`. A task with no state goes by its native status | Without the folder the view says that no list has open tasks. Without the `todo` mod, `Completed recently` is left out |
 | API cost | `claude -p`'s own price for each summary, and the token counts other mods write to their diaries, priced at Anthropic's API list prices | A mod that calls no model costs nothing |
 
 The API cost is what the same calls would cost through the API. On a Pro or Max plan the calls spend plan usage, not money.
@@ -86,7 +88,7 @@ With `autostart` on, the first session starts the server, and the server keeps r
 python3 -I <plugin folder>/server/panel.py
 ```
 
-On Windows, use `python` or `py` in place of `python3`. These variables set the server's options: `PANEL_PORT`, `PANEL_MODEL` and `PANEL_REFRESH_MINUTES`. Set `PANEL_CLAUDE` to the path of `claude` when it is not on the `PATH`.
+On Windows, use `python` or `py` in place of `python3`. These variables set the server's options: `PANEL_PORT`, `PANEL_MODEL` and `PANEL_REFRESH_MINUTES`. `PANEL_TASK_LIST` names the task list the Tasks view opens on; without it, the view opens on the named list that changed last. `PANEL_TASK_OWNER` names you as tasks name their owner, such as `me` in `[me] P0 sign the contract`; a task you own goes in `Waiting` whatever its state. Set `PANEL_CLAUDE` to the path of `claude` when it is not on the `PATH`.
 
 ## Running on a server
 
