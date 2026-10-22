@@ -8,7 +8,7 @@
     {
       "name": "cockpit",
       "source": "./cockpit",
-      "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, loop, secret, collision and pipefail guards, the session panel, the HUD and the spinner status line."
+      "description": "Installs every Cockpit mod at once: the usage-limit, memory, skill, loop, secret, collision and pipefail guards, the session panel, the HUD, the spinner status line and the task list."
     },
     {
       "name": "usage-limit",
@@ -44,6 +44,11 @@
       "name": "global-memory",
       "source": "./global-memory",
       "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md."
+    },
+    {
+      "name": "todo",
+      "source": "./todo",
+      "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, and completed tasks moved to an archive log."
     },
     {
       "name": "hud",

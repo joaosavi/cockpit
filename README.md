@@ -63,6 +63,7 @@ The setup turns on auto-update for `cockpit`, so new versions install by themsel
 | Mod | What it does |
 | :- | :- |
 | `global-memory` | Adds a machine-wide memory folder beside the per-project memory, so facts about the machine reach every session. It starts once you create `~/.claude/global-memory/MEMORY.md`. |
+| `todo` | Shows the open tasks of Claude Code's native task list at session start and on each prompt from you, reminds the agent that a new request becomes a task first, and moves completed tasks to an archive log. Newer models need `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` for the task tools. |
 
 On a Team or Enterprise plan, `global-memory` installs but does nothing until your organization lists it in managed settings: the plan's built-in guard skips plugins you install yourself on the hooks it needs. Its README shows the two settings to add.
 

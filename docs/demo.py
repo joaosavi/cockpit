@@ -83,7 +83,7 @@ write(CONFIG / 'plugins' / 'store' / 'usage-limit_cockpit-demo.json', json.dumps
     {'kind': 'five_hour', 'percentUsed': 62, 'resetsAt': iso(NOW + 5000)}, {'kind': 'seven_day', 'percentUsed': 38, 'resetsAt': iso(NOW + 3 * 86400)}]}}))
 MODS = {'secret-guard': ['redacted', 'redacted', 'filled'], 'collision-guard': ['git-held', 'edit-warned'], 'pipefail': ['rewritten'] * 4,
         'memory-guard': [], 'loop-breaker': ['nudge'], 'usage-limit': [],
-        'skill-loader': ['loaded'] * 5, 'hud': [], 'spinner-status': [], 'global-memory': ['context-injected'] * 4, 'panel': []}
+        'skill-loader': ['loaded'] * 5, 'hud': [], 'spinner-status': [], 'global-memory': ['context-injected'] * 4, 'todo': ['prompt-context'] * 6, 'panel': []}
 DETAIL = {'redacted': {'tool': 'Bash', 'names': 'STRIPE_KEY'}, 'filled': {'names': 'DATABASE_URL'}, 'git-held': {'op': 'stage-all', 'files': 2},
           'edit-warned': {'sessions': 'web'}, 'rewritten': {'key': 'npm test'}, 'reduced': {'key': 'tsc --noEmit'}, 'waited-and-fit': {'key': 'next build'},
           'refused': {'key': 'playwright test'}, 'nudge': {'kind': 'error', 'count': 3}, 'loaded': {'skill': 'typescript-best-practices'}}

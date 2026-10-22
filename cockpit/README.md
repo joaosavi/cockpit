@@ -20,6 +20,7 @@ claude plugin install cockpit@cockpit
 - `pipefail`: adds `set -o pipefail;` to a test, typecheck or lint run piped into `tail`, `head` or `grep`.
 - `panel`: a local web page with a card for every session on this machine, with what it needs from you and what it is doing. `/panel` gives the address.
 - `global-memory`: a machine-wide memory folder beside the per-project auto memory. It starts once you create `~/.claude/global-memory/MEMORY.md`.
+- `todo`: shows the open tasks of the native task list at session start and on each prompt from you, reminds the agent that a new request becomes a task first, and archives completed tasks. Newer models need `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`.
 - `spinner-status`: replaces the tip under the spinner with one Haiku line: where the session stands, or a tip about these mods. Needs `"spinnerTipsEnabled": false` in settings.
 
 Each mod has its own README with its options, what it records, what it costs, and what changes on macOS, Windows and Linux.

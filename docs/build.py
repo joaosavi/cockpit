@@ -90,7 +90,7 @@ def meta(name):
 GROUPS = [
     ('Guards', 'Stop a mistake before it lands.', ['secret-guard', 'collision-guard', 'pipefail', 'memory-guard', 'loop-breaker', 'usage-limit']),
     ('Instruments', 'Show where the session stands.', ['hud', 'spinner-status', 'panel', 'skill-loader']),
-    ('Memory', 'Carry what you learned into every session.', ['global-memory']),
+    ('Memory', 'Carry what you learned into every session.', ['global-memory', 'todo']),
 ]
 COMMANDS = {'hud': ['/hud'], 'panel': ['/panel'], 'usage-limit': ['/limit'], 'memory-guard': ['/ram']}
 MODEL_TAGS = {'spinner-status': 'calls Haiku', 'panel': 'calls claude -p'}

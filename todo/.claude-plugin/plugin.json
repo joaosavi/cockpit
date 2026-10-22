@@ -1,0 +1,39 @@
+{
+  "name": "todo",
+  "version": "1.4.0",
+  "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, and completed tasks moved to an archive log.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/todo",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "tasks",
+    "todo",
+    "compaction",
+    "orchestration",
+    "mod"
+  ],
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Show the open tasks and archive completed ones. Off, the mod does nothing.",
+      "default": true
+    },
+    "remind": {
+      "type": "boolean",
+      "title": "Request reminder",
+      "description": "With a named list (CLAUDE_CODE_TASK_LIST_ID), each prompt from the user carries a reminder: a new request becomes a task before any other work, with its owner in the subject.",
+      "default": true
+    },
+    "archive": {
+      "type": "boolean",
+      "title": "Archive completed tasks",
+      "description": "Move a completed task out of the list into ~/.local/state/mods/todo/<list>.jsonl, so the list holds only open work.",
+      "default": true
+    }
+  }
+}
