@@ -16,6 +16,15 @@ The task tools (`TaskCreate`, `TaskList`, `TaskUpdate`, `TaskGet`) write one JSO
 
 The list is the one Claude Code uses: `CLAUDE_CODE_TASK_LIST_ID` when it is set, and the session's own list otherwise.
 
+## Order of the list
+
+The open tasks go in one group per state, with a count, such as `waiting (2):`.
+
+- A task's priority and state come from `metadata.priority` and `metadata.state` in its file. Without metadata, they come from a subject such as `[owner] P1 waiting: what was asked`: the `P` number after the owner, then the word before the colon.
+- A task with no state goes in the group of its native status, `in_progress` or `pending`.
+- In each group, tasks go from P0 up, then the ones with no priority, then by id.
+- The group that holds the most urgent task comes first. On a tie, the group with a task in progress comes first.
+
 ## Turn on the task tools
 
 Claude Code offers the task tools by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5 and earlier models. To get them on a newer model, start Claude Code with the variable set:

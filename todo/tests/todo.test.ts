@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { cleanListId, openTasksNote, parseTask, promptContext } from '../hooks/rules.ts'
+import { cleanListId, groups, openTasksNote, parseTask, promptContext, type Task } from '../hooks/rules.ts'
 
 type Scene = { files: Map<string, string>; appended: string[]; removed: string[] }
 
@@ -66,13 +66,41 @@ test('the list file is parsed, and anything else is skipped', () => {
   expect(cleanListId('my list/1')).toBe('my-list-1')
 })
 
+test('the priority and the state come from the metadata, then from the subject', () => {
+  const raw = JSON.stringify({ id: '9', subject: '[a] x', status: 'pending', metadata: { priority: 'P1', state: 'fila' } })
+  expect(parseTask(raw)).toEqual({ id: '9', subject: '[a] x', description: '', status: 'pending', priority: 'P1', state: 'fila' })
+  const t = (id: string, subject: string, status: Task['status'] = 'pending', meta: Partial<Task> = {}): Task => ({ id, subject, description: '', status, ...meta })
+  const open = [
+    t('1', '[a] no tag at all'),
+    t('2', '[b] P2 fila: disk cleanup'),
+    t('3', '[c] P1 fila: role hierarchy'),
+    t('4', '[joao] P0 espera: yes to resend the report'),
+    t('5', '[d] P0 Next 16.3.8 to 16.4.2', 'in_progress', { state: 'andamento' }),
+    t('6', '[e] P1 andamento: review', 'in_progress'),
+    t('7', '[f] wrong tag', 'pending', { priority: 'P2', state: 'espera' }),
+  ]
+  const shape = groups(open).map((g) => `${g.state}: ${g.tasks.map((x) => x.id).join(' ')}`)
+  expect(shape).toEqual(['andamento: 5 6', 'espera: 4 7', 'fila: 3 2', 'pending: 1'])
+  const note = openTasksNote({ list: 'demerzel', open, when: 'start' }) ?? ''
+  expect(note).toContain('andamento (2):\n#5 [in_progress] [d] P0 Next 16.3.8 to 16.4.2\n#6 [in_progress] [e] P1 andamento: review\nespera (2):')
+  expect(note.endsWith('pending (1):\n#1 [pending] [a] no tag at all\nTaskGet shows a task in full. Keep the list current with TaskUpdate.')).toBe(true)
+})
+
+test('past 30 tasks the note cuts by priority and counts the rest', () => {
+  const open: Task[] = Array.from({ length: 32 }, (_, i) => ({ id: String(i + 1), subject: `[a] P${i < 2 ? 2 : 0} fila: t${i + 1}`, description: '', status: 'pending' }))
+  const note = openTasksNote({ list: 'demerzel', open, when: 'start' }) ?? ''
+  expect(note).toContain('fila (32):\n#3 ')
+  expect(note).not.toContain('#1 ')
+  expect(note).toContain('... and 2 more: run TaskList.')
+})
+
 test('the notes list open tasks in id order and say nothing about an empty list', () => {
   const open = [
     { id: '2', subject: '[refactor] port main', description: '', status: 'in_progress' as const },
     { id: '10', subject: '[tcc] title', description: '', status: 'pending' as const },
   ]
   expect(openTasksNote({ list: 'demerzel', open: [], when: 'start' })).toBe(null)
-  expect(openTasksNote({ list: 'demerzel', open, when: 'compaction' })).toContain('#2 [in_progress] [refactor] port main\n#10 [pending] [tcc] title')
+  expect(openTasksNote({ list: 'demerzel', open, when: 'compaction' })).toContain('in_progress (1):\n#2 [in_progress] [refactor] port main\npending (1):\n#10 [pending] [tcc] title')
   expect(promptContext({ list: 'demerzel', open: [], archived: [], remind: false })).toBe(null)
   expect(promptContext({ list: 'demerzel', open: [], archived: [], remind: true })).toContain('becomes a task (TaskCreate) before any other work')
 })
@@ -111,10 +139,10 @@ test('a prompt from the user carries the rule, and the open tasks; a peer messag
   expect(first).toMatchObject({ context: [expect.stringContaining('#4 [pending] [docs] guide')] })
   s.files.set(`${LIST}/5.json`, task('5', '[zippi] issue', 'pending'))
   const changed = await $.prompt.submit({ text: 'another', wait: false, origin: { kind: 'composer' } })
-  expect(changed).toMatchObject({ context: [expect.stringContaining('#4 [pending] [docs] guide\n#5 [pending] [zippi] issue')] })
+  expect(changed).toMatchObject({ context: [expect.stringContaining('pending (2):\n#4 [pending] [docs] guide\n#5 [pending] [zippi] issue')] })
   s.files.set(`${LIST}/4.json`, task('4', '[docs] guide', 'completed'))
   const closed = await $.prompt.submit({ text: 'and now', wait: false, origin: { kind: 'composer' } })
-  expect(closed).toMatchObject({ context: [expect.stringContaining('Completed and archived since the last prompt:\n#4 [docs] guide\nOpen tasks now:\n#5')] })
+  expect(closed).toMatchObject({ context: [expect.stringContaining('Completed and archived since the last prompt:\n#4 [docs] guide\nOpen tasks now:\npending (1):\n#5')] })
   const peer = await $.prompt.submit({ text: 'agent done', wait: false, origin: { kind: 'peer' } })
   expect(Reflect.get(peer, 'context')).toBe(undefined)
 })
@@ -126,7 +154,7 @@ test('without a named list the rule stays out, and the session list is read', as
   s.files.set(`${SESSION_LIST}/1.json`, task('1', 'write tests', 'pending'))
   const r = await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
   const ctx: unknown = Reflect.get(r, 'context')
-  expect(ctx).toEqual(['Open tasks now:\n#1 [pending] write tests'])
+  expect(ctx).toEqual(['Open tasks now:\npending (1):\n#1 [pending] write tests'])
 })
 
 test('a task marked completed leaves the list at once', async ($, on) => {

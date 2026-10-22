@@ -27,7 +27,15 @@ export function options(values: unknown): Options {
 
 export type Status = 'pending' | 'in_progress' | 'completed'
 
-export type Task = { id: string; subject: string; description: string; status: Status }
+export type Task = {
+  id: string
+  subject: string
+  description: string
+  status: Status
+  // `metadata.priority` and `metadata.state` of the task file, when set.
+  priority?: string
+  state?: string
+}
 
 // More than this many open tasks are cut from the note, with a count of the rest.
 export const MAX_LISTED = 30
@@ -59,7 +67,15 @@ export function parseTask(text: string): Task | null {
   const status: unknown = Reflect.get(raw, 'status')
   const description: unknown = Reflect.get(raw, 'description')
   if (typeof id !== 'string' || typeof subject !== 'string' || !isStatus(status)) return null
-  return { id, subject, status, description: typeof description === 'string' ? description : '' }
+  const task: Task = { id, subject, status, description: typeof description === 'string' ? description : '' }
+  const metadata: unknown = Reflect.get(raw, 'metadata')
+  if (typeof metadata === 'object' && metadata !== null) {
+    const priority: unknown = Reflect.get(metadata, 'priority')
+    const state: unknown = Reflect.get(metadata, 'state')
+    if (typeof priority === 'string' && priority.trim() !== '') task.priority = priority.trim()
+    if (typeof state === 'string' && state.trim() !== '') task.state = state.trim()
+  }
+  return task
 }
 
 // Numeric ids in numeric order, the order Claude Code gives them.
@@ -67,8 +83,52 @@ export function byId(a: Task, b: Task): number {
   return Number(a.id) - Number(b.id) || a.id.localeCompare(b.id)
 }
 
+// A subject such as `[owner] P1 waiting: what was asked` carries the priority and the state when the
+// task file has no metadata. The state word is the one before the colon, so `[a] P0 fix login` has a
+// priority and no state.
+const SUBJECT_TAGS = /^\s*(?:\[[^\]]*\]\s*)?(P\d+)\b(?:\s+([^\s:]+):)?/i
+
+// The priority as a number, P0 first. A task with no priority sorts after every tagged one.
+export function rank(t: Task): number {
+  const tag = t.priority ?? SUBJECT_TAGS.exec(t.subject)?.[1]
+  const n = tag === undefined ? NaN : Number(/^P(\d+)$/i.exec(tag)?.[1])
+  return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n
+}
+
+// The group a task is listed under: its state, or its native status when it names no state.
+export function stateOf(t: Task): string {
+  return (t.state ?? SUBJECT_TAGS.exec(t.subject)?.[2] ?? t.status).toLowerCase()
+}
+
+// Open tasks by priority, then in id order.
+export function byPriority(a: Task, b: Task): number {
+  return rank(a) - rank(b) || byId(a, b)
+}
+
+// One group per state, each sorted by priority. The group holding the most urgent task comes first,
+// and on a tie the group of a task in progress, so the work under way reads before the queue.
+export function groups(open: readonly Task[]): { state: string; tasks: Task[] }[] {
+  const by = new Map<string, Task[]>()
+  for (const t of [...open].sort(byPriority)) {
+    const k = stateOf(t)
+    by.set(k, [...(by.get(k) ?? []), t])
+  }
+  const top = (ts: readonly Task[]) => ts[0] as Task
+  const working = (ts: readonly Task[]) => (ts.some((t) => t.status === 'in_progress') ? 0 : 1)
+  return [...by.entries()]
+    .map(([state, tasks]) => ({ state, tasks }))
+    .sort((a, b) => rank(top(a.tasks)) - rank(top(b.tasks)) || working(a.tasks) - working(b.tasks) || byPriority(top(a.tasks), top(b.tasks)))
+}
+
 function listing(open: readonly Task[]): string[] {
-  const shown = open.slice(0, MAX_LISTED).map((t) => `#${t.id} [${t.status}] ${t.subject}`)
+  const shown: string[] = []
+  let left = MAX_LISTED
+  for (const g of groups(open)) {
+    if (left === 0) break
+    shown.push(`${g.state} (${g.tasks.length}):`)
+    for (const t of g.tasks.slice(0, left)) shown.push(`#${t.id} [${t.status}] ${t.subject}`)
+    left -= Math.min(left, g.tasks.length)
+  }
   if (open.length > MAX_LISTED) shown.push(`... and ${open.length - MAX_LISTED} more: run TaskList.`)
   return shown
 }

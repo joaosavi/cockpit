@@ -1,6 +1,6 @@
 {
   "name": "todo",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, and completed tasks moved to an archive log.",
   "author": {
     "name": "João Savi",
