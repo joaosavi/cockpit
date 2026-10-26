@@ -1,7 +1,7 @@
 {
   "name": "todo",
-  "version": "1.5.0",
-  "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, and completed tasks moved to an archive log.",
+  "version": "1.7.0",
+  "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, completed tasks logged to an archive, and the app's task panel kept in line with the task files.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
@@ -32,8 +32,16 @@
     "archive": {
       "type": "boolean",
       "title": "Archive completed tasks",
-      "description": "Move a completed task out of the list into ~/.local/state/mods/todo/<list>.jsonl, so the list holds only open work.",
+      "description": "Log each completed task to ~/.local/state/mods/todo/<list>.jsonl, and have the session remove it from the list with TaskUpdate after keepCompletedHours.",
       "default": true
+    },
+    "keepCompletedHours": {
+      "type": "number",
+      "title": "Keep completed (hours)",
+      "description": "How long a completed task stays in the list and in the app's task panel before the session removes it with TaskUpdate. 0 removes it at the next prompt",
+      "default": 24,
+      "min": 0,
+      "max": 720
     }
   }
 }

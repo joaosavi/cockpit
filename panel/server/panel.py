@@ -1117,8 +1117,9 @@ _panes_cache: tuple[float, dict[int, tuple[str, str]]] = (0.0, {})
 # --- the task lists ---
 
 # Claude Code's native task list: one JSON file per task in <config>/tasks/<list>/<id>.json, where the
-# list is CLAUDE_CODE_TASK_LIST_ID or the session id. The todo mod moves a completed task to
-# ~/.local/state/mods/todo/<list>.jsonl, so the folder holds open work and the log holds the rest.
+# list is CLAUDE_CODE_TASK_LIST_ID or the session id. The todo mod logs a completed task to
+# ~/.local/state/mods/todo/<list>.jsonl, and the file leaves the folder a day later; the tab lists
+# open tasks from the folder and completed ones from the log.
 TASKS = CONFIG / 'tasks'
 TODO_STATE = HOME / '.local/state/mods/todo'
 # The list the tab opens on. Without it, the named list changed last.

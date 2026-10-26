@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { cleanListId, groups, openTasksNote, parseTask, promptContext, type Task } from '../hooks/rules.ts'
+import { cleanListId, groups, isCompacted, openTasksNote, panelCalls, panelFromMessages, panelUpdate, parseTask, promptContext, type Task, withUnknown } from '../hooks/rules.ts'
 
 type Scene = { files: Map<string, string>; appended: string[]; removed: string[] }
 
@@ -16,7 +16,7 @@ function scene(entries: Record<string, string> = {}): Scene {
 }
 
 function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene, env: Record<string, string> = { HOME: '/home', CLAUDE_CODE_TASK_LIST_ID: 'demerzel' }, onTool?: (e: unknown) => void) {
-  mock.clock(on, { now: Date.parse('2026-10-22T13:00:00Z') })
+  const clock = mock.clock(on, { now: Date.parse('2026-10-22T13:00:00Z') })
   mock.env(on, env)
   on('session.id', () => ({ value: 'abcdef123456' }))
   on('fs.read', ($, e) => {
@@ -54,6 +54,7 @@ function prepare(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene, env: R
     onTool?.(e)
     return { result: 'ok', text: 'ok' }
   })
+  return clock
 }
 
 const start = { surface: 'terminal', isInteractive: true, cwd: '/work' } as const
@@ -105,7 +106,7 @@ test('the notes list open tasks in id order and say nothing about an empty list'
   expect(promptContext({ list: 'demerzel', open: [], archived: [], remind: true })).toContain('becomes a task (TaskCreate) before any other work')
 })
 
-test('at start the open tasks go in as a note, and completed ones move to the archive', async ($, on) => {
+test('at start the open tasks go in as a note, and completed ones go to the archive and stay on disk', async ($, on) => {
   const s = scene({
     [`${LIST}/1.json`]: task('1', '[refactor] port main', 'in_progress'),
     [`${LIST}/2.json`]: task('2', '[tcc] new title', 'completed'),
@@ -116,7 +117,8 @@ test('at start the open tasks go in as a note, and completed ones move to the ar
   expect(s.appended).toHaveLength(1)
   expect(s.appended[0]).toContain('#1 [in_progress] [refactor] port main')
   expect(s.appended[0]).not.toContain('tcc')
-  expect(s.removed).toEqual([`${LIST}/2.json`])
+  expect(s.removed).toEqual([])
+  expect(s.files.has(`${LIST}/2.json`)).toBe(true)
   const archived = (s.files.get(ARCHIVE) ?? '').trim().split('\n').map((l): unknown => JSON.parse(l))
   expect(archived).toEqual([
     { at: '2026-10-22T13:00:00.000Z', session: 'abcdef12', event: 'archived', list: 'demerzel', id: '2', subject: '[tcc] new title', description: 'about [tcc] new title' },
@@ -157,12 +159,12 @@ test('without a named list the rule stays out, and the session list is read', as
   expect(ctx).toEqual(['Open tasks now:\npending (1):\n#1 [pending] write tests'])
 })
 
-test('a task marked completed leaves the list at once', async ($, on) => {
+test('a task marked completed goes to the archive at once', async ($, on) => {
   const s = scene({ [`${LIST}/1.json`]: task('1', '[a] one', 'pending') })
   prepare(on, s, undefined, () => s.files.set(`${LIST}/1.json`, task('1', '[a] one', 'completed')))
   await $.session.start(start)
   await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'completed' })
-  expect(s.files.has(`${LIST}/1.json`)).toBe(false)
+  expect(s.files.has(`${LIST}/1.json`)).toBe(true)
   expect(s.files.get(ARCHIVE)).toContain('"id":"1"')
 })
 
@@ -193,4 +195,94 @@ test('disabled, the mod adds nothing', { options: { enabled: false } }, async ($
   expect(Reflect.get(r, 'context')).toBe(undefined)
   expect(s.appended).toEqual([])
   expect(s.files.has(`${LIST}/1.json`)).toBe(true)
+})
+
+// The app's task panel folds the session's TaskCreate and TaskUpdate calls and never reads the files.
+const use = (tool: string, input: Record<string, unknown>, text?: string) => ({ tool_use_id: `u${Math.random()}`, tool, input, text })
+
+test('the panel is folded from the calls the way the app folds them', () => {
+  const p = panelFromMessages([
+    { role: 'assistant', toolUses: [use('TaskCreate', { subject: '[a] one' }, 'Task #1 created successfully: [a] one')] },
+    { role: 'assistant', toolUses: [use('TaskUpdate', { taskId: '15', status: 'completed' })] },
+    { role: 'assistant', toolUses: [use('TaskCreate', { subject: '[b] reused' }, 'Task #1 created successfully: [b] reused')] },
+    { role: 'assistant', toolUses: [use('TaskCreate', { subject: '[c] failed' }, 'Error')] },
+    { role: 'assistant', toolUses: [use('TaskCreate', { subject: '[d] gone' }, 'Task #2 created successfully: [d] gone'), use('TaskUpdate', { taskId: '2', status: 'deleted' })] },
+  ])
+  // An update with no create shows the bare id, and a create on an id the panel holds is dropped.
+  expect(p).toEqual({ '1': { subject: '[a] one', status: 'pending' }, '15': { subject: '15', status: 'completed' } })
+  expect(panelUpdate(p, { taskId: 1, subject: '[a] renamed' })).toEqual({ ...p, '1': { subject: '[a] renamed', status: 'pending' } })
+})
+
+test('a panel that drifted from the disk gets the TaskUpdate calls that bring it back', () => {
+  const t = (id: string, subject: string, status: Task['status']): Task => ({ id, subject, description: '', status })
+  const panel = {
+    '1': { subject: '[next-cve] P0 Next', status: 'in_progress' },
+    '15': { subject: '15', status: 'completed' },
+    '17': { subject: '[tcc] old subject', status: 'in_progress' },
+    '20': { subject: '[x] same', status: 'pending' },
+  }
+  const disk = [t('17', '[tcc] new subject', 'in_progress'), t('20', '[x] same', 'pending'), t('21', '[y] by a script', 'pending'), t('22', '[z] closed', 'completed')]
+  expect(panelCalls({ panel, disk, expired: new Set(['22']) })).toEqual([
+    { taskId: '1', status: 'deleted' },
+    { taskId: '15', status: 'deleted' },
+    { taskId: '22', status: 'deleted' },
+    { taskId: '17', subject: '[tcc] new subject' },
+    { taskId: '21', subject: '[y] by a script', status: 'pending' },
+  ])
+})
+
+test('a task an outside script completed reaches the panel through the session', async ($, on) => {
+  const s = scene({ [`${LIST}/3.json`]: task('3', '[agent] P1 work', 'in_progress') })
+  prepare(on, s, undefined, (e) => {
+    const id = Reflect.get(e as object, 'taskId')
+    if (Reflect.get(e as object, 'tool') === 'TaskUpdate' && Reflect.get(e as object, 'status') === 'completed') s.files.set(`${LIST}/${id}.json`, task(String(id), '[agent] P1 work', 'completed'))
+  })
+  on('session.messages', () => ({ value: [{ role: 'assistant', text: '', toolUses: [use('TaskUpdate', { taskId: '3', subject: '[agent] P1 work', status: 'in_progress' })] }] }))
+  await $.session.start(start)
+  // `agent stop` rewrites the file and never calls TaskUpdate.
+  s.files.set(`${LIST}/3.json`, task('3', '[agent] P1 work', 'completed'))
+  const r = await $.prompt.submit({ text: 'status?', wait: false, origin: { kind: 'bridge' } })
+  expect(r).toMatchObject({ context: [expect.stringContaining('TaskUpdate {"taskId":"3","status":"completed"}')] })
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '3', status: 'completed' })
+  const after = await $.prompt.submit({ text: 'and now?', wait: false, origin: { kind: 'bridge' } })
+  expect(after).not.toMatchObject({ context: [expect.stringContaining('TaskUpdate {')] })
+  // The completed task stays on disk, so Claude Code never hands its id out again.
+  expect(s.files.has(`${LIST}/3.json`)).toBe(true)
+  expect(s.removed).toEqual([])
+})
+
+test('a completed task leaves the panel and the list through TaskUpdate once it is old enough', { options: { keepCompletedHours: 1 } }, async ($, on) => {
+  const s = scene({ [`${LIST}/4.json`]: task('4', '[a] done', 'completed') })
+  const clock = prepare(on, s)
+  on('session.messages', () => ({ value: [] }))
+  await $.session.start(start)
+  const early = await $.prompt.submit({ text: 'x', wait: false, origin: { kind: 'composer' } })
+  expect(Reflect.get(early, 'context')).toEqual(['Task list "demerzel". ' + 'A new request from the user becomes a task (TaskCreate) before any other work, with its owner in the subject, such as "[owner] what was asked". Mark it completed only after the result was reported.' + '\nCompleted and archived since the last prompt:\n#4 [a] done'])
+  await clock.advance(2 * 3600_000)
+  const late = await $.prompt.submit({ text: 'y', wait: false, origin: { kind: 'composer' } })
+  expect(late).toMatchObject({ context: [expect.stringContaining('TaskUpdate {"taskId":"4","status":"deleted"}')] })
+})
+
+test('at start the id mark is raised past every id the archive saw', async ($, on) => {
+  const s = scene({
+    [`${LIST}/2.json`]: task('2', '[a] open', 'pending'),
+    [ARCHIVE]: JSON.stringify({ event: 'archived', list: 'demerzel', id: '39', subject: 'x' }) + '\n',
+  })
+  prepare(on, s)
+  on('session.messages', () => ({ value: [] }))
+  await $.session.start(start)
+  expect(s.files.get(`${LIST}/.highwatermark`)).toBe('39')
+})
+
+test('after a compaction every id the conversation hides is resynced once', async ($, on) => {
+  const s = scene({ [`${LIST}/2.json`]: task('2', '[a] open', 'in_progress'), [`${LIST}/.highwatermark`]: '3' })
+  prepare(on, s)
+  const summary = 'This session is being continued from a previous conversation that ran out of context.'
+  on('session.messages', () => ({ value: [{ role: 'user', text: summary, toolUses: [] }] }))
+  await $.session.start(start)
+  const r = await $.prompt.submit({ text: 'x', wait: false, origin: { kind: 'bridge' } })
+  const ctx = String(Reflect.get(r, 'context'))
+  expect(ctx).toContain('TaskUpdate {"taskId":"1","status":"deleted"}\nTaskUpdate {"taskId":"3","status":"deleted"}\nTaskUpdate {"taskId":"2","subject":"[a] open","status":"in_progress"}')
+  expect(isCompacted([{ role: 'user', text: 'hi' }])).toBe(false)
+  expect(withUnknown({ '2': { subject: 'a', status: 'pending' } }, 2)).toEqual({ '1': { subject: '', status: '' }, '2': { subject: 'a', status: 'pending' } })
 })

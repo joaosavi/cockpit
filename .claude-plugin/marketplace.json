@@ -48,7 +48,7 @@
     {
       "name": "todo",
       "source": "./todo",
-      "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, and completed tasks moved to an archive log."
+      "description": "Keeps the native task list in front of the agent: the open tasks at session start and right after each compaction, a reminder that a new request becomes a task before any other work, completed tasks logged to an archive, and the app's task panel kept in line with the task files."
     },
     {
       "name": "hud",

@@ -10,11 +10,13 @@ export type Options = {
   enabled: boolean
   // With a named list, each prompt from the user carries the request reminder.
   remind: boolean
-  // A completed task leaves the list for the archive log.
+  // A completed task goes to the archive log, and leaves the list through TaskUpdate once it is
+  // keepCompletedHours old.
   archive: boolean
+  keepCompletedHours: number
 }
 
-export const DEFAULTS: Options = { enabled: true, remind: true, archive: true }
+export const DEFAULTS: Options = { enabled: true, remind: true, archive: true, keepCompletedHours: 24 }
 
 export function options(values: unknown): Options {
   if (typeof values !== 'object' || values === null) return DEFAULTS
@@ -22,7 +24,13 @@ export function options(values: unknown): Options {
     enabled: Reflect.get(values, 'enabled') !== false,
     remind: Reflect.get(values, 'remind') !== false,
     archive: Reflect.get(values, 'archive') !== false,
+    keepCompletedHours: hours(Reflect.get(values, 'keepCompletedHours')),
   }
+}
+
+function hours(v: unknown): number {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULTS.keepCompletedHours
 }
 
 export type Status = 'pending' | 'in_progress' | 'completed'
@@ -178,4 +186,128 @@ export function taskUpdate(input: unknown): { id: string | undefined; status: st
     id: typeof id === 'string' ? id : typeof id === 'number' ? String(id) : undefined,
     status: typeof status === 'string' ? status : undefined,
   }
+}
+
+// --- the app's task panel ---
+//
+// The task panel of the Claude app (claude.ai and the phone, over Remote Control) never reads the
+// task files. It folds the session's own TaskCreate and TaskUpdate calls, the way Claude Code 2.1.310
+// folds them for a remote session: a create counts once its result names the id, and only when the
+// panel does not hold that id yet; an update applies its input whatever the tool answered, so an
+// update on an id the panel never saw shows the bare id as the subject; `deleted` drops the entry. A
+// file that a script rewrote or removed never reaches the panel. The mod keeps the same fold, and
+// asks the session for the TaskUpdate calls that bring the panel back in line with the files.
+
+export type PanelEntry = { subject: string; status: string }
+export type Panel = Readonly<Record<string, PanelEntry>>
+export type PanelCall = { taskId: string; status?: string; subject?: string }
+
+const CREATED = /^Task #(\S+) created successfully/
+
+function idOf(v: unknown): string | undefined {
+  return typeof v === 'string' && v !== '' ? v : typeof v === 'number' ? String(v) : undefined
+}
+
+export function panelCreate(p: Panel, id: string, subject: string): Panel {
+  return id in p ? p : { ...p, [id]: { subject, status: 'pending' } }
+}
+
+// One TaskUpdate input folded in. `id` and `task_id` stand for `taskId`, as Claude Code reads them.
+export function panelUpdate(p: Panel, input: unknown): Panel {
+  if (typeof input !== 'object' || input === null) return p
+  const id = idOf(Reflect.get(input, 'taskId')) ?? idOf(Reflect.get(input, 'id')) ?? idOf(Reflect.get(input, 'task_id'))
+  if (id === undefined) return p
+  const status: unknown = Reflect.get(input, 'status')
+  const subject: unknown = Reflect.get(input, 'subject')
+  if (status === 'deleted') {
+    const { [id]: _gone, ...rest } = p
+    return rest
+  }
+  const before = p[id]
+  return {
+    ...p,
+    [id]: {
+      subject: typeof subject === 'string' ? subject : (before?.subject ?? id),
+      status: typeof status === 'string' ? status : (before?.status ?? 'pending'),
+    },
+  }
+}
+
+// The id a TaskCreate result names, or undefined for an error or an unknown answer.
+export function createdId(text: string | undefined): string | undefined {
+  return text === undefined ? undefined : CREATED.exec(text)?.[1]
+}
+
+type ToolUseRow = { tool: string; input: unknown; text?: string; isError?: true }
+
+// The panel as the app folded it from the conversation so far.
+export function panelFromMessages(messages: readonly { role: string; toolUses?: readonly ToolUseRow[] }[]): Panel {
+  let p: Panel = {}
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    for (const u of m.toolUses ?? []) {
+      if (u.tool === 'TaskUpdate') p = panelUpdate(p, u.input)
+      else if (u.tool === 'TaskCreate' && u.isError !== true) {
+        const id = createdId(u.text)
+        const subject: unknown = typeof u.input === 'object' && u.input !== null ? Reflect.get(u.input, 'subject') : undefined
+        if (id !== undefined && typeof subject === 'string') p = panelCreate(p, id, subject)
+      }
+    }
+  }
+  return p
+}
+
+// The summary a compaction leaves as the first user message. `$.session.messages()` starts there, and
+// the calls before it are still in the app's panel.
+const COMPACTED = /This session is being continued from a previous conversation|<tools-used-before-summary>/
+
+export function isCompacted(messages: readonly { role: string; text?: string }[]): boolean {
+  return messages.some((m) => m.role === 'user' && typeof m.text === 'string' && COMPACTED.test(m.text))
+}
+
+// Ids up to this one are filled in as unknown after a compaction.
+export const MAX_UNKNOWN_ID = 1000
+
+// A compacted conversation hides what the panel took before the summary. Every id up to `top` that the
+// conversation does not show is marked unknown: the next calls drop it when its file is gone and
+// rewrite it from the file otherwise. A delete on an id the panel never held changes nothing.
+export function withUnknown(p: Panel, top: number): Panel {
+  const out: Record<string, PanelEntry> = { ...p }
+  for (let id = 1; id <= Math.min(top, MAX_UNKNOWN_ID); id++) if (!(String(id) in out)) out[String(id)] = { subject: '', status: '' }
+  return out
+}
+
+// The calls that make the panel match the files: entries whose file is gone and completed tasks past
+// their time leave, then entries that differ take the file's subject and status, then open tasks the
+// panel never saw come in. A completed task the panel never saw stays out of it.
+export function panelCalls(a: { panel: Panel; disk: readonly Task[]; expired: ReadonlySet<string> }): PanelCall[] {
+  const onDisk = new Map(a.disk.map((t) => [t.id, t]))
+  const num = (x: string, y: string) => Number(x) - Number(y) || x.localeCompare(y)
+  const leave = [...new Set([...Object.keys(a.panel).filter((id) => !onDisk.has(id)), ...[...a.expired].filter((id) => onDisk.has(id))])].sort(num)
+  const out: PanelCall[] = leave.map((taskId) => ({ taskId, status: 'deleted' }))
+  for (const t of [...a.disk].sort(byId)) {
+    if (a.expired.has(t.id)) continue
+    const seen = a.panel[t.id]
+    if (seen === undefined) {
+      if (t.status !== 'completed') out.push({ taskId: t.id, subject: t.subject, status: t.status })
+      continue
+    }
+    const call: PanelCall = { taskId: t.id }
+    if (seen.subject !== t.subject) call.subject = t.subject
+    if (seen.status !== t.status) call.status = t.status
+    if (call.subject !== undefined || call.status !== undefined) out.push(call)
+  }
+  return out
+}
+
+// More than this many calls wait for the next prompt.
+export const MAX_CALLS = 40
+
+export function panelNote(calls: readonly PanelCall[]): string | null {
+  if (calls.length === 0) return null
+  const shown = calls.slice(0, MAX_CALLS).map((c) => `TaskUpdate ${JSON.stringify(c)}`)
+  return [
+    'The task panel in the Claude app shows what this session\'s TaskCreate and TaskUpdate calls said, and it no longer matches the task files. Make these TaskUpdate calls now, before anything else, without mentioning them. A call on a task whose file is gone answers that it failed; the panel drops the task anyway.',
+    ...shown,
+  ].join('\n')
 }
