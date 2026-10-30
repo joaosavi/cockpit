@@ -24,6 +24,7 @@ const SECRETS = `${HOME}/.secrets`
 const ROOT = `${HOME}/repos`
 // The env root is off by default; most cases set it to the folder holding the repos.
 const REPOS = { options: { envRoot: '~/repos' } }
+const TRASH = `${HOME}/.local/share/Trash/files`
 const ENV_BI = `${ROOT}/bi/apps/bi/.env`
 const EXAMPLE = `${ROOT}/bi/.env.example`
 const NOTES = `${ROOT}/bi/notes.md`
@@ -141,6 +142,9 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
     const argv = e.argv.join(' ')
     w.ran?.push(argv)
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    if (argv.startsWith(`find ${TRASH} `)) {
+      return ok([...w.files.keys()].filter((f) => f.startsWith(`${TRASH}/`) && /\/\.env[^/]*$/.test(f)).map((f) => `${f}\n`).join(''))
+    }
     if (argv.startsWith('find ') && w.finds !== undefined && w.finds.length > 0) {
       const out = w.finds.shift() ?? 'fail'
       return out === 'fail' ? { value: { exitCode: 1, stdout: '', stderr: 'killed', isStdoutTruncated: false, isStderrTruncated: false } } : ok(out)
@@ -518,6 +522,21 @@ test('a new .env is found by the folder check after 60 s, and not before', REPOS
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe(FAKE_NEW)
   await clock.advance(31_000)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe('<hidden:LOCAL_TOKEN>')
+})
+
+test('a .env in the trash is hidden without the folder scan going there, and one trashed later too', REPOS, async ($, on) => {
+  const w = freshWorld()
+  const old = 't'.repeat(14) + 'rashed-old-value'
+  const later = 'l'.repeat(14) + 'ater-trashed-value'
+  w.files.set(`${TRASH}/wt/apps/api/.env`, { text: `OLD_TOKEN=${old}\n`, mtimeMs: 0 })
+  w.answers.push(bash(old), bash(later))
+  const clock = setup(on, w)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'cat x' }))).not.toContain(old)
+  await clock.advance(1000)
+  w.files.set(`${TRASH}/wt2/.env.local`, { text: `LATER_TOKEN=${later}\n`, mtimeMs: clock.now() })
+  w.dirMtimes.set(TRASH, clock.now())
+  await clock.advance(1000)
+  expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'cat y' }))).not.toContain(later)
 })
 
 test('find skips the trash and the package caches', REPOS, async ($, on) => {

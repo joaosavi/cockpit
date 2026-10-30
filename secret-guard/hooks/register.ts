@@ -78,6 +78,9 @@ let built: Built | null = null
 let building: Promise<Built> | null = null
 // Whether `find` has listed the env root once in this session: when it has, a later failure is not a missing `find`.
 let findWorked = false
+// The `.env*` files in the trash, found by one `find` of the trash alone and kept until its folder's
+// mtime moves, which happens when an item is trashed, restored or emptied.
+let trashCache: { mtimeMs: number; files: string[] } | null = null
 
 // One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
 // on each write, because `/clear` and `/resume` change it without reloading the mod.
@@ -217,7 +220,8 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
       s = { envFiles: found.sort(), dirs, at: builtAt }
     }
   }
-  const files = s.envFiles
+  const trash = await trashEnvFiles($)
+  const files = [...s.envFiles, ...trash.files]
   const secrets = await readOrNull($, p.secretsFile)
   const secretsDir = secretsDirOf(p.secretsFile)
   const fromDir = await secretsDirFiles($, secretsDir)
@@ -234,6 +238,7 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
     [secretsDir, fromDir.exists],
     ...[...fromDir.files, ...envFiles].map((f): [string, boolean] => [f.path, true]),
   ])
+  if (trash.dir !== null) known.set(trash.dir, true)
   await log($, {
     event: 'list-built',
     scanned: prior === null,
@@ -242,9 +247,34 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
     envFiles: envFiles.filter((f) => !isExample(f.path)).length,
     exampleFiles: envFiles.filter((f) => isExample(f.path)).length,
     environment: environ.length,
+    trashEnvFiles: trash.files.length,
     ms: (await $.clock.now()) - builtAt,
   })
   return { table, builtAt, files: known, scan: s, dirsCheckedAt: builtAt }
+}
+
+// The `.env*` files in the trash. The folder scan skips the trash, which can hold thousands of folders,
+// but a `.env` put there still holds live values: trash-put of a worktree carries its `.env` along.
+async function trashEnvFiles($: Api): Promise<{ dir: string | null; files: string[] }> {
+  const home = (await $.env.get('XDG_DATA_HOME')) ?? `${(await $.env.get('HOME')) ?? ''}/.local/share`
+  const dir = `${home}/Trash/files`
+  let mtimeMs
+  try {
+    mtimeMs = (await $.fs.stat(dir)).mtimeMs
+  } catch {
+    return { dir: null, files: [] }
+  }
+  if (trashCache?.mtimeMs !== mtimeMs) {
+    let files = trashCache?.files ?? []
+    try {
+      const r = await $.process.run(['find', dir, '-name', '.env*', '-type', 'f'], { timeoutMs: 30_000 })
+      if (r.exitCode === 0 && !r.isStdoutTruncated) files = r.stdout.split('\n').filter((l) => l !== '')
+    } catch {
+      // `find` missing: the trash stays out, as it was before this source
+    }
+    trashCache = { mtimeMs, files }
+  }
+  return { dir, files: trashCache.files }
 }
 
 // A source changed when it appeared, disappeared, or has an mtime from the build's millisecond on: `>=`,
