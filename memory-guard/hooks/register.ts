@@ -11,6 +11,7 @@
 
 import type { Elements, Hook, On, PluginOptions, RenderElement, Timer } from 'claude-code'
 import {
+  ALSO_WATCHED,
   bar,
   cost,
   DEFAULTS,
@@ -67,8 +68,8 @@ const PANE = 'ram'
 const PANE_REFRESH_MS = 2000
 
 // What the /ram pane draws. The command, the timer and the Refresh button read the files; the render hook only reads this.
-type Reading = { levels: Level[]; machine: Machine | null; peaks: Record<string, number[]> }
-let shown: Reading = { levels: [], machine: null, peaks: {} }
+type Reading = { levels: Level[]; machine: Machine | null; peaks: Record<string, number[]>; others: Level[] }
+let shown: Reading = { levels: [], machine: null, peaks: {}, others: [] }
 let paneTimer: Timer | null = null
 
 let cwd = ''
@@ -98,8 +99,13 @@ async function readLevels($: Api): Promise<Level[]> {
   } catch {
     return []
   }
+  return readGroups($, groups(proc))
+}
+
+// A group that is missing or has no memory controller is left out.
+async function readGroups($: Api, paths: readonly string[]): Promise<Level[]> {
   const levels: Level[] = []
-  for (const group of groups(proc)) {
+  for (const group of paths) {
     try {
       const dir = '/sys/fs/cgroup' + group
       const current = numberOrMax(await $.fs.read(dir + '/memory.current'))
@@ -201,7 +207,7 @@ async function updateStatus($: Api) {
 }
 
 async function refreshRam($: Api) {
-  shown = { levels: await readLevels($), machine: await readMachine($), peaks: await readPeaks($) }
+  shown = { levels: await readLevels($), machine: await readMachine($), peaks: await readPeaks($), others: await readGroups($, o.alsoShow) }
   $.ui.invalidate('ui.render')
 }
 
@@ -240,6 +246,8 @@ function ramPane(ui: Ui, r: Reading, columns: number, refresh: () => Promise<voi
   blocks.push(ui.Text({ children: [' '] }))
   for (const l of r.levels) blocks.push(levelBlock(ui, l, columns))
   if (r.levels.length === 0 && r.machine !== null) blocks.push(ui.Text({ dimColor: true, children: [machineLine(r.machine)] }))
+  if (r.others.length > 0) blocks.push(ui.Text({ dimColor: true, children: [ALSO_WATCHED] }))
+  for (const l of r.others) blocks.push(levelBlock(ui, l, columns))
   for (const line of peakLines(r.peaks)) blocks.push(ui.Text({ dimColor: true, wrap: 'truncate', children: [line] }))
   blocks.push(
     ui.Box({
@@ -351,7 +359,7 @@ export function register(on: On, values: PluginOptions) {
         await refreshRam($)
       })
     }
-    return { text: [report(shown.levels, shown.machine, o.margin), ...peakLines(shown.peaks)].join('\n') }
+    return { text: [report(shown.levels, shown.machine, o.margin, shown.others), ...peakLines(shown.peaks)].join('\n') }
   })
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {

@@ -21,7 +21,7 @@ Without a cgroup limit, as on most Linux desktops and laptops, the headroom is `
 
 ## Commands
 
-- `/ram` shows the headroom, each cgroup's use and limits when there are any, and the measured peaks. It says there is no memory reading when the system gives none. In a terminal it also opens the Memory pane: a bar per cgroup with the high mark, refreshed every 2 seconds. Press `r` to refresh and `esc` to close.
+- `/ram` shows the headroom, each cgroup's use and limits when there are any, the groups in `alsoShow`, and the measured peaks. It says there is no memory reading when the system gives none. In a terminal it also opens the Memory pane: a bar per cgroup with the high mark, refreshed every 2 seconds. Press `r` to refresh and `esc` to close.
 
 ## Options
 
@@ -34,6 +34,7 @@ Without a cgroup limit, as on most Linux desktops and laptops, the headroom is `
 | `wait` | `true` | When nothing fits, wait up to `waitSeconds`. Off, the next step comes at once. |
 | `refuse` | `true` | When memory does not free up, refuse the command. Off, it runs as written and may be killed. |
 | `retry137` | `true` | Rerun with a single process a command killed with exit 137. |
+| `alsoShow` | empty | Comma-separated cgroups outside the session's own, like `ci.slice`, that `/ram` shows under "Also watched". They never count in the headroom, because the session cannot use their memory. |
 
 ## What it records
 

@@ -57,6 +57,8 @@ type Scenario = {
   inactive?: number
   high?: number | 'max'
   max?: number | 'max'
+  // Groups outside the session's tree, by path, for the alsoShow option.
+  others?: Record<string, { used: number; max: number }>
   // The surfaces /ram sees, and the panes it opened.
   surfaces?: string[]
   opened?: string[]
@@ -80,6 +82,11 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], c: Scenario) {
   on('fs.read', ($, e) => {
     const p = e.path
     if (p.endsWith('/proc/self/cgroup')) return { value: '0::/agents.slice/demo.service\n' }
+    for (const [group, g] of Object.entries(c.others ?? {})) {
+      if (p === `/sys/fs/cgroup${group}/memory.current`) return { value: String(g.used) }
+      if (p === `/sys/fs/cgroup${group}/memory.max`) return { value: String(g.max) }
+      if (p === `/sys/fs/cgroup${group}/memory.high`) return { value: 'max' }
+    }
     if (p.endsWith('demo.service/memory.current')) return { value: String(c.used[0]) }
     if (p.endsWith('demo.service/memory.high')) return { value: String(c.high ?? HIGH) }
     if (p.endsWith('demo.service/memory.max')) return { value: String(c.max ?? MAX) }
@@ -304,6 +311,26 @@ test('the Memory pane refreshes every 2 seconds while open', async ($, on) => {
   c.used[0] = 2.5 * GB
   await clock.advance(2000)
   expect(await ui.find({ type: 'Text', text: /^2560 MB in use/ })).toBeDefined()
+})
+
+test('/ram also shows the groups in alsoShow, after the session tree, without counting them in the headroom', { options: { alsoShow: 'ci.slice, /missing.slice' } }, async ($, on) => {
+  const c = { used: [2 * GB], commands: [], responses: [], surfaces: ['terminal'], others: { '/ci.slice': { used: 2.9 * GB, max: 3 * GB } } }
+  setup(on, c)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'ram', args: '' })
+  // ci.slice is almost full, and the headroom still comes only from the session's own groups.
+  expect(r.text).toBe(
+    'Headroom: 1464 MB, after the 2% margin\n' +
+      '/agents.slice/demo.service: 2048 MB in use, high 3072 MB, max 3584 MB\n' +
+      '/agents.slice: 2048 MB in use, no limit\n' +
+      'Also watched:\n' +
+      '/ci.slice: 2970 MB in use, max 3072 MB',
+  )
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: '/ci.slice' })).toBeDefined()
+  // A tsc of 1 GiB fits the session's headroom and runs, even with ci.slice full.
+  await $.tool.call({ tool: 'Bash', command: 'npx tsc --noEmit' })
+  expect(c.commands).toEqual(['npx tsc --noEmit'])
 })
 
 test('/ram without a surface that draws answers with text only', async ($, on) => {

@@ -34,9 +34,12 @@ export type Options = {
   margin: number
   // How long the command can wait for memory to drop before it is refused.
   waitSeconds: number
+  // cgroups outside the session's tree that /ram also shows, like a CI slice next to the agents'. They
+  // never count in the headroom: the session cannot use their memory.
+  alsoShow: string[]
 }
 
-export const DEFAULTS: Options = { enabled: true, reduce: true, wait: true, refuse: true, retry137: true, margin: 2, waitSeconds: 120 }
+export const DEFAULTS: Options = { enabled: true, reduce: true, wait: true, refuse: true, retry137: true, margin: 2, waitSeconds: 120, alsoShow: [] }
 
 const MB = 1024 * 1024
 const GB = 1024 * MB
@@ -67,7 +70,18 @@ export function options(values: unknown): Options {
     retry137: on('retry137'),
     margin: number('margin', DEFAULTS.margin),
     waitSeconds: number('waitSeconds', DEFAULTS.waitSeconds),
+    alsoShow: cgroupList(Reflect.get(values, 'alsoShow')),
   }
+}
+
+// "ci.slice, /other.slice" becomes ['/ci.slice', '/other.slice']. A path that climbs out with `..` is dropped.
+function cgroupList(v: unknown): string[] {
+  if (typeof v !== 'string') return []
+  return v
+    .split(',')
+    .map((s) => s.trim().replace(/^\/+/, ''))
+    .filter((s) => s !== '' && !s.split('/').includes('..'))
+    .map((s) => '/' + s)
 }
 
 // Each rule matches a runner that actually runs, at the start of the command or after `;`, `&&`, `|` or `(`.
@@ -267,15 +281,23 @@ function groupText(l: Level): string {
 }
 
 // The /ram reply and the refusal's explanation: plain lines, so it reads the same in Remote Control.
-export function report(levels: readonly Level[], machine: { available: number; total: number } | null, margin: number): string {
-  if (levels.length === 0 && machine === null) return 'No memory reading on this machine.'
+export function report(
+  levels: readonly Level[],
+  machine: { available: number; total: number } | null,
+  margin: number,
+  others: readonly Level[] = [],
+): string {
+  if (levels.length === 0 && machine === null && others.length === 0) return 'No memory reading on this machine.'
   const lines: string[] = []
   const h = headroomLine(levels, machine, margin)
   if (h !== null) lines.push(h)
   for (const l of levels) lines.push(`${l.group}: ${groupText(l)}`)
   if (machine !== null) lines.push(machineLine(machine))
+  if (others.length > 0) lines.push(ALSO_WATCHED, ...others.map((l) => `${l.group}: ${groupText(l)}`))
   return lines.join('\n')
 }
+
+export const ALSO_WATCHED = 'Also watched:'
 
 export function machineLine(m: { available: number; total: number }): string {
   return `Machine: ${mb(m.available)} available of ${mb(m.total)}`
