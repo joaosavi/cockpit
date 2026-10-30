@@ -53,6 +53,8 @@ type World = {
   // No /proc, as on macOS and Windows; the environment comes from these commands instead.
   noProc?: { env0: boolean; set: boolean }
   ran?: string[]
+  // What each `find` prints, in order: a listing, or 'fail' for a run that fails. Empty, `find` is missing.
+  finds?: string[]
 }
 
 function envBi(extra = ''): string {
@@ -139,6 +141,10 @@ function setup(on: Parameters<Parameters<typeof test>[1]>[1], w: World) {
     const argv = e.argv.join(' ')
     w.ran?.push(argv)
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    if (argv.startsWith('find ') && w.finds !== undefined && w.finds.length > 0) {
+      const out = w.finds.shift() ?? 'fail'
+      return out === 'fail' ? { value: { exitCode: 1, stdout: '', stderr: 'killed', isStdoutTruncated: false, isStderrTruncated: false } } : ok(out)
+    }
     if (argv === 'env -0' && w.noProc?.env0 === true) return ok(Object.entries(w.environ).map(([k, v]) => `${k}=${v}\0`).join(''))
     if (argv === 'cmd /d /c set' && w.noProc?.set === true) return ok(Object.entries(w.environ).map(([k, v]) => `${k}=${v}\r\n`).join(''))
     return { deny: 'ENOENT' }
@@ -512,6 +518,32 @@ test('a new .env is found by the folder check after 60 s, and not before', REPOS
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe(FAKE_NEW)
   await clock.advance(31_000)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))).toBe('<hidden:LOCAL_TOKEN>')
+})
+
+test('find skips the trash and the package caches', REPOS, async ($, on) => {
+  const w = freshWorld()
+  w.ran = []
+  setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  const find = w.ran.find((a) => a.startsWith('find ')) ?? ''
+  for (const name of ['Trash', '.cache', '.npm', '.bun', 'node_modules']) expect(find).toContain(`-name ${name}`)
+})
+
+test('a find that fails after one that worked keeps the last scan, and the folder walk does not run', REPOS, async ($, on) => {
+  const w = freshWorld()
+  const listing = [`0 d ${ROOT}`, `1 d ${ROOT}/bi`, `2 d ${ROOT}/bi/apps`, `3 d ${ROOT}/bi/apps/bi`, `4 f ${ENV_BI}`].join('\n') + '\n'
+  w.finds = [listing, 'fail']
+  w.answers.push(bash('first'), bash(FAKE_BI))
+  const clock = setup(on, w)
+  await $.tool.call({ tool: 'Bash', command: 'true' })
+  expect(w.lists).toBe(0)
+  createNewEnv(w, clock.now() + 1000)
+  await clock.advance(61_000)
+  const out = stdoutOf(await $.tool.call({ tool: 'Bash', command: 'ls' }))
+  expect(out).not.toContain(FAKE_BI)
+  expect(out).toContain('hidden:')
+  expect(w.finds).toEqual([])
+  expect(w.lists).toBe(0)
 })
 
 test('a Write to a new .env path is scanned right away, and its value hidden in that same result', REPOS, async ($, on) => {

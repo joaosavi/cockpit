@@ -76,7 +76,12 @@ export const FORMATS: ReadonlyArray<readonly [string, RegExp]> = [
   ['private-key', /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g],
 ]
 
-export const SKIPPED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.next', '.turbo', '.yarn', 'dist', 'build', 'coverage'])
+// Package caches and the trash hold no `.env` anyone uses, and they are most of a home folder: on one
+// machine the trash alone was 9 053 of 21 434 folders, and the scan passed the 30 s `find` limit.
+export const SKIPPED_DIRS: ReadonlySet<string> = new Set([
+  'node_modules', '.git', '.next', '.turbo', '.yarn', 'dist', 'build', 'coverage',
+  '.cache', '.npm', '.bun', 'Trash',
+])
 
 // How deep under the env root the scan goes, and from which level up a folder's mtime is watched.
 export const SCAN_DEPTH = 5

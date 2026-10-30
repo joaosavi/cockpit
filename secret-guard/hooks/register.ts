@@ -76,6 +76,8 @@ let tally = newTally()
 let built: Built | null = null
 // Parallel tool calls share one rebuild.
 let building: Promise<Built> | null = null
+// Whether `find` has listed the env root once in this session: when it has, a later failure is not a missing `find`.
+let findWorked = false
 
 // One diary line. Every mod's diary line starts with `at`, `session` and `event`. The session id is read
 // on each write, because `/clear` and `/resume` change it without reloading the mod.
@@ -164,6 +166,7 @@ async function scanWithFind($: Api, root: string, files: string[], watched: stri
     return false
   }
   if (r.exitCode !== 0 || r.isStdoutTruncated) return false
+  findWorked = true
   const f = parseFind(r.stdout)
   files.push(...f.files)
   for (const link of f.links) if (await isFile($, link)) files.push(link)
@@ -203,8 +206,16 @@ async function build($: Api, prior: Scan | null): Promise<Built> {
     const dirs: string[] = []
     // An empty env root turns the folder scan off: the list then holds the secrets file, the
     // environment and URL passwords, and the known token formats still apply.
-    if (p.envRoot !== '' && !(await scanWithFind($, p.envRoot, found, dirs))) await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
-    s = { envFiles: found.sort(), dirs, at: builtAt }
+    if (p.envRoot === '' || (await scanWithFind($, p.envRoot, found, dirs))) {
+      s = { envFiles: found.sort(), dirs, at: builtAt }
+    } else if (findWorked && built !== null) {
+      // `find` ran before, so this failure is most often its time running out on a loaded machine. The
+      // folder walk is slower still, so the last scan stays until MAX_AGE_MS asks for another.
+      s = { ...built.scan, at: builtAt }
+    } else {
+      await scan($, p.envRoot, SCAN_DEPTH, found, dirs)
+      s = { envFiles: found.sort(), dirs, at: builtAt }
+    }
   }
   const files = s.envFiles
   const secrets = await readOrNull($, p.secretsFile)
