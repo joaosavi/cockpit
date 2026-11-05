@@ -1,6 +1,6 @@
 {
   "name": "hud",
-  "version": "1.3.0",
+  "version": "1.8.1",
   "description": "A heads-up display under or above the prompt: model, branch, context and plan limits, and memory headroom. /hud opens the full view",
   "author": {
     "name": "João Savi"

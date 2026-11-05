@@ -24,7 +24,9 @@ When the marketplace was added from GitHub, Claude Code keeps its own clone at
 `~/.claude/plugins/marketplaces/cockpit`, and `claude plugin marketplace update cockpit` keeps it
 current. When you added it from a local clone of the repo, use that clone's path instead. The
 `installPath` of the mod changes with each version, so avoid it. The script needs Node 22.18 or
-later, which runs its TypeScript as is.
+later, which runs its TypeScript as is. It keeps Node's compiled code in
+`~/.cache/mods/hud/compile`, so a run takes about 0.1 s of CPU instead of 0.45 s, and Node compiles
+a file again when its content changes. Deleting the folder is safe.
 
 On Windows, Claude Code runs the status line command through Git Bash when it is installed and
 through PowerShell otherwise, and PowerShell cannot run a `.sh` file. Point the command at Node
