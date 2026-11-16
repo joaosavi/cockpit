@@ -7,6 +7,10 @@ import type { InstructionFile, PluginOptions } from 'claude-code'
 
 export const INDEX = 'MEMORY.md'
 export const DEFAULT_DIR = '~/.claude/global-memory'
+// The ai-memory wiki keeps each project's pages under <wiki>/<workspace id>/<project id>/, with the
+// project's name in that folder's _meta.md. The index page sits at the same path in every project.
+export const WIKI_INDEX = '_rules/indice-memorias.md'
+export const WIKI_GLOBAL = '_global'
 // Core cuts MEMORY.md at 200 lines and 25,000 bytes before it reaches the model.
 const MAX_LINES = 200
 const MAX_CHARS = 25000
@@ -39,6 +43,30 @@ export function expandHome(path: string, home: string | undefined): string | nul
   if (path !== '~' && !path.startsWith('~/') && !path.startsWith('~\\')) return path
   if (home === undefined || home === '') return null
   return home.replace(/[\\/]+$/, '') + path.slice(1)
+}
+
+// The ai-memory wiki folder from the plugin options, or null when the option is unset: the index then
+// comes from MEMORY.md, as before.
+export function wikiDir(values: PluginOptions, home: string | undefined): string | null {
+  const raw = values.wikiDir
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+  const expanded = expandHome(raw.trim(), home)
+  if (expanded === null) return null
+  const trimmed = expanded.replace(/[\\/]+$/, '')
+  return trimmed === '' ? null : trimmed
+}
+
+// The project name an ai-memory _meta.md declares, or null.
+export function metaProject(raw: string): string | null {
+  const m = /^project:\s*(.+?)\s*$/m.exec(raw.replace(/\r\n?/g, '\n'))
+  return m?.[1]?.replace(/^["']|["']$/g, '') ?? null
+}
+
+// The scope a project memory folder stands for: the last name of the folder it resolves to, so a
+// folder linked to memorias/getdemo is the scope getdemo. Null for core's own folder, named memory.
+export function scopeOf(realPath: string): string | null {
+  const name = realPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? ''
+  return name === '' || name === 'memory' ? null : name
 }
 
 // The global folder from the plugin options, without a trailing slash.

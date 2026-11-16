@@ -10,7 +10,7 @@
 // The diary records each action, and at the end of the session one summary line with the counts.
 
 import type { Hook, InstructionFile, On, PluginOptions } from 'claude-code'
-import { globalDir, INDEX, indexContent, type Mode, rewriteSection, withGlobalIndex } from './rules.ts'
+import { globalDir, INDEX, indexContent, metaProject, type Mode, rewriteSection, scopeOf, WIKI_GLOBAL, WIKI_INDEX, wikiDir, withGlobalIndex } from './rules.ts'
 import { countAction, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -47,19 +47,78 @@ async function act($: Api, action: string) {
 }
 
 type Global = { dir: string; index: string; raw: string }
+type Page = { path: string; raw: string }
 
-// The global folder and its MEMORY.md, or null when either is missing.
+async function home($: Api): Promise<string | undefined> {
+  return (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+}
+
+// The index page of one ai-memory project, read from the wiki on disk; null when `wikiDir` is unset,
+// the project is not in the wiki or its index page is missing. The caller then keeps MEMORY.md.
+async function wikiIndex($: Api, project: string): Promise<Page | null> {
+  const wiki = wikiDir(values, await home($))
+  if (wiki === null) return null
+  try {
+    for (const ws of await $.fs.list(wiki)) {
+      if (ws.kind !== 'dir') continue
+      for (const p of await $.fs.list(`${wiki}/${ws.name}`)) {
+        if (p.kind !== 'dir') continue
+        const dir = `${wiki}/${ws.name}/${p.name}`
+        const meta = await $.fs.read(`${dir}/_meta.md`).catch(() => '')
+        if (metaProject(meta) !== project) continue
+        const path = `${dir}/${WIKI_INDEX}`
+        return { path, raw: await $.fs.read(path) }
+      }
+    }
+  } catch {
+    // an unreadable wiki falls back to MEMORY.md
+  }
+  return null
+}
+
+// The global folder and its index: the wiki's _global index when there is one, else the folder's
+// MEMORY.md. Null when the folder is missing, or when neither index is there.
 async function loadGlobal($: Api): Promise<Global | null> {
-  const dir = globalDir(values, (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')))
+  const dir = globalDir(values, await home($))
   if (dir === null) return null
   try {
     if ((await $.fs.stat(dir)).kind !== 'dir') return null
-    const index = `${dir}/${INDEX}`
-    const raw = await $.fs.read(index)
-    return { dir, index, raw }
   } catch {
     return null
   }
+  const wiki = await wikiIndex($, WIKI_GLOBAL)
+  if (wiki !== null) return { dir, index: wiki.path, raw: wiki.raw }
+  try {
+    const index = `${dir}/${INDEX}`
+    return { dir, index, raw: await $.fs.read(index) }
+  } catch {
+    return null
+  }
+}
+
+// Core's project MEMORY.md swapped for the wiki index of the scope its folder links to. A project
+// folder that is not a link, or a scope without a wiki index, keeps core's entry.
+async function withWikiProjects($: Api, files: readonly InstructionFile[], globalIndex: string): Promise<readonly InstructionFile[]> {
+  if (wikiDir(values, await home($)) === null) return files
+  let changed = false
+  const out: InstructionFile[] = []
+  for (const f of files) {
+    const cut = f.path.length - INDEX.length - 1
+    if (f.kind !== 'memory' || f.path === globalIndex || !f.path.endsWith(INDEX) || cut <= 0) {
+      out.push(f)
+      continue
+    }
+    const real = (await $.fs.stat(f.path.slice(0, cut), { resolve: true }).catch(() => undefined))?.realPath
+    const scope = real === undefined ? null : scopeOf(real)
+    const page = scope === null ? null : await wikiIndex($, scope)
+    if (page === null) {
+      out.push(f)
+      continue
+    }
+    out.push({ ...f, path: page.path, content: indexContent(page.raw) })
+    changed = true
+  }
+  return changed ? out : files
 }
 
 export function register(on: On, options: PluginOptions) {
@@ -72,10 +131,10 @@ export function register(on: On, options: PluginOptions) {
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     // HOME, or USERPROFILE on Windows, where HOME is usually unset.
-    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
-    if (home !== undefined) {
+    const h = await home($)
+    if (h !== undefined) {
       const day = new Date(await $.clock.now()).toISOString().slice(0, 10)
-      diary = `${home}/.local/state/mods/global-memory/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
+      diary = `${h}/.local/state/mods/global-memory/${day}-${(await $.session.id()).slice(0, 8)}.jsonl`
     }
     return next(e)
   })
@@ -117,9 +176,11 @@ export function register(on: On, options: PluginOptions) {
       return r
     }
     const entry: InstructionFile = { path: g.index, kind: 'memory', content: indexContent(g.raw) }
-    const updated = withGlobalIndex(files, entry)
+    const projects = await withWikiProjects($, files, g.index)
+    const updated = withGlobalIndex(projects, entry)
     if (updated === files) return r
-    await act($, 'context-injected')
+    if (projects !== files) await act($, 'project-from-wiki')
+    if (updated !== projects) await act($, g.index.endsWith(WIKI_INDEX) ? 'context-injected-wiki' : 'context-injected')
     return { ...r, instructionFiles: updated }
   })
 

@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { expandHome, globalDir, indexContent, parseSection, rewriteSection, withGlobalIndex } from '../hooks/rules.ts'
+import { expandHome, globalDir, indexContent, metaProject, parseSection, rewriteSection, scopeOf, withGlobalIndex } from '../hooks/rules.ts'
 import { coreSection } from './core-section.ts'
 
 const PROJECT = '/home/u/.claude/projects/-home-u-work/memory/'
@@ -242,4 +242,90 @@ test('the context gets the global index even before the memory section and with 
   await $.session.start(start)
   const r = await $.prompt.context({ blocks: [{ name: 'claudeMd', text: 'core' }], instructionFiles: files })
   expect(r.instructionFiles).toEqual([...files, { path: GLOBAL_INDEX, kind: 'memory', content: '- [Machine fact](machine-fact.md) — invented' }])
+})
+
+// An ai-memory wiki with two projects: _global and work, whose memory folder the project folder links to.
+const WIKI = '/home/u/wiki'
+const WIKI_GLOBAL_INDEX = `${WIKI}/ws/g/_rules/indice-memorias.md`
+const WIKI_WORK_INDEX = `${WIKI}/ws/w/_rules/indice-memorias.md`
+const PAGE = (line: string) => `---\ntitle: Índice\nkind: rule\n---\n${line}\n`
+
+function prepareWiki(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene & { workLinked: boolean; workIndex: boolean }) {
+  mock.clock(on, { now: Date.parse('2026-10-07T13:00:00Z') })
+  mock.env(on, { HOME: '/home/u' })
+  on('session.id', () => ({ value: 'abcdef123456' }))
+  on('fs.write', ($, e) => {
+    s.written.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('session.start', () => ({ cwd: '/home/u/work' }))
+  const dir = (name: string) => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })
+  on('fs.list', ($, e) => {
+    if (e.path === WIKI) return { value: [dir('ws')] }
+    if (e.path === `${WIKI}/ws`) return { value: [dir('g'), dir('w')] }
+    return { deny: 'no such folder' }
+  })
+  on('fs.stat', ($, e) => {
+    if (e.path === GLOBAL) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } }
+    if (e.path === PROJECT.replace(/\/$/, '') && s.workLinked)
+      return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: true, realPath: '/home/u/repo/memorias/work' } }
+    if (e.path === PROJECT.replace(/\/$/, '')) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false, realPath: PROJECT.replace(/\/$/, '') } }
+    return { deny: 'no such file' }
+  })
+  on('fs.read', ($, e) => {
+    if (e.path === `${WIKI}/ws/g/_meta.md`) return { value: '---\nproject: _global\ntype: Scope Manifest\n---\n' }
+    if (e.path === `${WIKI}/ws/w/_meta.md`) return { value: '---\nproject: work\n---\n' }
+    if (e.path === WIKI_GLOBAL_INDEX) return { value: PAGE('- [Wiki fact](memorias/vps/wiki-fact.md) — from the wiki') }
+    if (e.path === WIKI_WORK_INDEX && s.workIndex) return { value: PAGE('- [Work fact](work-fact.md) — from the wiki') }
+    if (e.path === GLOBAL_INDEX) return { value: '- [Machine fact](machine-fact.md) — invented\n' }
+    return { deny: 'no file' }
+  })
+}
+
+test('with wikiDir, the global and the project index come from the wiki', { options: { wikiDir: '~/wiki' } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true, workLinked: true, workIndex: true }
+  prepareWiki(on, s)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: FILES }))
+  await $.session.start(start)
+  const r = await $.prompt.context({ blocks: [], instructionFiles: FILES })
+  expect(r.instructionFiles).toEqual([
+    FILES[0],
+    { path: WIKI_WORK_INDEX, kind: 'memory', content: '- [Work fact](work-fact.md) — from the wiki' },
+    { path: WIKI_GLOBAL_INDEX, kind: 'memory', content: '- [Wiki fact](memorias/vps/wiki-fact.md) — from the wiki' },
+  ])
+})
+
+test('with wikiDir, a project folder that is not a link keeps core MEMORY.md', { options: { wikiDir: '~/wiki' } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true, workLinked: false, workIndex: true }
+  prepareWiki(on, s)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: FILES }))
+  await $.session.start(start)
+  const r = await $.prompt.context({ blocks: [], instructionFiles: FILES })
+  expect(r.instructionFiles?.[1]).toEqual(FILES[1])
+  expect(r.instructionFiles?.[2]?.path).toBe(WIKI_GLOBAL_INDEX)
+})
+
+test('with wikiDir, a scope without a wiki index keeps core MEMORY.md', { options: { wikiDir: '~/wiki' } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true, workLinked: true, workIndex: false }
+  prepareWiki(on, s)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: FILES }))
+  await $.session.start(start)
+  const r = await $.prompt.context({ blocks: [], instructionFiles: FILES })
+  expect(r.instructionFiles?.[1]).toEqual(FILES[1])
+})
+
+test('with wikiDir and no wiki on disk, the global MEMORY.md is used', { options: { wikiDir: '~/nowiki' } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true, workLinked: true, workIndex: true }
+  prepareWiki(on, s)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks, instructionFiles: FILES }))
+  await $.session.start(start)
+  const r = await $.prompt.context({ blocks: [], instructionFiles: FILES })
+  expect(r.instructionFiles).toEqual([...FILES, { path: GLOBAL_INDEX, kind: 'memory', content: '- [Machine fact](machine-fact.md) — invented' }])
+})
+
+test('metaProject and scopeOf read the names', () => {
+  expect(metaProject('---\nproject: _global\ntype: Scope Manifest\n---\n')).toBe('_global')
+  expect(metaProject('---\ntype: x\n---\n')).toBeNull()
+  expect(scopeOf('/home/u/repo/memorias/getdemo')).toBe('getdemo')
+  expect(scopeOf('/home/u/.claude/projects/-home-u-work/memory')).toBeNull()
 })

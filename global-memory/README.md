@@ -35,6 +35,7 @@ None.
 | :- | :- | :- |
 | `enabled` | `true` | Off, the mod does nothing: the memory section stays as Claude Code wrote it. Takes effect in the next session, or after `/reload-plugins`. |
 | `globalDir` | `~/.claude/global-memory` | Folder of the machine-wide memory, with its own `MEMORY.md`. |
+| `wikiDir` | empty | Wiki folder of an [ai-memory](https://github.com/akitaonrails/ai-memory) server, such as `~/.local/share/ai-memory/wiki`. Set, both indexes come from the wiki: see below. |
 
 The mod creates nothing: make the folder and an empty `MEMORY.md` in it, and the mod starts on the next session. `globalDir` can point to a folder inside a git repo, such as `~/dotfiles/memory`, so the memories are versioned and can follow you to another machine.
 
@@ -60,3 +61,12 @@ claude plugin install global-memory@cockpit
 ```
 
 The `cockpit` bundle installs it with the other mods.
+
+## Index from an ai-memory wiki
+
+With `wikiDir` set, the mod reads the indexes from the wiki on disk, where agents write through the ai-memory MCP tools, instead of from `MEMORY.md`:
+
+- The global index is the page `_rules/indice-memorias.md` of the wiki project `_global`.
+- The project index is the same page of the wiki project named like the folder the project memory resolves to. A project memory folder that links to `~/repo/memorias/work` reads the project `work`.
+
+The mod finds a project by the `project:` line of each folder's `_meta.md`. A project memory folder that is not a link, a project missing from the wiki, or a missing page keeps `MEMORY.md`.
