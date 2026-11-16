@@ -10,7 +10,7 @@
 // The diary records each action, and at the end of the session one summary line with the counts.
 
 import type { Hook, InstructionFile, On, PluginOptions } from 'claude-code'
-import { globalDir, INDEX, indexContent, metaProject, type Mode, rewriteSection, scopeOf, WIKI_GLOBAL, WIKI_INDEX, wikiDir, withGlobalIndex } from './rules.ts'
+import { globalDir, INDEX, indexContent, metaProject, type Mode, parseSection, rewriteSection, scopeOf, scopePath, WIKI_GLOBAL, WIKI_INDEX, wikiDir, type WikiScope, wikiSection, withGlobalIndex } from './rules.ts'
 import { countAction, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -53,9 +53,9 @@ async function home($: Api): Promise<string | undefined> {
   return (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
 }
 
-// The index page of one ai-memory project, read from the wiki on disk; null when `wikiDir` is unset,
-// the project is not in the wiki or its index page is missing. The caller then keeps MEMORY.md.
-async function wikiIndex($: Api, project: string): Promise<Page | null> {
+// The folder of one ai-memory project in the wiki on disk, found by the `project:` line of each
+// folder's _meta.md; null when `wikiDir` is unset or the project is not there.
+async function wikiProject($: Api, project: string): Promise<string | null> {
   const wiki = wikiDir(values, await home($))
   if (wiki === null) return null
   try {
@@ -65,15 +65,36 @@ async function wikiIndex($: Api, project: string): Promise<Page | null> {
         if (p.kind !== 'dir') continue
         const dir = `${wiki}/${ws.name}/${p.name}`
         const meta = await $.fs.read(`${dir}/_meta.md`).catch(() => '')
-        if (metaProject(meta) !== project) continue
-        const path = `${dir}/${WIKI_INDEX}`
-        return { path, raw: await $.fs.read(path) }
+        if (metaProject(meta) === project) return dir
       }
     }
   } catch {
     // an unreadable wiki falls back to MEMORY.md
   }
   return null
+}
+
+// The index page of one ai-memory project; null when the project or its page is missing. The caller
+// then keeps MEMORY.md.
+async function wikiIndex($: Api, project: string): Promise<Page | null> {
+  const dir = await wikiProject($, project)
+  if (dir === null) return null
+  const path = `${dir}/${WIKI_INDEX}`
+  try {
+    return { path, raw: await $.fs.read(path) }
+  } catch {
+    return null
+  }
+}
+
+// The wiki scope a memory folder stands for, through the folder it resolves to; null when it is not
+// a link or its project is not in the wiki.
+async function wikiScopeOf($: Api, folder: string, project?: string): Promise<WikiScope | null> {
+  const real = (await $.fs.stat(folder.replace(/[\\/]+$/, ''), { resolve: true }).catch(() => undefined))?.realPath
+  if (real === undefined) return null
+  const name = project ?? scopeOf(real)
+  if (name === null || (await wikiProject($, name)) === null) return null
+  return { project: name, prefix: scopePath(real) }
 }
 
 // The global folder and its index: the wiki's _global index when there is one, else the folder's
@@ -151,14 +172,18 @@ export function register(on: On, options: PluginOptions) {
       await act($, 'skipped-missing')
       return r
     }
-    const out = rewriteSection(r.text, g.dir)
+    // With the wiki in place, the save rules point at it; without it, the two-folder rewrite.
+    const wikiGlobal = await wikiScopeOf($, g.dir, WIKI_GLOBAL)
+    const projectDir = wikiGlobal === null ? undefined : parseSection(r.text)?.projectDir
+    const project = projectDir === undefined ? null : await wikiScopeOf($, projectDir)
+    const out = wikiGlobal === null ? rewriteSection(r.text, g.dir) : wikiSection(r.text, g.dir, wikiGlobal, project)
     if (out === null) {
       await act($, 'skipped-unrecognized')
       return r
     }
     memory = out.mode
     // Read-only keeps core's mode: the global folder is added without the save rules.
-    await act($, out.mode === 'read-only' ? 'section-rewritten-read-only' : 'section-rewritten')
+    await act($, out.mode === 'read-only' ? 'section-rewritten-read-only' : wikiGlobal === null ? 'section-rewritten' : 'section-wiki')
     return { text: out.text }
   })
 

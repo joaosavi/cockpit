@@ -178,3 +178,57 @@ export function withGlobalIndex(files: readonly InstructionFile[], entry: Instru
   const at = last < 0 ? files.length : last + 1
   return [...files.slice(0, at), entry, ...files.slice(at)]
 }
+
+// The wiki path prefix of a memory folder: its last two folder names, so ~/repo/memorias/getdemo
+// gives memorias/getdemo, the path its pages carry in the wiki.
+export function scopePath(realPath: string): string {
+  return realPath.replace(/[\\/]+$/, '').split(/[\\/]/).slice(-2).join('/')
+}
+
+export type WikiScope = { project: string; prefix: string }
+
+// The save rules when memory lives in an ai-memory wiki: the agent writes through the MCP tools and
+// keeps one index page per project, which the mod loads at the next session start.
+export function wikiSaveRules(global: WikiScope, project: WikiScope | null): string {
+  const scopes = [
+    `- global: facts about the machine, its tools, access and services, and the user's preferences and corrections. Write with \`scope: "global"\` at \`${global.prefix}/<name>.md\`; the index is \`${WIKI_INDEX}\` of the \`${global.project}\` project.`,
+    project === null
+      ? '- project: this folder has no project scope in the wiki. Save only global memories from here.'
+      : `- project: facts that apply only to this project. Write to the project \`${project.project}\` (with \`workspace: "default"\`) at \`${project.prefix}/<name>.md\`; the index is \`${WIKI_INDEX}\` of that project.`,
+  ]
+  return [
+    '## How to save memories',
+    '',
+    'Memory lives in the ai-memory wiki. Save and edit it only with the `ai-memory` MCP tools, never with Write or Edit: the memory folders above are read-only.',
+    '',
+    '1. Before saving, search with `memory_query` (`global=true` when the subject may sit in another scope). Read the page you find with `memory_read_page` and edit that page with `memory_patch_page`, so two memories never contradict each other.',
+    '2. Write a new memory with `memory_write_page`. Start the body with a one-line description, then the fact. For feedback and project memories, add a **Why:** line and a **How to apply:** line. Link related memories with `[[name]]`.',
+    `3. Add its line, \`- [Title](<name>.md) — one-line hook\`, to the \`${WIKI_INDEX}\` page of the same project with \`memory_patch_page\` (append at the end of the page). The next session loads that index.`,
+    '',
+    'Choose the scope:',
+    '',
+    ...scopes,
+    '',
+    '- Never save a password, key or token in memory: it goes to the password vault. The prompt is recorded too, so never type one there.',
+    '- Before acting on an old memory, check the fact at its source when that is cheap, and fix or delete the page right away.',
+  ].join('\n')
+}
+
+// The memory section for a wiki: core's opening says the folders are read-only and the save rules
+// become wikiSaveRules. Core's guidance on types, exclusions and recall stays. A read-only session
+// keeps the two-folder rewrite, since it saves nothing either way.
+export function wikiSection(text: string, globalDir: string, global: WikiScope, project: WikiScope | null): { text: string; mode: Mode } | null {
+  const p = parseSection(text)
+  if (p === null) return null
+  if (p.mode === 'read-only') return rewriteSection(text, globalDir)
+  const shown = /[\\/]$/.test(globalDir) ? globalDir : `${globalDir}/`
+  const lead = p.isFull ? 'You have a persistent memory system' : 'You have a persistent memory'
+  const opening = `${lead} in an ai-memory wiki, reached through the \`ai-memory\` MCP tools. Its project folder \`${p.projectDir}\` and global folder \`${shown}\` are read-only copies: never write memory files there.`
+  const rules = wikiSaveRules(global, project)
+  const out = text.replace(p.opening, opening)
+  if (!p.isFull) return { text: `${out.slice(0, out.indexOf(opening) + opening.length)}\n\n${rules}\n`, mode: 'writable' }
+  const start = out.indexOf('\n## How to save memories')
+  if (start < 0) return { text: `${out.replace(/\n+$/, '')}\n\n${rules}\n`, mode: 'writable' }
+  const end = out.indexOf('\n## ', start + 1)
+  return { text: `${out.slice(0, start + 1)}${rules}\n${end < 0 ? '' : out.slice(end)}`, mode: 'writable' }
+}

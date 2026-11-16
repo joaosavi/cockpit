@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { expandHome, globalDir, indexContent, metaProject, parseSection, rewriteSection, scopeOf, withGlobalIndex } from '../hooks/rules.ts'
+import { expandHome, globalDir, indexContent, metaProject, parseSection, rewriteSection, scopeOf, scopePath, wikiSection, withGlobalIndex } from '../hooks/rules.ts'
 import { coreSection } from './core-section.ts'
 
 const PROJECT = '/home/u/.claude/projects/-home-u-work/memory/'
@@ -266,7 +266,7 @@ function prepareWiki(on: Parameters<Parameters<typeof test>[1]>[1], s: Scene & {
     return { deny: 'no such folder' }
   })
   on('fs.stat', ($, e) => {
-    if (e.path === GLOBAL) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } }
+    if (e.path === GLOBAL) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: true, realPath: '/home/u/repo/memorias/vps' } }
     if (e.path === PROJECT.replace(/\/$/, '') && s.workLinked)
       return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: true, realPath: '/home/u/repo/memorias/work' } }
     if (e.path === PROJECT.replace(/\/$/, '')) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false, realPath: PROJECT.replace(/\/$/, '') } }
@@ -328,4 +328,54 @@ test('metaProject and scopeOf read the names', () => {
   expect(metaProject('---\ntype: x\n---\n')).toBeNull()
   expect(scopeOf('/home/u/repo/memorias/getdemo')).toBe('getdemo')
   expect(scopeOf('/home/u/.claude/projects/-home-u-work/memory')).toBeNull()
+})
+
+const G = { project: '_global', prefix: 'memorias/vps' }
+const W = { project: 'work', prefix: 'memorias/work' }
+
+test('the wiki section saves through the MCP tools and keeps core guidance', () => {
+  const r = wikiSection(coreSection(PROJECT), GLOBAL, G, W)
+  const text = r?.text ?? ''
+  expect(r?.mode).toBe('writable')
+  expect(text).toContain('in an ai-memory wiki, reached through the `ai-memory` MCP tools')
+  expect(text).toContain('never with Write or Edit')
+  expect(text).toContain('`scope: "global"` at `memorias/vps/<name>.md`')
+  expect(text).toContain('Write to the project `work` (with `workspace: "default"`) at `memorias/work/<name>.md`')
+  expect(text).toContain('## Types of memory')
+  expect(text).toContain('## What NOT to save in memory')
+  expect(text).toContain('## When to access memories')
+  expect(text).not.toContain('**Step 1**')
+  expect(text).not.toContain('This directory already exists')
+})
+
+test('the wiki section without a project scope saves only global memories', () => {
+  const text = wikiSection(coreSection(PROJECT), GLOBAL, G, null)?.text ?? ''
+  expect(text).toContain('this folder has no project scope in the wiki. Save only global memories from here.')
+})
+
+test('the wiki section keeps a read-only session read-only, and the lean section gets only the rules', () => {
+  expect(wikiSection(coreSection(PROJECT, true), GLOBAL, G, W)?.text).toBe(rewriteSection(coreSection(PROJECT, true), GLOBAL)?.text)
+  const lean = wikiSection(LEAN, GLOBAL, G, W)?.text ?? ''
+  expect(lean).toContain('## How to save memories')
+  expect(lean).not.toContain('After writing the file')
+  expect(scopePath('/home/u/repo/memorias/getdemo/')).toBe('memorias/getdemo')
+})
+
+test('with wikiDir, the memory section points the saves at the wiki', { options: { wikiDir: '~/wiki' } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true, workLinked: true, workIndex: true }
+  prepareWiki(on, s)
+  on('prompt.section', () => ({ text: coreSection(PROJECT) }))
+  await $.session.start(start)
+  const r = await $.prompt.section({ name: 'memory', text: coreSection(PROJECT) })
+  expect(r.text).toContain('Write to the project `work` (with `workspace: "default"`) at `memorias/work/<name>.md`')
+  expect(r.text).toContain('`scope: "global"` at `memorias/vps/<name>.md`')
+})
+
+test('with wikiDir and no wiki on disk, the memory section keeps the two-folder rewrite', { options: { wikiDir: '~/nowiki' } }, async ($, on) => {
+  const s = { written: new Map<string, string>(), globalExists: true, workLinked: true, workIndex: true }
+  prepareWiki(on, s)
+  on('prompt.section', () => ({ text: coreSection(PROJECT) }))
+  await $.session.start(start)
+  const r = await $.prompt.section({ name: 'memory', text: coreSection(PROJECT) })
+  expect(r.text).toBe(rewriteSection(coreSection(PROJECT), GLOBAL)?.text)
 })
