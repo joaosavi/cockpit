@@ -224,9 +224,19 @@ async function listTop($: Api): Promise<number> {
   return Math.max(0, ...ids, await idMark($, l.dir), await loggedTop($, l.id))
 }
 
+// The Claude app draws a task panel only for a session it reaches through Remote Control, which starts
+// from the terminal. A session that an SDK host runs (T3 Code, `claude -p`, an Agent SDK app) has no
+// panel, and syncing one there asks a new session for a TaskUpdate per open task: 40 calls on the first
+// prompt of each session with a 52-task list.
+async function hasAppPanel($: Api): Promise<boolean> {
+  const entrypoint = (await $.env.get('CLAUDE_CODE_ENTRYPOINT')) ?? ''
+  return !(entrypoint === 't3-code' || entrypoint.startsWith('sdk-'))
+}
+
 // The panel of the session that runs now. A session the mod has not followed yet is read back from its
 // conversation; when that fails the panel stays unknown and no call is asked for.
 async function currentPanel($: Api): Promise<{ session: string; value: Panel } | null> {
+  if (!(await hasAppPanel($))) return null
   const session = await $.session.id()
   if (panel?.session === session) return panel
   if (stateDir === '') return null

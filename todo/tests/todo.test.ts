@@ -251,6 +251,28 @@ test('a task an outside script completed reaches the panel through the session',
   expect(s.removed).toEqual([])
 })
 
+for (const entrypoint of ['t3-code', 'sdk-ts', 'sdk-cli']) {
+  test(`a session hosted by ${entrypoint} has no app panel and gets no TaskUpdate calls`, async ($, on) => {
+    const s = scene({ [`${LIST}/3.json`]: task('3', '[agent] P1 work', 'pending'), [`${LIST}/4.json`]: task('4', '[agent] P2 more', 'in_progress') })
+    prepare(on, s, { HOME: '/home', CLAUDE_CODE_TASK_LIST_ID: 'demerzel', CLAUDE_CODE_ENTRYPOINT: entrypoint })
+    on('session.messages', () => ({ value: [] }))
+    await $.session.start(start)
+    const r = await $.prompt.submit({ text: 'status?', wait: false, origin: { kind: 'bridge' } })
+    expect(r).toMatchObject({ context: [expect.stringContaining('[agent] P1 work')] })
+    expect(r).not.toMatchObject({ context: [expect.stringContaining('TaskUpdate {')] })
+    expect([...s.files.keys()].some((k) => k.includes('/panel/'))).toBe(false)
+  })
+}
+
+test('a terminal session with a fresh panel still gets the calls that fill it', async ($, on) => {
+  const s = scene({ [`${LIST}/3.json`]: task('3', '[agent] P1 work', 'pending') })
+  prepare(on, s, { HOME: '/home', CLAUDE_CODE_TASK_LIST_ID: 'demerzel', CLAUDE_CODE_ENTRYPOINT: 'cli' })
+  on('session.messages', () => ({ value: [] }))
+  await $.session.start(start)
+  const r = await $.prompt.submit({ text: 'status?', wait: false, origin: { kind: 'bridge' } })
+  expect(r).toMatchObject({ context: [expect.stringContaining('TaskUpdate {"taskId":"3"')] })
+})
+
 test('a completed task leaves the panel and the list through TaskUpdate once it is old enough', { options: { keepCompletedHours: 1 } }, async ($, on) => {
   const s = scene({ [`${LIST}/4.json`]: task('4', '[a] done', 'completed') })
   const clock = prepare(on, s)

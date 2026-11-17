@@ -25,6 +25,8 @@ The task panel of the Claude app (claude.ai and the phone, in a Remote Control s
 - A `TaskUpdate` applies its input whatever the tool answers. An update on an id the panel never saw shows the bare id, such as `Task #15`, with no subject.
 - `TaskUpdate` with status `deleted` drops the task.
 
+A session run by an SDK host has no panel: `CLAUDE_CODE_ENTRYPOINT` set to `t3-code` (T3 Code) or to `sdk-*` (`claude -p`, an Agent SDK app). There the mod keeps no copy and asks for no calls.
+
 So a task file that a script rewrote or removed stays in the panel as it was. The mod keeps its own copy of the panel, from the same calls, in `~/.local/state/mods/todo/panel/<session>.json`. When the copy and the files differ, the next prompt from the user asks the session for the `TaskUpdate` calls that fix the panel, 40 at most per prompt:
 
 | On disk | In the panel | Call |
