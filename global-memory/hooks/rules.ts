@@ -149,14 +149,19 @@ export function rewriteSection(text: string, global: string): { text: string; mo
   return { text: out, mode: p.mode }
 }
 
-// MEMORY.md as core loads an auto-memory index: frontmatter and HTML comments out, cut at 200
-// lines and 25,000 characters with a warning line.
-export function indexContent(raw: string): string {
-  const body = raw
+// An index without frontmatter and HTML comments, whole.
+export function indexBody(raw: string): string {
+  return raw
     .replace(/\r\n?/g, '\n')
     .replace(/^---\n[\s\S]*?\n---\n?/, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .trim()
+}
+
+// MEMORY.md as core loads an auto-memory index: frontmatter and HTML comments out, cut at 200
+// lines and 25,000 characters with a warning line.
+export function indexContent(raw: string): string {
+  const body = indexBody(raw)
   const lines = body.split('\n')
   let kept = lines.length > MAX_LINES ? lines.slice(0, MAX_LINES).join('\n') : body
   if (kept.length > MAX_CHARS) {

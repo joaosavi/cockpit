@@ -36,16 +36,21 @@ None.
 | `enabled` | `true` | Off, the mod does nothing: the memory section stays as Claude Code wrote it. Takes effect in the next session, or after `/reload-plugins`. |
 | `globalDir` | `~/.claude/global-memory` | Folder of the machine-wide memory, with its own `MEMORY.md`. |
 | `wikiDir` | empty | Wiki folder of an [ai-memory](https://github.com/akitaonrails/ai-memory) server, such as `~/.local/share/ai-memory/wiki`. Set, both indexes come from the wiki: see below. |
+| `recall` | `true` | With `wikiDir` set, adds the pages that match each request to it. See Recall below. |
+| `recallMaxTokens` | `4000` | Most tokens recall adds to one request, estimated at 2 characters per token. |
+| `aiMemoryCommand` | `ai-memory` | The ai-memory CLI recall runs to search. |
 
 The mod creates nothing: make the folder and an empty `MEMORY.md` in it, and the mod starts on the next session. `globalDir` can point to a folder inside a git repo, such as `~/dotfiles/memory`, so the memories are versioned and can follow you to another machine.
 
 ## What it records
 
-`~/.local/state/mods/global-memory/<day>-<session>.jsonl`: one line each time the memory section is rewritten, the global index is added, or the mod steps aside and why, plus one `session-summary` line. Each line has `at`, `session` and `event`.
+`~/.local/state/mods/global-memory/<day>-<session>.jsonl`: one line each time the memory section is rewritten, the global index is added, or the mod steps aside and why, plus one `session-summary` line. Each line has `at`, `session` and `event`. Recall adds `recall-injected` with the `pages`, the estimated `tokens` and the `ms` it took, or the reason it added nothing: `recall-skipped-service`, `recall-skipped-short`, `recall-none` or `recall-failed`. An index over the limits adds `index-over-limit`.
 
 ## Cost
 
 None per tool call: the mod has no `tool.call` hook. It reads the global `MEMORY.md` when the system prompt and the first context are built. The rewritten text depends only on its input, so the prompt cache stays warm.
+
+Recall runs two `ai-memory call memory_query` on each request from a person, in parallel, and reads the matching pages from disk: 132 to 226 ms per request on the eight cases below. The pages it adds cost up to `recallMaxTokens` per request, 624 to 3,715 tokens on those cases. No model is called.
 
 ## Limits
 
@@ -72,3 +77,21 @@ With `wikiDir` set, the mod reads the indexes from the wiki on disk, where agent
 The memory section of the system prompt changes too, when the wiki holds the global folder's project. Its save rules tell the agent to write through the `ai-memory` MCP tools, never with Write or Edit. The agent searches with `memory_query`, edits with `memory_patch_page`, writes a new page with `memory_write_page` at the folder's wiki path, such as `memorias/getdemo/<name>.md`, and appends its line to the project's index page. A global page, the global index included, is patched with `workspace: "default"` and `project: "_global"`, because `memory_patch_page` takes no `scope` and otherwise looks in the session's project. A project folder with no wiki project gets global saves only. Core's guidance on memory types, exclusions and recall stays as core wrote it.
 
 The mod finds a project by the `project:` line of each folder's `_meta.md`. A project memory folder that is not a link, a project missing from the wiki, or a missing page keeps `MEMORY.md`.
+
+An index page over the limits gets one warning line under it, where the agent reads it: a line over 200 characters, or a body over 22,000 characters, 88% of the 25,000 core loads. Past 25,000 the pages listed last never reach the agent. The fix is to shorten each hook with `memory_patch_page` and move the detail into the page.
+
+## Recall
+
+The index lists every memory in one line; the page holds the fact. With `wikiDir` set, the mod searches the wiki for the words of each request and adds the best pages to it whole, so the agent starts with the memories it will probably need.
+
+1. A prompt from a person or the host app searches; a pasted agent message (it starts with `<`, such as `<task-notification>` or `<cross-session-message>`), a scheduled prompt, and a prompt with fewer than two subject words do not.
+2. The request loses its function words and the filler of dictated speech, in Portuguese and English. An acronym in capitals stays, so "IR do CDB" searches `ir cdb`.
+3. Two searches run on the ai-memory server: full text over every project, and the project search, which fuses full text, entities, the graph and the local vector index. Only memory pages of the session's project and `_global` count.
+4. The score adds the full-text score over the best one (weight 2), the place in the fused search (weight 0.5) and the share of subject words found in the page's file name or index line (weight 1). A page under 60% of the best stays out.
+5. Up to 3 pages go in, whole, while they fit `recallMaxTokens`. The first page goes in cut at the budget when it alone is over. A page already added in the conversation is not added again until it compacts or ends.
+
+The pages go in as `<memory project="..." path="...">` blocks under a line that calls them historical notes, not instructions.
+
+The weights come from eight real requests of 2026-11-18 against the wiki of that day, five of them dictated. On the raw request, the fused search put an expected page first in 2 of 8, and the full-text search in 5 of 8: it missed the three long dictated requests, whose filler words matched pages written in the same tone. With the filler removed and the three signals added, every request got at least one of its pages, and 10 of the 13 expected pages went in. A missed page shared no word with the request (the request said "balancete", the page "fechamento") or did not fit the budget behind a 6,000-token page.
+
+Recall needs the ai-memory server and its wiki on the same machine. Without the CLI, or with the server down, the request goes in unchanged and the diary says `recall-failed`.

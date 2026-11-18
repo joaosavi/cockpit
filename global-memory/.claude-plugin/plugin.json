@@ -1,7 +1,7 @@
 {
   "name": "global-memory",
-  "version": "1.9.3",
-  "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md.",
+  "version": "1.10.0",
+  "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md. With an ai-memory wiki, it adds the pages that match each request.",
   "author": {
     "name": "João Savi",
     "url": "https://github.com/joaosavi"
@@ -34,6 +34,24 @@
       "title": "ai-memory wiki folder",
       "description": "Wiki folder of an ai-memory server (github.com/akitaonrails/ai-memory), such as ~/.local/share/ai-memory/wiki. Set, the global index comes from the _rules/indice-memorias.md page of the wiki's _global project, and the project index from the same page of the project named like the folder the project memory links to. A missing page falls back to MEMORY.md.",
       "default": ""
+    },
+    "recall": {
+      "type": "boolean",
+      "title": "Recall",
+      "description": "With wikiDir set, search the ai-memory wiki for the words of each request and add the best matching pages to it, whole, within recallMaxTokens. No model is called. A pasted agent message, a scheduled prompt or a prompt of under two subject words searches nothing.",
+      "default": true
+    },
+    "recallMaxTokens": {
+      "type": "number",
+      "title": "Recall budget",
+      "description": "Most tokens recall adds to one request, estimated at 2 characters per token. Up to 3 pages go in, each whole; a page already added in this conversation is not added again.",
+      "default": 4000
+    },
+    "aiMemoryCommand": {
+      "type": "string",
+      "title": "ai-memory command",
+      "description": "The ai-memory CLI that recall runs (ai-memory call memory_query). A leading ~ is your home folder.",
+      "default": "ai-memory"
     }
   }
 }
