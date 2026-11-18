@@ -1,0 +1,62 @@
+{
+  "name": "recall",
+  "version": "1.13.0",
+  "description": "Searches the ai-memory server for the words of each request and adds the best matching memory pages to it, as the hook's suggestions, without a model. Reaches the server through the ai-memory CLI, or through an MCP gateway when that fails.",
+  "author": {
+    "name": "João Savi",
+    "url": "https://github.com/joaosavi"
+  },
+  "homepage": "https://github.com/joaosavi/cockpit/tree/main/recall",
+  "repository": "https://github.com/joaosavi/cockpit",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "ai-memory",
+    "recall",
+    "mod"
+  ],
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Search the memory on each request. Off, the prompt goes in unchanged. Takes effect in the next session, or after /reload-plugins.",
+      "default": true
+    },
+    "recallMaxTokens": {
+      "type": "number",
+      "title": "Recall budget",
+      "description": "Most tokens recall adds to one request, estimated at 2 characters per token. Up to 3 pages go in, each whole; a page already added in this conversation is not added again.",
+      "default": 4000
+    },
+    "aiMemoryCommand": {
+      "type": "string",
+      "title": "ai-memory command",
+      "description": "The ai-memory CLI recall runs (ai-memory call memory_query). It reaches the server its config names, on this machine or through a tunnel to its port. A leading ~ is your home folder.",
+      "default": "ai-memory"
+    },
+    "wikiDir": {
+      "type": "string",
+      "title": "ai-memory wiki folder",
+      "description": "Wiki folder of the ai-memory server when it runs on this machine, such as ~/.local/share/ai-memory/wiki. Set, recall reads the pages from disk; empty, through memory_read_page.",
+      "default": ""
+    },
+    "gatewayCommand": {
+      "type": "string",
+      "title": "MCP gateway command",
+      "description": "When the ai-memory CLI fails, recall searches and reads pages through this command instead. It takes a tool name and its JSON arguments and prints the tool's text answer, such as a gateway CLI's call subcommand. A leading ~ is your home folder. Empty, recall uses only the CLI.",
+      "default": ""
+    },
+    "gatewayToolPrefix": {
+      "type": "string",
+      "title": "Gateway tool prefix",
+      "description": "Prefix the gateway puts before the ai-memory tool names, such as memoria_ for memoria_memory_query.",
+      "default": "memoria_"
+    },
+    "projectsFile": {
+      "type": "string",
+      "title": "Projects file",
+      "description": "JSON file of projects, { \"<name>\": { \"path\": \"~/folder\" } }. Recall also searches the ai-memory project of every entry whose folder holds the session folder, deepest first. An .ai-memory.toml above the session folder names a project too. A leading ~ is your home folder.",
+      "default": ""
+    }
+  }
+}

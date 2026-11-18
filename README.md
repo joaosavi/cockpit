@@ -62,10 +62,8 @@ The setup turns on auto-update for `cockpit`, so new versions install by themsel
 
 | Mod | What it does |
 | :- | :- |
-| `global-memory` | Adds a machine-wide memory folder beside the per-project memory, so facts about the machine reach every session. It starts once you create `~/.claude/global-memory/MEMORY.md`. With an ai-memory wiki, it also adds the memory pages that match each request, found without a model. |
+| `recall` | Searches the [ai-memory](https://github.com/akitaonrails/ai-memory) server for the words of each request and adds the best matching memory pages to it, as the hook's suggestions, without a model. |
 | `todo` | Shows the open tasks of Claude Code's native task list at session start and on each prompt from you, reminds the agent that a new request becomes a task first, logs completed tasks to an archive, and keeps the Claude app's task panel in line with the task files. Newer models need `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` for the task tools. |
-
-On a Team or Enterprise plan, `global-memory` installs but does nothing until your organization lists it in managed settings: the plan's built-in guard skips plugins you install yourself on the hooks it needs. Its README shows the two settings to add.
 
 To turn one mod off, set its **Enabled** option to off in `/config`, or `"enabled": false` under its `pluginConfigs` entry, and start a new session or run `/reload-plugins`. The guards also have one switch per step, such as the wait and the refusal of `memory-guard` or each signal of `loop-breaker`; each mod's README lists them. To remove a mod's hooks entirely, disable the bundle first and then the mod, because Claude Code refuses to disable a plugin that an enabled plugin requires: `claude plugin disable cockpit@cockpit && claude plugin disable pipefail@cockpit`.
 
@@ -85,7 +83,7 @@ Each mod's options are rows in `/config`. Each mod's README lists its options, w
 
 ## What leaves your machine
 
-`panel` and `spinner-status` send an excerpt of the session to a model through your own Claude account. `panel` runs `claude -p` (`sonnet` by default) on each session's transcript when you press Refresh, when a session goes idle after a turn, and every 5 minutes for a session that changed. `spinner-status` sends the last few prompts and the agent's last text to Haiku, at most 3,000 characters, one call per turn in its default mode and none in `tips` mode. No other mod calls a model. With recall on, `global-memory` sends the subject words of each request to the ai-memory server on the same machine, through the `ai-memory` CLI. The `hud` status line runs `gh pr view` to show the branch's pull request, so it reaches GitHub when `gh` is installed.
+`panel` and `spinner-status` send an excerpt of the session to a model through your own Claude account. `panel` runs `claude -p` (`sonnet` by default) on each session's transcript when you press Refresh, when a session goes idle after a turn, and every 5 minutes for a session that changed. `spinner-status` sends the last few prompts and the agent's last text to Haiku, at most 3,000 characters, one call per turn in its default mode and none in `tips` mode. No other mod calls a model. `recall` sends the subject words of each request to the ai-memory server, through the `ai-memory` CLI or an MCP gateway you configure. The `hud` status line runs `gh pr view` to show the branch's pull request, so it reaches GitHub when `gh` is installed.
 
 ## What stays on your machine
 

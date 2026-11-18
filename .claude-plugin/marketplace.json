@@ -41,9 +41,9 @@
       "description": "Adds set -o pipefail to a command that pipes a test, typecheck or lint run into tail, head or grep, so a failing run cannot exit 0 and read as a pass."
     },
     {
-      "name": "global-memory",
-      "source": "./global-memory",
-      "description": "Adds a machine-wide memory folder beside the per-project auto memory, so facts about the machine reach every session from any folder: rewrites the memory section for both folders and loads the global MEMORY.md. With an ai-memory wiki, it adds the pages that match each request."
+      "name": "recall",
+      "source": "./recall",
+      "description": "Searches the ai-memory server for the words of each request and adds the best matching memory pages to it, as the hook's suggestions, without a model. Reaches the server through the ai-memory CLI, or through an MCP gateway when that fails."
     },
     {
       "name": "todo",

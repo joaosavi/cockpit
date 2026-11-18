@@ -90,7 +90,7 @@ def meta(name):
 GROUPS = [
     ('Guards', 'Stop a mistake before it lands.', ['secret-guard', 'collision-guard', 'pipefail', 'memory-guard', 'loop-breaker', 'usage-limit']),
     ('Instruments', 'Show where the session stands.', ['hud', 'spinner-status', 'panel', 'skill-loader']),
-    ('Memory', 'Carry what you learned into every session.', ['global-memory', 'todo']),
+    ('Memory', 'Carry what you learned into every session.', ['recall', 'todo']),
 ]
 COMMANDS = {'hud': ['/hud'], 'panel': ['/panel'], 'usage-limit': ['/limit'], 'memory-guard': ['/ram']}
 MODEL_TAGS = {'spinner-status': 'calls Haiku', 'panel': 'calls claude -p'}
@@ -182,10 +182,6 @@ def install():
 <p>You should see 12 entries ending in <code>@cockpit</code>, each marked <code>enabled</code>. An entry marked <code>failed to load</code> points to a version mismatch; see <a href="#troubleshooting">Troubleshooting</a>.</p>
 <h2 id="install-auto">Updates install by themselves</h2>
 <p>The setup turns on auto-update for the <code>cockpit</code> marketplace. A few minutes after the first message of a session, Claude Code updates every mod that has a new version, installs any mod added to the bundle, and shows <code>Plugin updated: &lt;name&gt; · Run /reload-plugins to apply</code>. To turn it off, open <code>/plugin</code>, go to <b>Marketplaces</b>, and select <code>cockpit</code>.</p>
-<h2 id="install-team">On a Team or Enterprise plan</h2>
-<p>Every mod works the same on every plan, except <code>global-memory</code>. Team and Enterprise plans run a built-in guard that skips plugins you install yourself on the two hooks it needs, so it installs and does nothing. To use it, your organization adds it to managed settings, ahead of the guard:</p>
-{code(json.dumps({'enabledPlugins': {'global-memory@cockpit': True}, 'prependPlugins': ['global-memory@cockpit', 'sec-default@builtin']}, indent=2), 'json')}
-<p>Without those settings, nothing breaks: the other mods run as usual.</p>
 {note('info', 'Coming from the agent marketplace', '<p>Cockpit was called <code>agent</code> before October 2026. Rename every <code>@agent</code> key to <code>@cockpit</code> in <code>~/.claude/settings.json</code>, then run <code>claude plugin marketplace remove agent</code> before the steps above. Removing a marketplace deletes the saved options of its plugins, so rename the keys first, or run <code>/cockpit:setup</code> again afterwards.</p>')}
 '''
 
@@ -362,7 +358,6 @@ def troubleshooting():
         ('Two lines show under the spinner', '<p>Claude Code\'s own tip is still on. Set <code>"spinnerTipsEnabled": false</code> in your settings, or run the setup again.</p>'),
         ('A mod shows "failed to load" in claude plugin list', '<p>The marketplace copy and the installed version are out of step. Run <code>claude plugin marketplace update cockpit</code>, then <code>claude plugin update cockpit@cockpit</code>, and restart.</p>'),
         ('The mod options are gone', '<p>Removing a marketplace deletes the saved options of its plugins. Run <code>/cockpit:setup</code> again to write them back.</p>'),
-        ('global-memory does nothing on a Team or Enterprise plan', '<p>Those plans run a built-in guard that skips user-installed plugins on the hooks <code>global-memory</code> needs. It must run as an organization plugin; its <a href="#mod-global-memory">page</a> shows the managed settings.</p>'),
         ('/panel says the page server is not running', '<p>The server starts when a session starts, unless <b>Start the page</b> (<code>autostart</code>) is off. Check that Python 3.9 or later is installed as <code>python3</code>, <code>python</code> or <code>py</code>, and that <code>curl</code> runs, then start a new session. The server writes its errors to <code>~/.local/state/mods/panel/server.log</code>. If a service manager runs the server, check the service.</p>'),
         ('The panel greys out the options of a session', '<p>The session has not checked its inbox in the last 15 seconds, usually because it loaded an older <code>panel</code> mod. Run <code>/reload-plugins</code> in that session.</p>'),
         ('The Mods drawer shows no memory or services box', '<p>That is expected on macOS and Windows. The page shows memory by group only for Linux cgroup v2 groups with a memory limit, and services only under systemd. Elsewhere it shows the machine\'s memory alone, in the header and the drawer.</p>'),

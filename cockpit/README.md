@@ -19,15 +19,11 @@ claude plugin install cockpit@cockpit
 - `collision-guard`: warns when another session on this machine edited the same file, and holds a git command once when it would take that session's uncommitted edits along.
 - `pipefail`: adds `set -o pipefail;` to a test, typecheck or lint run piped into `tail`, `head` or `grep`.
 - `panel`: a local web page with a card for every session on this machine, with what it needs from you and what it is doing. `/panel` gives the address.
-- `global-memory`: a machine-wide memory folder beside the per-project auto memory. It starts once you create `~/.claude/global-memory/MEMORY.md`.
+- `recall`: the memory pages that match each request, searched in an ai-memory server.
 - `todo`: shows the open tasks of the native task list at session start and on each prompt from you, reminds the agent that a new request becomes a task first, and archives completed tasks. Newer models need `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`.
 - `spinner-status`: replaces the tip under the spinner with one Haiku line: where the session stands, or a tip about these mods. Needs `"spinnerTipsEnabled": false` in settings.
 
 Each mod has its own README with its options, what it records, what it costs, and what changes on macOS, Windows and Linux.
-
-## Team and Enterprise plans
-
-On a Team or Enterprise plan, `global-memory` installs but does nothing until your organization lists it in managed settings: the plan's built-in guard skips plugins you install yourself on the hooks it needs. Its README shows the two settings to add.
 
 ## Turn one mod off
 
