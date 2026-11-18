@@ -11,7 +11,7 @@
 
 import type { Hook, InstructionFile, On, PluginOptions } from 'claude-code'
 import { expandHome, globalDir, INDEX, indexBody, indexContent, metaProject, type Mode, parseSection, rewriteSection, scopeOf, scopePath, WIKI_GLOBAL, WIKI_INDEX, wikiDir, type WikiScope, wikiSection, withGlobalIndex } from './rules.ts'
-import { type Hit, indexLines, indexWarning, isMemoryPage, keywords, type Page, pageBody, RECALL_DEFAULTS, rankPages, recallContext, skipReason } from './recall.ts'
+import { type Hit, indexLines, projectsAt, tomlProject, indexWarning, isMemoryPage, keywords, type Page, pageBody, RECALL_DEFAULTS, rankPages, recallContext, skipReason } from './recall.ts'
 import { countAction, newTally, sessionSummary } from './summary.ts'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -244,28 +244,62 @@ function maxTokens(): number {
   return Number.isFinite(v) && v > 0 ? v : RECALL_DEFAULTS.maxTokens
 }
 
+// The wiki projects of this session, most specific first: the `.ai-memory.toml` nearest above the
+// session folder, then the projects file entries whose folder holds it, then the project the memory
+// folder links to. Read once per session. On a machine without the wiki this is how a getdemo agent
+// reaches the getdemo pages.
+let sessionProjects: string[] | null = null
+async function projectsOf($: Api): Promise<string[]> {
+  if (sessionProjects !== null) return sessionProjects
+  const out: string[] = []
+  const h = await home($)
+  let dir = cwd.replace(/[\\/]+$/, '')
+  for (let i = 0; i < 12 && dir !== ''; i += 1) {
+    const raw = await $.fs.read(`${dir}/.ai-memory.toml`).catch(() => null)
+    const named = raw === null ? null : tomlProject(raw)
+    if (named !== null) {
+      out.push(named)
+      break
+    }
+    const up = dir.replace(/[\\/][^\\/]*$/, '')
+    if (up === dir) break
+    dir = up
+  }
+  const file = typeof values.projectsFile === 'string' && values.projectsFile.trim() !== '' ? expandHome(values.projectsFile.trim(), h) : null
+  const listed = file === null ? null : await $.fs.read(file).catch(() => null)
+  if (listed !== null) out.push(...projectsAt(listed, cwd, h))
+  if (recallProject !== null) out.push(recallProject)
+  sessionProjects = [...new Set(out)].filter((p) => p !== WIKI_GLOBAL).slice(0, 3)
+  return sessionProjects
+}
+
 // The recall block for one prompt, or why there is none.
 async function recall($: Api, src: Source, text: string): Promise<{ block: string; paths: string[]; summarized: string[]; tokens: number } | { skip: string }> {
   const skip = skipReason(text)
   if (skip !== null) return { skip: `recall-skipped-${skip}` }
   const words = keywords(text)
   const query = words.join(' ')
-  const project = recallProject ?? WIKI_GLOBAL
-  const allowed = new Set([project, WIKI_GLOBAL])
+  const projects = await projectsOf($)
+  const allowed = new Set([...projects, WIKI_GLOBAL])
   // The index pages load with the searches: from disk locally, through the gateway otherwise.
   const indexes = [...allowed].map((name) => (src.kind === 'gateway' ? remotePage($, src, name, WIKI_INDEX) : wikiIndex($, name).then((p) => p?.raw ?? null)))
-  const [all, scoped, ...raws] = await Promise.all([
+  // The project search runs in each session project, or in _global when there is none. A name that is
+  // not a wiki project answers an error and counts as no hits.
+  const scopes = projects.length > 0 ? projects : [WIKI_GLOBAL]
+  const [all, ...rest] = await Promise.all([
     memoryTool($, src, 'memory_query', { query, global: true, limit: 30 }),
-    memoryTool($, src, 'memory_query', { query, workspace: WORKSPACE, project, limit: 15 }),
+    ...scopes.map((project) => memoryTool($, src, 'memory_query', { query, workspace: WORKSPACE, project, limit: 15 })),
     ...indexes,
   ])
-  if (all === null && scoped === null) return { skip: 'recall-failed' }
+  const scoped = rest.slice(0, scopes.length)
+  const raws = rest.slice(scopes.length)
+  if (all === null && scoped.every((x) => x === null)) return { skip: 'recall-failed' }
   const lines = new Map<string, string>()
   for (const raw of raws) if (typeof raw === 'string') for (const [k, v] of indexLines(raw)) lines.set(k, v)
   const ranked = rankPages({
     words,
     text: hitsOf(all, 'global_hits', allowed),
-    fused: [...hitsOf(scoped, 'hits', allowed, project), ...hitsOf(scoped, 'global_scope_hits', allowed, WIKI_GLOBAL)],
+    fused: scoped.flatMap((answer, i) => [...hitsOf(answer, 'hits', allowed, scopes[i]), ...hitsOf(answer, 'global_scope_hits', allowed, WIKI_GLOBAL)]),
     lines,
     max: RECALL_DEFAULTS.pages,
   }).filter((h) => !injected.has(`${h.project}\n${h.path}`))
@@ -291,6 +325,7 @@ export function register(on: On, options: PluginOptions) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    sessionProjects = null
     // One file per session, because `$.fs.write` rewrites the whole file and two sessions sharing one
     // would erase each other's lines. `$.fs.write` creates the folder with the first line.
     // HOME, or USERPROFILE on Windows, where HOME is usually unset.

@@ -240,3 +240,32 @@ export function indexWarning(body: string): string | null {
   const lines = long > 0 ? `${long} lines over ${INDEX_LINE_MAX} characters` : null
   return `> WARNING: this index has ${[size, lines].filter((x) => x !== null).join(' and ')}. Shorten each hook to one line under ${INDEX_LINE_MAX} characters with memory_patch_page and move the detail into the page itself.`
 }
+
+// The project an `.ai-memory.toml` names, the file ai-memory itself reads to scope a repository.
+export function tomlProject(raw: string): string | null {
+  const m = /^\s*project\s*=\s*(["'])([^"']+)\1/m.exec(raw)
+  return m?.[2] ?? null
+}
+
+// The projects of a projects file, `{ "<name>": { "path": "~/folder" } }`, whose folder holds `cwd`,
+// the deepest folder first: ~/getdemo/financeiro gives financeiro-getdemo, then getdemo.
+export function projectsAt(raw: string, cwd: string, home: string | undefined): string[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return []
+  }
+  if (typeof parsed !== 'object' || parsed === null) return []
+  const here = `${cwd.replace(/[\\/]+$/, '')}/`
+  const found: { name: string; depth: number }[] = []
+  for (const [name, entry] of Object.entries(parsed)) {
+    const path: unknown = typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'path') : undefined
+    if (typeof path !== 'string') continue
+    const full = path === '~' || path.startsWith('~/') ? (home === undefined ? null : `${home.replace(/[\\/]+$/, '')}${path.slice(1)}`) : path
+    if (full === null) continue
+    const dir = `${full.replace(/[\\/]+$/, '')}/`
+    if (here.startsWith(dir)) found.push({ name, depth: dir.length })
+  }
+  return found.sort((a, b) => b.depth - a.depth).map((f) => f.name)
+}

@@ -41,6 +41,7 @@ None.
 | `aiMemoryCommand` | `ai-memory` | The ai-memory CLI recall runs to search. |
 | `gatewayCommand` | empty | Without `wikiDir`, recall searches and reads pages through this command: it takes a tool name and its JSON arguments and prints the answer. See Recall below. |
 | `gatewayToolPrefix` | `memoria_` | Prefix of the ai-memory tool names on the gateway. |
+| `projectsFile` | empty | JSON file of projects, `{ "<name>": { "path": "~/folder" } }`, that names the session's ai-memory project by its folder. |
 
 The mod creates nothing: make the folder and an empty `MEMORY.md` in it, and the mod starts on the next session. `globalDir` can point to a folder inside a git repo, such as `~/dotfiles/memory`, so the memories are versioned and can follow you to another machine.
 
@@ -88,7 +89,7 @@ The index lists every memory in one line; the page holds the fact. With `wikiDir
 
 1. A prompt from a person or the host app searches; a pasted agent message (it starts with `<`, such as `<task-notification>` or `<cross-session-message>`), a scheduled prompt, and a prompt with fewer than two subject words do not.
 2. The request loses its function words and the filler of dictated speech, in Portuguese and English. An acronym in capitals stays, so "IR do CDB" searches `ir cdb`.
-3. Two searches run on the ai-memory server: full text over every project, and the project search, which fuses full text, entities, the graph and the local vector index. Only memory pages of the session's project and `_global` count.
+3. Two searches run on the ai-memory server: full text over every project, and the project search, which fuses full text, entities, the graph and the local vector index. Only memory pages of the session's projects and `_global` count. The session's projects are, most specific first, the one an `.ai-memory.toml` above the session folder names, the `projectsFile` entries whose folder holds the session folder, and the project the memory folder links to. The project search runs in each of them, up to 3.
 4. The score adds the full-text score over the best one (weight 2), the place in the fused search (weight 0.5) and the share of subject words found in the page's file name or index line (weight 1). A page under 60% of the best stays out.
 5. Up to 3 pages go in, in rank order. A page goes in whole when it fits `recallMaxTokens` and still leaves room for the summaries of the pages below it. Otherwise its summary goes in: the text before its first subheading, at most 800 tokens, with a note to read the rest with `memory_read_page`. A page already added in the conversation is not added again until it compacts or ends.
 

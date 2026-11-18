@@ -5,7 +5,7 @@
 - Recall do global-memory (1.11.0, 18/11/2026): cada pedido de pessoa busca no ai-memory e injeta até
   3 páginas, teto de 4.000 tokens. Nos 8 casos reais de 18/11, 11 das 13 páginas esperadas entram, e
   todo caso traz ao menos uma. Na VPS lê do disco (120 a 340 ms); no PC e no Mac busca pelo gateway MCP
-  (1,9 s no Mac). Aberto: a página que não divide palavra com o pedido ("balancete" contra
+  (1,9 a 2,5 s no Mac), com o projeto da pasta (1.12.0). Aberto: a página que não divide palavra com o pedido ("balancete" contra
   "fechamento") fica de fora; no gateway cada chamada abre sessão própria (0,5 s).
 
 ## Decisões
@@ -29,6 +29,10 @@
   por não mexer no wiki (recomendação do coordenador).
 - Recall pelo gateway sem wiki local (1.11.0, 18/11): opção `gatewayCommand`, que no PC e no Mac é o
   `gateway-mcp chamar` do harness. Por quê: o código vai para o Mac, onde não há servidor do ai-memory.
+
+- Projeto da sessão pelo `.ai-memory.toml` e pelo `projectsFile` (1.12.0, 18/11): o mesmo arquivo
+  que o ai-memory lê e o projects.json da Demerzel, a pasta mais funda primeiro, até 3 projetos. Por quê:
+  no Mac a pasta de memória não é link para o wiki, e o agente do getdemo ficava só com o `_global`.
 
 ## Armadilhas
 

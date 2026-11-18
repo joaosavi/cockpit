@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { estimateTokens, indexLines, pageSummary, indexProblems, indexWarning, isMemoryPage, keywords, rankPages, recallContext, skipReason } from '../hooks/recall.ts'
+import { estimateTokens, indexLines, pageSummary, projectsAt, tomlProject, indexProblems, indexWarning, isMemoryPage, keywords, rankPages, recallContext, skipReason } from '../hooks/recall.ts'
 import { coreSection } from './core-section.ts'
 
 test('keywords drop filler and function words and keep acronyms', () => {
@@ -102,7 +102,7 @@ const DISK = 'memorias/vps/disco-da-vps.md'
 const RECIBOS = 'memorias/work/recibos.md'
 
 type RunResult = { value: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean; isStderrTruncated: boolean } }
-type Calls = { argv: string[][]; written: string[]; fail?: boolean; globalIndex?: string; run?: (argv: readonly string[]) => RunResult }
+type Calls = { argv: string[][]; written: string[]; fail?: boolean; globalIndex?: string; run?: (argv: readonly string[]) => RunResult; files?: Record<string, string> }
 
 function prepareRecall(on: Parameters<Parameters<typeof test>[1]>[1], calls: Calls) {
   mock.clock(on, { now: Date.parse('2026-11-18T20:00:00Z') })
@@ -125,6 +125,8 @@ function prepareRecall(on: Parameters<Parameters<typeof test>[1]>[1], calls: Cal
     return { deny: 'no such file' }
   })
   on('fs.read', ($, e) => {
+    const extra = calls.files?.[e.path]
+    if (extra !== undefined) return { value: extra }
     if (e.path === `${WIKI}/ws/g/_meta.md`) return { value: '---\nproject: _global\n---\n' }
     if (e.path === `${WIKI}/ws/w/_meta.md`) return { value: '---\nproject: work\n---\n' }
     if (e.path === `${WIKI}/ws/g/_rules/indice-memorias.md`) return { value: calls.globalIndex ?? '- [Disco da VPS](disco-da-vps.md) — 30% é normal\n' }
@@ -241,4 +243,48 @@ test('without a local wiki, recall searches and reads the pages through the MCP 
   expect(calls.argv.every((a) => a[0] === '/home/u/bin/gateway-mcp' && a[1] === 'chamar')).toBe(true)
   expect(calls.argv.map((a) => a[2]).sort()).toEqual(['memoria_memory_query', 'memoria_memory_query', 'memoria_memory_read_page', 'memoria_memory_read_page'])
   expect(JSON.parse(calls.argv.find((a) => a[2] === 'memoria_memory_read_page' && a[3]?.includes(DISK))?.[3] ?? '{}')).toEqual({ path: DISK, workspace: 'default', project: '_global', max_chars: 64000 })
+})
+
+test('the session projects come from .ai-memory.toml and from the projects file, the deepest folder first', () => {
+  expect(tomlProject('workspace = "default"\nproject = "arteeco"\n')).toBe('arteeco')
+  expect(tomlProject("project='x' # comment")).toBe('x')
+  expect(tomlProject('workspace = "default"')).toBeNull()
+  const projects = JSON.stringify({ getdemo: { path: '~/getdemo' }, 'financeiro-getdemo': { path: '~/getdemo/financeiro' }, cockpit: { path: '~/repos/cockpit' }, broken: 3 })
+  expect(projectsAt(projects, '/home/u/getdemo/financeiro/src', '/home/u')).toEqual(['financeiro-getdemo', 'getdemo'])
+  expect(projectsAt(projects, '/home/u/getdemo', '/home/u')).toEqual(['getdemo'])
+  expect(projectsAt(projects, '/home/u/getdemo2', '/home/u')).toEqual([])
+  expect(projectsAt('not json', '/home/u/getdemo', '/home/u')).toEqual([])
+})
+
+// The getdemo agent of 2026-11-18 on the Mac: no wiki on disk, the gateway, and the projects file the
+// gateway CLI keeps there.
+const gatewayAnswers = (argv: readonly string[]): RunResult => {
+  const tool = argv[2]
+  const args = JSON.parse(argv[3] ?? '{}')
+  const ok = (answer: unknown) => ({ value: { exitCode: 0, stdout: JSON.stringify(answer), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+  if (tool === 'memoria_memory_query' && args.global)
+    return ok({ hits: [], global_hits: [{ project_name: 'getdemo', path: 'memorias/getdemo/sdoc-documentos.md', rank: -16 }, { project_name: 'arteeco', path: 'memorias/arteeco/x.md', rank: -30 }] })
+  if (tool === 'memoria_memory_query') return ok({ hits: [], global_scope_hits: [] })
+  if (tool === 'memoria_memory_read_page' && args.path === 'memorias/getdemo/sdoc-documentos.md') return ok({ body: 'Passo a passo dos S/ DOC.' })
+  return { value: { exitCode: 1, stdout: '', stderr: 'no page', isStdoutTruncated: false, isStderrTruncated: false } }
+}
+
+test('through the gateway, recall covers the project of the session folder with _global', { options: { gatewayCommand: 'gw call', projectsFile: '~/projects.json' } }, async ($, on) => {
+  const calls: Calls = { argv: [], written: [], run: gatewayAnswers, files: { '/home/u/projects.json': JSON.stringify({ getdemo: { path: '~/getdemo' }, 'financeiro-getdemo': { path: '~/getdemo/financeiro' } }) } }
+  prepareRecall(on, calls)
+  await $.session.start({ ...start, cwd: '/home/u/getdemo/financeiro' })
+  const r = await $.prompt.submit(ask('atualizar a planilha de recibos sem doc'))
+  const context = (r.context ?? []).join('\n')
+  expect(context).toContain('<memory project="getdemo" path="memorias/getdemo/sdoc-documentos.md">\nPasso a passo dos S/ DOC.\n</memory>')
+  expect(context).not.toContain('memorias/arteeco/x.md')
+  const scoped = calls.argv.filter((a) => a[2] === 'memoria_memory_query').map((a) => JSON.parse(a[3] ?? '{}')).filter((a) => a.global !== true)
+  expect(scoped.map((a) => a.project).sort()).toEqual(['financeiro-getdemo', 'getdemo'])
+})
+
+test('an .ai-memory.toml above the session folder names the project', { options: { gatewayCommand: 'gw call' } }, async ($, on) => {
+  const calls: Calls = { argv: [], written: [], run: gatewayAnswers, files: { '/home/u/getdemo/.ai-memory.toml': 'workspace = "default"\nproject = "getdemo"\n' } }
+  prepareRecall(on, calls)
+  await $.session.start({ ...start, cwd: '/home/u/getdemo/financeiro' })
+  const r = await $.prompt.submit(ask('atualizar a planilha de recibos sem doc'))
+  expect((r.context ?? []).join('\n')).toContain('path="memorias/getdemo/sdoc-documentos.md"')
 })
