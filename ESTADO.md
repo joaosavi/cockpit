@@ -8,6 +8,11 @@
   esperadas entram sem o índice, igual à 1.12.0 com o índice. Busca pelo `ai-memory call` (na VPS e,
   pelo túnel da 49374, no PC e no Mac), com o gateway de reserva. Aberto: a página que não divide
   palavra com o pedido ("balancete" contra "fechamento") fica de fora.
+- Pendência do Mac (18/11/2026): o container não foi recriado porque um `claude auth login` espera o
+  João num tmux (`claude-vps-login`). A 49374 roda lá num `ssh -N -L` à parte, aberto à mão, que some
+  na próxima recriação. Quando o login não for mais preciso: fechar o tmux, rodar `agent host install
+  mac` (o `container/update` recria com o `entrypoint` novo, que leva a 49374 no túnel padrão) e
+  conferir `curl 127.0.0.1:49374/healthz` dentro do container.
 
 ## Decisões
 
