@@ -21,6 +21,10 @@
 - Aviso de índice em 22.000 caracteres e linha em 200 (18/11): o core corta em 25.000, e 22.000 deixa
   umas 12 linhas de crescimento antes do aviso. Em 20.000 o `_global` (20.298) já nascia avisando.
 
+- Texto do recall como sugestão (1.10.1, 18/11, pedido do João): o bloco diz que as páginas são
+  palpite do hook, que ele erra e deixa página de fora, e manda o agente buscar com `memory_query` sem
+  se limitar ao que veio. Por quê: página que o hook não trouxe não pode parecer inexistente.
+
 ## Armadilhas
 
 - Teste de mod roda isolado (18/11/2026): importa só arquivos do mod e `claude-code`. `node:fs`,

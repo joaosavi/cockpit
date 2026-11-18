@@ -136,6 +136,9 @@ test('a request gets its best page whole, from the project and _global only, onc
   await $.prompt.section({ name: 'memory', text: coreSection(PROJECT) })
   const r = await $.prompt.submit(ask('atualizar a planilha de recibos sem doc'))
   const context = (r.context ?? []).join('\n')
+  // The agent reads the pages as the hook's guess and still searches on its own.
+  expect(context).toContain('These pages are suggestions from the global-memory hook, picked by matching the words of this request. The hook can pick wrong pages and miss the ones that apply.')
+  expect(context).toContain('Search for the memories this request needs yourself with `memory_query`, and do not limit yourself to the pages below.')
   expect(context).toContain(`<memory project="work" path="${RECIBOS}">\nA planilha de recibos sem doc fica no Drive.\n</memory>`)
   expect(context).not.toContain('memorias/other/x.md')
   expect(context).not.toContain('sessions/s.md')

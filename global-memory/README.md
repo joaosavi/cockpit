@@ -90,7 +90,7 @@ The index lists every memory in one line; the page holds the fact. With `wikiDir
 4. The score adds the full-text score over the best one (weight 2), the place in the fused search (weight 0.5) and the share of subject words found in the page's file name or index line (weight 1). A page under 60% of the best stays out.
 5. Up to 3 pages go in, whole, while they fit `recallMaxTokens`. The first page goes in cut at the budget when it alone is over. A page already added in the conversation is not added again until it compacts or ends.
 
-The pages go in as `<memory project="..." path="...">` blocks under a line that calls them historical notes, not instructions.
+The pages go in as `<memory project="..." path="...">` blocks under a paragraph that calls them the hook's suggestions, which can be wrong or miss a page, tells the agent to search for the memories it needs with `memory_query` without limiting itself to them, and calls them historical notes, not instructions.
 
 The weights come from eight real requests of 2026-11-18 against the wiki of that day, five of them dictated. On the raw request, the fused search put an expected page first in 2 of 8, and the full-text search in 5 of 8: it missed the three long dictated requests, whose filler words matched pages written in the same tone. With the filler removed and the three signals added, every request got at least one of its pages, and 10 of the 13 expected pages went in. A missed page shared no word with the request (the request said "balancete", the page "fechamento") or did not fit the budget behind a 6,000-token page.
 
