@@ -191,7 +191,7 @@ export type WikiScope = { project: string; prefix: string }
 // keeps one index page per project, which the mod loads at the next session start.
 export function wikiSaveRules(global: WikiScope, project: WikiScope | null): string {
   const scopes = [
-    `- global: facts about the machine, its tools, access and services, and the user's preferences and corrections. Write with \`scope: "global"\` at \`${global.prefix}/<name>.md\`; the index is \`${WIKI_INDEX}\` of the \`${global.project}\` project.`,
+    `- global: facts about the machine, its tools, access and services, and the user's preferences and corrections. Write with \`scope: "global"\` at \`${global.prefix}/<name>.md\`; the index is \`${WIKI_INDEX}\` of the \`${global.project}\` project. \`memory_patch_page\` takes no \`scope\`: edit a global page, its index included, with \`workspace: "default"\` and \`project: "${global.project}"\`. Without them the patch looks in the session's project and fails with "latest is no page".`,
     project === null
       ? '- project: this folder has no project scope in the wiki. Save only global memories from here.'
       : `- project: facts that apply only to this project. Write to the project \`${project.project}\` (with \`workspace: "default"\`) at \`${project.prefix}/<name>.md\`; the index is \`${WIKI_INDEX}\` of that project.`,
