@@ -39,6 +39,8 @@ None.
 | `recall` | `true` | With `wikiDir` set, adds the pages that match each request to it. See Recall below. |
 | `recallMaxTokens` | `4000` | Most tokens recall adds to one request, estimated at 2 characters per token. |
 | `aiMemoryCommand` | `ai-memory` | The ai-memory CLI recall runs to search. |
+| `gatewayCommand` | empty | Without `wikiDir`, recall searches and reads pages through this command: it takes a tool name and its JSON arguments and prints the answer. See Recall below. |
+| `gatewayToolPrefix` | `memoria_` | Prefix of the ai-memory tool names on the gateway. |
 
 The mod creates nothing: make the folder and an empty `MEMORY.md` in it, and the mod starts on the next session. `globalDir` can point to a folder inside a git repo, such as `~/dotfiles/memory`, so the memories are versioned and can follow you to another machine.
 
@@ -88,10 +90,10 @@ The index lists every memory in one line; the page holds the fact. With `wikiDir
 2. The request loses its function words and the filler of dictated speech, in Portuguese and English. An acronym in capitals stays, so "IR do CDB" searches `ir cdb`.
 3. Two searches run on the ai-memory server: full text over every project, and the project search, which fuses full text, entities, the graph and the local vector index. Only memory pages of the session's project and `_global` count.
 4. The score adds the full-text score over the best one (weight 2), the place in the fused search (weight 0.5) and the share of subject words found in the page's file name or index line (weight 1). A page under 60% of the best stays out.
-5. Up to 3 pages go in, whole, while they fit `recallMaxTokens`. The first page goes in cut at the budget when it alone is over. A page already added in the conversation is not added again until it compacts or ends.
+5. Up to 3 pages go in, in rank order. A page goes in whole when it fits `recallMaxTokens` and still leaves room for the summaries of the pages below it. Otherwise its summary goes in: the text before its first subheading, at most 800 tokens, with a note to read the rest with `memory_read_page`. A page already added in the conversation is not added again until it compacts or ends.
 
 The pages go in as `<memory project="..." path="...">` blocks under a paragraph that calls them the hook's suggestions, which can be wrong or miss a page, tells the agent to search for the memories it needs with `memory_query` without limiting itself to them, and calls them historical notes, not instructions.
 
-The weights come from eight real requests of 2026-11-18 against the wiki of that day, five of them dictated. On the raw request, the fused search put an expected page first in 2 of 8, and the full-text search in 5 of 8: it missed the three long dictated requests, whose filler words matched pages written in the same tone. With the filler removed and the three signals added, every request got at least one of its pages, and 10 of the 13 expected pages went in. A missed page shared no word with the request (the request said "balancete", the page "fechamento") or did not fit the budget behind a 6,000-token page.
+The weights come from eight real requests of 2026-11-18 against the wiki of that day, five of them dictated. On the raw request, the fused search put an expected page first in 2 of 8, and the full-text search in 5 of 8: it missed the three long dictated requests, whose filler words matched pages written in the same tone. With the filler removed and the three signals added, every request got at least one of its pages, and 10 of the 13 expected pages went in. A missed page shared no word with the request (the request said "balancete", the page "fechamento") or did not fit the budget behind a 6,000-token page, which now goes in as its summary.
 
-Recall needs the ai-memory server and its wiki on the same machine. Without the CLI, or with the server down, the request goes in unchanged and the diary says `recall-failed`.
+Recall reads the pages from the wiki on disk when `wikiDir` is set. On a machine without the wiki, set `gatewayCommand` to a command that reaches the same ai-memory tools through an MCP gateway: recall then runs `<gatewayCommand> memoria_memory_query <json>` for the searches and `memoria_memory_read_page` for the pages and the index pages, all in parallel. Without either, or with the server down, the request goes in unchanged and the diary says `recall-failed`. The diary's `source` field says which path ran, and `summarized` lists the pages that went in as their summary.

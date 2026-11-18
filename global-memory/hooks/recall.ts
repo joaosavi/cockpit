@@ -164,32 +164,56 @@ function block(p: Page, body: string): string {
   return `<memory project="${p.project}" path="${p.path}">\n${body}\n</memory>`
 }
 
-export type Recall = { text: string; paths: string[]; tokens: number }
+export type Recall = { text: string; paths: string[]; summarized: string[]; tokens: number }
 
-// The context block for the pages that fit the budget, whole, in rank order. A page that does not fit is
-// left out, except the first: it goes in cut at the budget, so the best match always arrives. Null when
-// nothing goes in.
+// Most a summary may take: a fifth of the default budget, so a summary never crowds out the pages below it.
+const SUMMARY_MAX_TOKENS = 800
+
+// The opening of a page: the text before its first subheading, which on these pages is the one-line
+// description and the rules that hold for the whole page. A page without subheadings, or with a longer
+// opening, is cut at the last paragraph that fits SUMMARY_MAX_TOKENS.
+export function pageSummary(body: string): string {
+  const at = body.search(/\n#{2,6} /)
+  const lead = (at > 0 ? body.slice(0, at) : body).trim()
+  const max = SUMMARY_MAX_TOKENS * CHARS_PER_TOKEN
+  if (lead.length <= max) return lead
+  const paragraph = lead.lastIndexOf('\n\n', max)
+  const line = lead.lastIndexOf('\n', max)
+  return lead.slice(0, paragraph > 0 ? paragraph : line > 0 ? line : max).trim()
+}
+
+function summaryBlock(p: Page): string {
+  const whole = estimateTokens(p.body).toLocaleString('en-US')
+  return block(p, `${pageSummary(p.body)}\n[Summary only: the whole page has about ${whole} tokens. Read it with memory_read_page.]`)
+}
+
+// The context block for the pages, in rank order, within the budget. A page goes in whole when it fits
+// and still leaves room for the summaries of the pages below it; otherwise its summary goes in. On
+// 2026-11-18 a 6,000-token page went in first and cut, and filled the budget alone. Null when nothing
+// goes in.
 export function recallContext(pages: readonly Page[], maxTokens: number): Recall | null {
   const parts: string[] = []
   const paths: string[] = []
+  const summarized: string[] = []
+  const summaries = pages.map(summaryBlock)
   let used = estimateTokens(HEAD)
-  for (const p of pages) {
+  pages.forEach((p, i) => {
+    const below = summaries.slice(i + 1).reduce((n, t) => n + estimateTokens(t), 0)
     const whole = block(p, p.body)
-    if (used + estimateTokens(whole) <= maxTokens) {
-      parts.push(whole)
-      paths.push(p.path)
-      used += estimateTokens(whole)
-    } else if (parts.length === 0) {
-      const room = Math.max(0, (maxTokens - used) * CHARS_PER_TOKEN - 200)
-      const cut = p.body.lastIndexOf('\n', room)
-      const piece = block(p, `${p.body.slice(0, cut > 0 ? cut : room)}\n[cut here: read the rest with memory_read_page]`)
-      parts.push(piece)
-      paths.push(p.path)
-      used += estimateTokens(piece)
+    const summary = summaries[i] ?? ''
+    let piece: string | null = null
+    if (used + estimateTokens(whole) + below <= maxTokens) piece = whole
+    else if (used + estimateTokens(summary) <= maxTokens) {
+      piece = summary
+      summarized.push(p.path)
     }
-  }
+    if (piece === null) return
+    parts.push(piece)
+    paths.push(p.path)
+    used += estimateTokens(piece)
+  })
   if (parts.length === 0) return null
-  return { text: [HEAD, ...parts].join('\n\n'), paths, tokens: used }
+  return { text: [HEAD, ...parts].join('\n\n'), paths, summarized, tokens: used }
 }
 
 // What an index page breaks: lines over 200 characters and a body over the limit core loads. Core and

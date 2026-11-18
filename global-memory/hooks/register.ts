@@ -172,18 +172,52 @@ const REQUEST_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge', 'cha
 const WORKSPACE = 'default'
 const SEARCH_TIMEOUT_MS = 5000
 
-// One memory_query through the ai-memory CLI, which reaches the local server with its own credentials.
-// Null when the command is missing, fails, or answers something that is not JSON.
-async function memoryQuery($: Api, args: Record<string, unknown>): Promise<unknown> {
-  const raw = typeof values.aiMemoryCommand === 'string' && values.aiMemoryCommand.trim() !== '' ? values.aiMemoryCommand.trim() : 'ai-memory'
-  const cmd = expandHome(raw, await home($)) ?? raw
+// Where recall searches: the local ai-memory CLI with the wiki on disk, or, on a machine without them,
+// an MCP gateway that serves the same ai-memory tools. Null when neither is configured.
+type Source = { kind: 'local'; argv: string[] } | { kind: 'gateway'; argv: string[]; prefix: string }
+
+function words(option: unknown): string[] {
+  return typeof option === 'string' ? option.trim().split(/\s+/).filter((w) => w !== '') : []
+}
+
+async function source($: Api): Promise<Source | null> {
+  const h = await home($)
+  const expand = ([cmd, ...rest]: string[]) => (cmd === undefined ? [] : [expandHome(cmd, h) ?? cmd, ...rest])
+  if (wikiDir(values, h) !== null) {
+    const local = words(values.aiMemoryCommand)
+    return { kind: 'local', argv: [...expand(local.length > 0 ? local : ['ai-memory']), 'call'] }
+  }
+  const gateway = words(values.gatewayCommand)
+  if (gateway.length === 0) return null
+  const prefix = typeof values.gatewayToolPrefix === 'string' ? values.gatewayToolPrefix.trim() : 'memoria_'
+  return { kind: 'gateway', argv: expand(gateway), prefix }
+}
+
+// One ai-memory tool call. Null when the command is missing, fails, or answers something that is not JSON.
+async function memoryTool($: Api, src: Source, tool: string, args: Record<string, unknown>): Promise<unknown> {
+  const name = src.kind === 'gateway' ? `${src.prefix}${tool}` : tool
   try {
-    const r = await $.process.run([cmd, 'call', 'memory_query', JSON.stringify(args)], { env: { RUST_LOG: 'error' }, timeoutMs: SEARCH_TIMEOUT_MS })
+    const r = await $.process.run([...src.argv, name, JSON.stringify(args)], { env: { RUST_LOG: 'error' }, timeoutMs: SEARCH_TIMEOUT_MS })
     if (r.exitCode !== 0 || r.isStdoutTruncated) return null
     return JSON.parse(r.stdout)
   } catch {
     return null
   }
+}
+
+// A page body through memory_read_page, which returns it without frontmatter.
+async function remotePage($: Api, src: Source, project: string, path: string): Promise<string | null> {
+  const answer = await memoryTool($, src, 'memory_read_page', { path, workspace: WORKSPACE, project, max_chars: 64000 })
+  const body: unknown = typeof answer === 'object' && answer !== null ? Reflect.get(answer, 'body') : undefined
+  return typeof body === 'string' ? body : null
+}
+
+// A page body: from the wiki on disk for the local source, through the gateway otherwise.
+async function pageText($: Api, src: Source, project: string, path: string): Promise<string | null> {
+  if (src.kind === 'gateway') return remotePage($, src, project, path)
+  const dir = await wikiProject($, project)
+  const raw = dir === null ? null : await $.fs.read(`${dir}/${path}`).catch(() => null)
+  return raw === null ? null : pageBody(raw)
 }
 
 // The hits of one list in a memory_query answer, kept to memory pages of the allowed projects. A hit
@@ -211,41 +245,40 @@ function maxTokens(): number {
 }
 
 // The recall block for one prompt, or why there is none.
-async function recall($: Api, text: string): Promise<{ block: string; paths: string[]; tokens: number } | { skip: string }> {
+async function recall($: Api, src: Source, text: string): Promise<{ block: string; paths: string[]; summarized: string[]; tokens: number } | { skip: string }> {
   const skip = skipReason(text)
   if (skip !== null) return { skip: `recall-skipped-${skip}` }
   const words = keywords(text)
   const query = words.join(' ')
   const project = recallProject ?? WIKI_GLOBAL
   const allowed = new Set([project, WIKI_GLOBAL])
-  const [all, scoped] = await Promise.all([
-    memoryQuery($, { query, global: true, limit: 30 }),
-    memoryQuery($, { query, workspace: WORKSPACE, project, limit: 15 }),
+  // The index pages load with the searches: from disk locally, through the gateway otherwise.
+  const indexes = [...allowed].map((name) => (src.kind === 'gateway' ? remotePage($, src, name, WIKI_INDEX) : wikiIndex($, name).then((p) => p?.raw ?? null)))
+  const [all, scoped, ...raws] = await Promise.all([
+    memoryTool($, src, 'memory_query', { query, global: true, limit: 30 }),
+    memoryTool($, src, 'memory_query', { query, workspace: WORKSPACE, project, limit: 15 }),
+    ...indexes,
   ])
   if (all === null && scoped === null) return { skip: 'recall-failed' }
   const lines = new Map<string, string>()
-  for (const name of allowed) {
-    const page = await wikiIndex($, name)
-    if (page !== null) for (const [k, v] of indexLines(page.raw)) lines.set(k, v)
-  }
+  for (const raw of raws) if (typeof raw === 'string') for (const [k, v] of indexLines(raw)) lines.set(k, v)
   const ranked = rankPages({
     words,
     text: hitsOf(all, 'global_hits', allowed),
     fused: [...hitsOf(scoped, 'hits', allowed, project), ...hitsOf(scoped, 'global_scope_hits', allowed, WIKI_GLOBAL)],
     lines,
     max: RECALL_DEFAULTS.pages,
-  })
+  }).filter((h) => !injected.has(`${h.project}\n${h.path}`))
+  const bodies = await Promise.all(ranked.map((h) => pageText($, src, h.project, h.path)))
   const pages: Page[] = []
-  for (const h of ranked) {
-    if (injected.has(`${h.project}\n${h.path}`)) continue
-    const dir = await wikiProject($, h.project)
-    const raw = dir === null ? null : await $.fs.read(`${dir}/${h.path}`).catch(() => null)
-    if (raw !== null) pages.push({ project: h.project, path: h.path, body: pageBody(raw) })
-  }
+  ranked.forEach((h, i) => {
+    const body = bodies[i]
+    if (typeof body === 'string') pages.push({ project: h.project, path: h.path, body })
+  })
   const r = recallContext(pages, maxTokens())
   if (r === null) return { skip: 'recall-none' }
   for (const p of pages) if (r.paths.includes(p.path)) injected.add(`${p.project}\n${p.path}`)
-  return { block: r.text, paths: r.paths, tokens: r.tokens }
+  return { block: r.text, paths: r.paths, summarized: r.summarized, tokens: r.tokens }
 }
 
 export function register(on: On, options: PluginOptions) {
@@ -324,17 +357,19 @@ export function register(on: On, options: PluginOptions) {
   // Recall: the pages that match the request go in with it. Only a prompt from a person or the host app
   // searches; a scheduled or agent message does not. Needs the wiki on disk to read the pages.
   on('prompt.submit', async ($, e, next) => {
-    if (values.recall === false || !REQUEST_ORIGINS.has(e.origin.kind) || wikiDir(values, await home($)) === null) return next(e)
+    if (values.recall === false || !REQUEST_ORIGINS.has(e.origin.kind)) return next(e)
+    const src = await source($)
+    if (src === null) return next(e)
     const began = await $.clock.now()
-    const r = await recall($, e.text).catch(() => ({ skip: 'recall-failed' }))
+    const r = await recall($, src, e.text).catch(() => ({ skip: 'recall-failed' }))
     const ms = (await $.clock.now()) - began
     if ('skip' in r) {
       countAction(tally, r.skip)
-      await log($, { event: r.skip, ms }).catch(() => undefined)
+      await log($, { event: r.skip, source: src.kind, ms }).catch(() => undefined)
       return next(e)
     }
     countAction(tally, 'recall-injected')
-    await log($, { event: 'recall-injected', pages: r.paths, tokens: r.tokens, ms }).catch(() => undefined)
+    await log($, { event: 'recall-injected', source: src.kind, pages: r.paths, summarized: r.summarized, tokens: r.tokens, ms }).catch(() => undefined)
     return next({ ...e, context: [...(e.context ?? []), r.block] })
   })
 
